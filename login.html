@@ -24,25 +24,10 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
         }
-        /* Style for password requirements */
-        #password-reqs ul {
-            list-style: none;
-            padding-right: 0;
-        }
-        #password-reqs li {
-            color: #b91c1c; /* red-700 */
-            transition: color 0.3s ease;
-            display: flex;
-            align-items: center;
-        }
-        /* Style for valid requirements */
-        #password-reqs li.valid {
-            color: #15803d; /* green-700 */
-        }
-        #password-reqs li .icon {
-            margin-left: 0.5rem;
-            width: 1.25rem;
-        }
+        #password-reqs ul { list-style: none; padding-right: 0; }
+        #password-reqs li { color: #b91c1c; transition: color 0.3s ease; display: flex; align-items: center; }
+        #password-reqs li.valid { color: #15803d; }
+        #password-reqs li .icon { margin-left: 0.5rem; width: 1.25rem; }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-gray-200">
@@ -50,7 +35,7 @@
     <div class="w-full max-w-md mx-auto bg-white/80 form-container rounded-2xl shadow-2xl p-8 m-4">
         
         <!-- Tabs -->
-        <div class="flex border-b border-gray-300 mb-6">
+        <div id="auth-tabs" class="flex border-b border-gray-300 mb-6">
             <button id="login-tab" class="flex-1 py-3 text-lg font-semibold text-center border-b-4 border-blue-600 text-blue-600">התחברות</button>
             <button id="signup-tab" class="flex-1 py-3 text-lg font-semibold text-center text-gray-500">הרשמה</button>
         </div>
@@ -93,7 +78,6 @@
                 <label for="signup-password" class="block text-gray-700 mb-2">סיסמה</label>
                 <input type="password" id="signup-password" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required minlength="8">
             </div>
-            <!-- Password Requirements -->
             <div id="password-reqs" class="text-sm mt-2 mb-6">
                 <ul>
                     <li id="req-length"><span class="icon"></span>לפחות 8 תווים</li>
@@ -107,8 +91,27 @@
             </button>
         </form>
 
+        <!-- Google Finish Signup Form (hidden by default) -->
+        <div id="google-finish-signup" class="hidden">
+            <h2 class="text-xl font-bold text-center mb-4">צעד אחרון...</h2>
+            <p class="text-center text-gray-600 mb-6">אנא אמת את שמך לפני שנמשיך.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="google-firstname" class="block text-gray-700 mb-2">שם פרטי</label>
+                    <input type="text" id="google-firstname" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div>
+                    <label for="google-lastname" class="block text-gray-700 mb-2">שם משפחה</label>
+                    <input type="text" id="google-lastname" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+            </div>
+            <button id="finish-google-signup-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                צור חשבון
+            </button>
+        </div>
+
         <!-- Divider -->
-        <div class="my-6 flex items-center">
+        <div id="divider" class="my-6 flex items-center">
             <div class="flex-grow border-t border-gray-300"></div>
             <span class="flex-shrink mx-4 text-gray-500">או</span>
             <div class="flex-grow border-t border-gray-300"></div>
@@ -122,7 +125,6 @@
     </div>
 
     <script type="module">
-        // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { 
             getAuth, 
@@ -135,7 +137,6 @@
         } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -145,237 +146,212 @@
             appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // DOM Elements
-        const loginTab = document.getElementById('login-tab');
-        const signupTab = document.getElementById('signup-tab');
-        const loginForm = document.getElementById('login-form');
-        const signupForm = document.getElementById('signup-form');
-        const googleSigninBtn = document.getElementById('google-signin-btn');
-        const messageArea = document.getElementById('message-area');
-        const signupPasswordInput = document.getElementById('signup-password');
-        
-        // Password requirement elements
-        const reqs = {
-            length: document.getElementById('req-length'),
-            upper: document.getElementById('req-upper'),
-            number: document.getElementById('req-number'),
-            special: document.getElementById('req-special'),
+        const DOM = {
+            loginTab: document.getElementById('login-tab'),
+            signupTab: document.getElementById('signup-tab'),
+            loginForm: document.getElementById('login-form'),
+            signupForm: document.getElementById('signup-form'),
+            googleSigninBtn: document.getElementById('google-signin-btn'),
+            messageArea: document.getElementById('message-area'),
+            signupPasswordInput: document.getElementById('signup-password'),
+            passwordReqs: {
+                length: document.getElementById('req-length'),
+                upper: document.getElementById('req-upper'),
+                number: document.getElementById('req-number'),
+                special: document.getElementById('req-special'),
+            },
+            googleFinishSignupForm: document.getElementById('google-finish-signup'),
+            finishGoogleSignupBtn: document.getElementById('finish-google-signup-btn'),
+            authTabs: document.getElementById('auth-tabs'),
+            divider: document.getElementById('divider'),
         };
-        
+
         const icons = {
             valid: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>`,
             invalid: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>`
         };
+        
+        let pendingGoogleUser = null;
 
-        // Check if user is already logged in and redirect
         onAuthStateChanged(auth, (user) => {
-            // We only redirect if email is verified to handle the case where a user registers
-            // but hasn't verified yet, then closes the tab and comes back.
             if (user && user.emailVerified) {
-                window.location.href = 'index.html'; // Redirect to main page
+                window.location.href = 'index.html';
             }
         });
 
-        // --- UI Functions ---
         function showMessage(text, isError = false) {
-            messageArea.textContent = text;
-            messageArea.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-            if (isError) {
-                messageArea.classList.add('bg-red-100', 'text-red-700');
-            } else {
-                messageArea.classList.add('bg-green-100', 'text-green-700');
-            }
+            DOM.messageArea.textContent = text;
+            DOM.messageArea.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            DOM.messageArea.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
         }
 
         function clearMessage() {
-            messageArea.textContent = '';
-            messageArea.classList.add('hidden');
+            DOM.messageArea.textContent = '';
+            DOM.messageArea.classList.add('hidden');
         }
 
-        // --- Tab Switching Logic ---
-        loginTab.addEventListener('click', () => {
-            loginTab.classList.add('border-blue-600', 'text-blue-600');
-            loginTab.classList.remove('text-gray-500');
-            signupTab.classList.remove('border-blue-600', 'text-blue-600');
-            signupTab.classList.add('text-gray-500');
-            
-            loginForm.classList.remove('hidden');
-            signupForm.classList.add('hidden');
+        DOM.loginTab.addEventListener('click', () => {
+            DOM.loginTab.classList.add('border-blue-600', 'text-blue-600');
+            DOM.loginTab.classList.remove('text-gray-500');
+            DOM.signupTab.classList.remove('border-blue-600', 'text-blue-600');
+            DOM.signupTab.classList.add('text-gray-500');
+            DOM.loginForm.classList.remove('hidden');
+            DOM.signupForm.classList.add('hidden');
             clearMessage();
         });
 
-        signupTab.addEventListener('click', () => {
-            signupTab.classList.add('border-blue-600', 'text-blue-600');
-            signupTab.classList.remove('text-gray-500');
-            loginTab.classList.remove('border-blue-600', 'text-blue-600');
-            loginTab.classList.add('text-gray-500');
-
-            signupForm.classList.remove('hidden');
-            loginForm.classList.add('hidden');
-            validatePassword(); // Initial check when switching to tab
+        DOM.signupTab.addEventListener('click', () => {
+            DOM.signupTab.classList.add('border-blue-600', 'text-blue-600');
+            DOM.signupTab.classList.remove('text-gray-500');
+            DOM.loginTab.classList.remove('border-blue-600', 'text-blue-600');
+            DOM.loginTab.classList.add('text-gray-500');
+            DOM.signupForm.classList.remove('hidden');
+            DOM.loginForm.classList.add('hidden');
+            validatePassword();
             clearMessage();
         });
         
-        // --- Password Validation ---
         function validatePassword() {
-            const pass = signupPasswordInput.value;
+            const pass = DOM.signupPasswordInput.value;
             let allValid = true;
-
-            // Check length
-            const isLengthValid = pass.length >= 8;
-            updateReqUI('length', isLengthValid);
-            if (!isLengthValid) allValid = false;
-
-            // Check for uppercase letter
-            const isUpperValid = /[A-Z]/.test(pass);
-            updateReqUI('upper', isUpperValid);
-            if (!isUpperValid) allValid = false;
-
-            // Check for number
-            const isNumberValid = /[0-9]/.test(pass);
-            updateReqUI('number', isNumberValid);
-            if (!isNumberValid) allValid = false;
-
-            // Check for special character
-            const isSpecialValid = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
-            updateReqUI('special', isSpecialValid);
-            if (!isSpecialValid) allValid = false;
-            
+            const checks = {
+                length: pass.length >= 8,
+                upper: /[A-Z]/.test(pass),
+                number: /[0-9]/.test(pass),
+                special: /[!@#$%^&*(),.?":{}|<>]/.test(pass)
+            };
+            for (const [key, isValid] of Object.entries(checks)) {
+                updateReqUI(key, isValid);
+                if (!isValid) allValid = false;
+            }
             return allValid;
         }
         
         function updateReqUI(reqName, isValid) {
-            const el = reqs[reqName];
+            const el = DOM.passwordReqs[reqName];
             const iconSpan = el.querySelector('.icon');
-            if (isValid) {
-                el.classList.add('valid');
-                iconSpan.innerHTML = icons.valid;
-            } else {
-                el.classList.remove('valid');
-                iconSpan.innerHTML = icons.invalid;
-            }
+            el.classList.toggle('valid', isValid);
+            iconSpan.innerHTML = isValid ? icons.valid : icons.invalid;
         }
 
-        // Add listener to password input
-        signupPasswordInput.addEventListener('input', validatePassword);
+        DOM.signupPasswordInput.addEventListener('input', validatePassword);
 
-
-        // --- Form Handlers ---
-
-        // Sign Up
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             clearMessage();
-
             if (!validatePassword()) {
                 showMessage('הסיסמה אינה עומדת בכל הדרישות.', true);
                 return;
             }
-
             const firstName = document.getElementById('signup-firstname').value;
             const lastName = document.getElementById('signup-lastname').value;
             const email = document.getElementById('signup-email').value;
-            const password = signupPasswordInput.value;
-
+            const password = DOM.signupPasswordInput.value;
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-
-                await sendEmailVerification(user);
-                
-                const userDocRef = doc(db, "users", user.uid);
-                await setDoc(userDocRef, {
+                await sendEmailVerification(userCredential.user);
+                await setDoc(doc(db, "users", userCredential.user.uid), {
                     name: `${firstName} ${lastName}`,
-                    email: user.email,
+                    email: userCredential.user.email,
                     createdAt: new Date()
                 });
-
                 showMessage('הרשמה הושלמה! שלחנו לך מייל לאימות החשבון. יש לאשר את המייל לפני ההתחברות.');
-                signupForm.reset();
-                validatePassword(); // Reset UI after form reset
-
+                DOM.signupForm.reset();
+                validatePassword();
             } catch (error) {
-                console.error("Signup error:", error);
                 showMessage(getFriendlyErrorMessage(error.code), true);
             }
         });
 
-        // Login
-        loginForm.addEventListener('submit', async (e) => {
+        DOM.loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             clearMessage();
-
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
-
             try {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-
-                if (user.emailVerified) {
+                if (userCredential.user.emailVerified) {
                     window.location.href = 'index.html';
                 } else {
                     showMessage('עליך לאמת את כתובת המייל שלך לפני שתוכל להתחבר. בדוק את תיבת הדואר שלך.', true);
                 }
             } catch (error) {
-                console.error("Login error:", error);
                 showMessage(getFriendlyErrorMessage(error.code), true);
             }
         });
 
-        // Google Sign-in
-        googleSigninBtn.addEventListener('click', async () => {
+        DOM.googleSigninBtn.addEventListener('click', async () => {
             clearMessage();
             const provider = new GoogleAuthProvider();
-
             try {
                 const result = await signInWithPopup(auth, provider);
                 const user = result.user;
-
                 const userDocRef = doc(db, "users", user.uid);
                 const docSnap = await getDoc(userDocRef);
-
-                if (!docSnap.exists()) {
-                    await setDoc(userDocRef, {
-                        name: user.displayName,
-                        email: user.email,
-                        createdAt: new Date()
-                    });
+                if (docSnap.exists()) {
+                    window.location.href = 'index.html';
+                } else {
+                    pendingGoogleUser = user;
+                    showGoogleFinishSignupStep(user);
                 }
-                
-                window.location.href = 'index.html';
-
             } catch (error) {
-                console.error("Google sign-in error:", error);
                 showMessage(getFriendlyErrorMessage(error.code), true);
             }
         });
+
+        function showGoogleFinishSignupStep(user) {
+            DOM.authTabs.classList.add('hidden');
+            DOM.loginForm.classList.add('hidden');
+            DOM.signupForm.classList.add('hidden');
+            DOM.divider.classList.add('hidden');
+            DOM.googleSigninBtn.classList.add('hidden');
+            DOM.googleFinishSignupForm.classList.remove('hidden');
+
+            const firstNameInput = document.getElementById('google-firstname');
+            const lastNameInput = document.getElementById('google-lastname');
+            const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
+            firstNameInput.value = nameParts[0] || '';
+            lastNameInput.value = nameParts.slice(1).join(' ') || '';
+        }
+
+        DOM.finishGoogleSignupBtn.addEventListener('click', async () => {
+            if (!pendingGoogleUser) return;
+            const firstName = document.getElementById('google-firstname').value.trim();
+            const lastName = document.getElementById('google-lastname').value.trim();
+            if (!firstName || !lastName) {
+                showMessage('אנא מלא שם פרטי ושם משפחה.', true);
+                return;
+            }
+            try {
+                const userDocRef = doc(db, "users", pendingGoogleUser.uid);
+                await setDoc(userDocRef, {
+                    name: `${firstName} ${lastName}`,
+                    email: pendingGoogleUser.email,
+                    createdAt: new Date()
+                });
+                window.location.href = 'index.html';
+            } catch (error) {
+                showMessage('שגיאה ביצירת החשבון. נסה שוב.', true);
+            }
+        });
         
-        // Initial call to set icons on page load
         validatePassword();
 
-        // --- Helper Functions ---
         function getFriendlyErrorMessage(errorCode) {
             switch (errorCode) {
-                case 'auth/invalid-email':
-                    return 'כתובת המייל אינה תקינה.';
+                case 'auth/invalid-email': return 'כתובת המייל אינה תקינה.';
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    return 'שם המשתמש או הסיסמה שגויים.';
-                case 'auth/email-already-in-use':
-                    return 'כתובת המייל הזו כבר קיימת במערכת.';
-                case 'auth/weak-password':
-                    return 'הסיסמה חלשה מדי. אנא ודא שהיא עומדת בכל הדרישות.';
-                case 'auth/too-many-requests':
-                    return 'זוהו יותר מדי נסיונות התחברות. אנא נסה שוב מאוחר יותר.';
-                default:
-                    return 'אירעה שגיאה. אנא נסה שוב.';
+                case 'auth/invalid-credential': return 'שם המשתמש או הסיסמה שגויים.';
+                case 'auth/email-already-in-use': return 'כתובת המייל הזו כבר קיימת במערכת.';
+                case 'auth/weak-password': return 'הסיסמה חלשה מדי. אנא ודא שהיא עומדת בכל הדרישות.';
+                case 'auth/too-many-requests': return 'זוהו יותר מדי נסיונות התחברות. אנא נסה שוב מאוחר יותר.';
+                case 'auth/popup-closed-by-user': return 'חלון ההתחברות נסגר. נסה שוב.';
+                default: return 'אירעה שגיאה. אנא נסה שוב.';
             }
         }
     </script>
