@@ -70,6 +70,11 @@
         <!-- Main Actions -->
         <main class="text-center">
             <h1 class="text-4xl md:text-6xl font-bold mb-8">מתכנן הטיולים שלך</h1>
+            
+            <!-- Message for logged-out users -->
+            <p id="login-prompt-message" class="text-xl mt-4">על מנת להתחיל ליצור טיולים, יש <a href="login.html" class="font-bold underline hover:text-blue-300">להתחבר או להירשם</a></p>
+
+            <!-- Main actions for logged-in users -->
             <div id="main-actions" class="hidden space-y-4 md:space-y-0 md:space-x-4 md:flex md:flex-row-reverse">
                 <!-- כפתור יצירת טיול -->
                 <button id="create-trip-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-300 w-full md:w-auto">
@@ -152,6 +157,7 @@
       const settingsBtn = document.getElementById('settings-btn');
       const createTripBtn = document.getElementById('create-trip-btn');
       const tripsDropdown = document.getElementById('trips-dropdown');
+      const loginPromptMessage = document.getElementById('login-prompt-message');
       
       const settingsModal = document.getElementById('settings-modal');
       const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -162,12 +168,11 @@
       const mainBg = document.getElementById('main-bg');
 
       let currentUser = null;
-      let userUnsubscribe = null; // משתנה לשמירת פונקציית ביטול ההאזנה למשתמש
-      let tripsUnsubscribe = null; // משתנה לשמירת פונקציית ביטול ההאזנה לטיולים
+      let userUnsubscribe = null; 
+      let tripsUnsubscribe = null;
 
       // --- Firebase Auth State Listener ---
       onAuthStateChanged(auth, async (user) => {
-        // ביטול האזנות קודמות כדי למנוע דליפות זיכרון
         if (userUnsubscribe) userUnsubscribe();
         if (tripsUnsubscribe) tripsUnsubscribe();
 
@@ -177,32 +182,28 @@
             loginBtn.classList.add('hidden');
             userInfo.classList.remove('hidden');
             mainActions.classList.remove('hidden');
+            loginPromptMessage.classList.add('hidden');
             settingsBtn.classList.remove('hidden');
 
             const userDocRef = doc(db, "users", user.uid);
             
-            // האזנה לשינויים במסמך המשתמש (שם, הגדרות)
             userUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const userData = docSnap.data();
                     userNameBtn.textContent = `ברוך הבא, ${userData.name || 'משתמש'}`;
                     
-                    // החלת הגדרות
                     applyUserSettings(userData.settings);
 
-                    // בדיקה אם יש טיול ברירת מחדל והפניה אליו
                     if (userData.settings && userData.settings.defaultTripId && !window.location.search.includes('no_redirect')) {
                         window.location.href = `trip.html?id=${userData.settings.defaultTripId}`;
                         console.log(`Redirecting to default trip: ${userData.settings.defaultTripId}`);
                     }
                 } else {
-                    // במקרה שזה משתמש חדש שאין לו עדיין document
                     userNameBtn.textContent = `ברוך הבא, משתמש`;
                     console.log("No user document found, might be a new user.");
                 }
             });
 
-            // האזנה לשינויים בטיולים של המשתמש
             listenToUserTrips(user.uid);
 
         } else {
@@ -211,6 +212,7 @@
             loginBtn.classList.remove('hidden');
             userInfo.classList.add('hidden');
             mainActions.classList.add('hidden');
+            loginPromptMessage.classList.remove('hidden');
             settingsBtn.classList.add('hidden');
             resetUI();
         }
@@ -230,7 +232,7 @@
           tripsDropdown.innerHTML = `<p class="px-4 py-2 text-sm text-gray-500">אין טיולים להצגה.</p>`;
           defaultTripList.innerHTML = '';
           defaultTripSection.classList.add('hidden');
-          applyUserSettings(null); // איפוס רקע לברירת מחדל
+          applyUserSettings(null);
       }
 
       function listenToUserTrips(uid) {
@@ -246,7 +248,6 @@
       }
 
       async function updateTripsUI(trips) {
-        // עדכון תפריט הטיולים שלי
         if (trips.length > 0) {
             tripsDropdown.innerHTML = trips.map(trip => 
                 `<a href="trip.html?id=${trip.id}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">${trip.name}</a>`
@@ -255,7 +256,6 @@
             tripsDropdown.innerHTML = `<p class="px-4 py-2 text-sm text-gray-500">עדיין לא יצרת טיולים.</p>`;
         }
 
-        // עדכון רשימת הטיולים במודל ההגדרות
         if (!currentUser) return;
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
         const currentSettings = userDoc.data()?.settings || {};
@@ -307,7 +307,6 @@
         const userDocRef = doc(db, "users", currentUser.uid);
         
         try {
-            // שימוש ב-setDoc עם merge: true כדי ליצור או לעדכן את המסמך
             await setDoc(userDocRef, { 
                 settings: {
                     backgroundImage: bgImage,
