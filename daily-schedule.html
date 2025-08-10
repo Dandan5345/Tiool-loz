@@ -7,7 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
-
   <style>
     body { font-family: 'Assistant', sans-serif; }
     #sidebar { transition: transform 0.3s ease-in-out; }
@@ -15,14 +14,9 @@
     .submenu.open { max-height: 1200px; }
     .leaf-badge { border-inline-start: 4px solid #38bdf8; }
     .timeline { position: relative; }
-    .timeline::before {
-      content: ""; position: absolute; right: 20px; top: 0; bottom: 0; width: 2px; background: rgba(30,41,59,.15);
-    }
+    .timeline::before { content: ""; position: absolute; right: 20px; top: 0; bottom: 0; width: 2px; background: rgba(30,41,59,.15); }
     .timeline-item { position: relative; padding-right: 56px; }
-    .timeline-dot {
-      position: absolute; right: 12px; top: .75rem; width: 16px; height: 16px; border-radius: 9999px;
-      background: white; box-shadow: 0 0 0 4px #e2e8f0 inset, 0 0 0 2px rgba(30,41,59,.1);
-    }
+    .timeline-dot { position: absolute; right: 12px; top: .75rem; width: 16px; height: 16px; border-radius: 9999px; background: white; box-shadow: 0 0 0 4px #e2e8f0 inset, 0 0 0 2px rgba(30,41,59,.1); }
     .bg-fixed-image { background-size: cover; background-position: center; }
     #initial-loader { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; transition: opacity .5s ease-out; }
     @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
@@ -30,7 +24,6 @@
   </style>
 </head>
 <body class="bg-slate-100">
-
   <!-- Loader -->
   <div id="initial-loader">
     <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
@@ -143,12 +136,15 @@
     let currentUser = null;
     let tripId = null;
     let tripData = null;
-    let dateStr = null;       // dd/mm/yyyy from URL
-    let dateISO = null;       // yyyy-mm-dd normalized
-    let dayNameHe = null;     // e.g. "יום שני"
-    let destForDate = null;   // destination object for date
 
-    // UI refs
+    // מה-URL (נשתמש **בדיוק** כפי שהגיע לתצוגה)
+    let dateStr = null;   // dd/m/yyyy או כל וריאציה – מציגים כמו שהוא
+    let dateISO = null;   // yyyy-mm-dd אם הצלחנו לפרש, לשימוש פנימי בלבד
+    let dayNameHe = "";   // יום בשבוע אם הצלחנו לפרש
+
+    let destForDate = null;
+
+    // UI
     const initialLoader = document.getElementById('initial-loader');
     const mainContent = document.getElementById('main-content');
     const pageBg = document.getElementById('page-bg');
@@ -173,42 +169,50 @@
     // ---------- Helpers ----------
     function toggleSidebar(){ sidebar.classList.toggle('translate-x-full'); overlay.classList.toggle('hidden'); }
 
-    function parseLocalDate(ddmmyyyy) {
-      const [d, m, y] = ddmmyyyy.split('/').map(Number);
-      return new Date(y, m-1, d);
+    // פענוח עמיד לכל פורמט d/m/yy או d.m.yyyy
+    function parseLocalDateFlexible(s) {
+      if (!s) return null;
+      const m = s.trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);
+      if (!m) return null;
+      let d = +m[1], mo = +m[2], y = +m[3];
+      if (y < 100) y += 2000;               // 25 -> 2025
+      // משתמשים ב־UTC כדי לא ליפול בהסטי אזור זמן
+      const dt = new Date(Date.UTC(y, mo-1, d));
+      return isNaN(dt.getTime()) ? null : dt;
     }
-    function toISODate(d) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
+    function toISODateUTC(d) {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+      const dd = String(d.getUTCDate()).padStart(2,'0');
       return `${yyyy}-${mm}-${dd}`;
     }
-    function hebWeekday(d) {
-      // משתמש ב־Intl כדי לתת "יום שני" וכן הלאה
-      const s = d.toLocaleDateString('he-IL', { weekday:'long' });
-      // חלק מהדפדפנים מחזירים רק "שני" — נוסיף "יום " אם חסר
-      return s.startsWith('יום') ? s : `יום ${s}`;
+    function hebWeekdayUTC(d) {
+      const names = ['יום ראשון','יום שני','יום שלישי','יום רביעי','יום חמישי','יום שישי','יום שבת'];
+      return names[d.getUTCDay()];
     }
 
     function generateDatesFromRange(rangeStr) {
       if (!rangeStr || !rangeStr.includes(' - ')) return [];
       const [startStr, endStr] = rangeStr.split(' - ');
-      const [sd, sm, sy] = startStr.split('/').map(Number);
-      const [ed, em, ey] = endStr.split('/').map(Number);
-      const start = new Date(sy, sm-1, sd);
-      const end = new Date(ey, em-1, ed);
+      const start = parseLocalDateFlexible(startStr);
+      const end = parseLocalDateFlexible(endStr);
+      if (!start || !end) return [];
       const out = [];
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
-        out.push(d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'}));
+      for (let t = new Date(start); t <= end; t.setUTCDate(t.getUTCDate()+1)) {
+        out.push(new Date(t.getTime())); // copy
       }
       return out;
     }
 
-    function findDestinationForDate(trip, ddmmyyyy) {
-      if (!trip?.destinations) return null;
-      return trip.destinations.find(dest => {
-        const list = generateDatesFromRange(dest.dates);
-        return list.includes(ddmmyyyy);
+    // מאתרים יעד לפי תאריך: משווים לפי ISO אחיד
+    function findDestinationForDate(trip, rawDDMMYYYY) {
+      const target = parseLocalDateFlexible(rawDDMMYYYY);
+      if (!target) return null;
+      const targetISO = toISODateUTC(target);
+      return (trip.destinations || []).find(dest => {
+        const days = generateDatesFromRange(dest.dates);
+        const isoList = days.map(d => toISODateUTC(d));
+        return isoList.includes(targetISO);
       }) || null;
     }
 
@@ -228,11 +232,14 @@
         btn.innerHTML = `<span>${dest.nameHe || dest.name}</span> <i class="fas fa-chevron-down"></i>`;
         const submenu = document.createElement('div');
         submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
-        generateDatesFromRange(dest.dates).forEach(dateStrInner => {
+        const dates = generateDatesFromRange(dest.dates);
+        dates.forEach(dObj => {
+          // מציגים כ-dd/m/yyyy בלי אפסים מובילים – נעים לעין ותואם למה שאתה שולח לעיתים
+          const nice = `${dObj.getUTCDate()}/${dObj.getUTCMonth()+1}/${dObj.getUTCFullYear()}`;
           const a = document.createElement('a');
-          a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStrInner)}`;
+          a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(nice)}`;
           a.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md';
-          a.textContent = `לו"ז ליום ${dateStrInner}`;
+          a.textContent = `לו"ז ליום ${nice}`;
           submenu.appendChild(a);
         });
         btn.addEventListener('click', () => {
@@ -246,12 +253,11 @@
 
     function renderHeadline() {
       const destName = destForDate?.nameHe || destForDate?.name || 'היעד';
-      const d = parseLocalDate(dateStr);
-      const longDate = d.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' });
-      scheduleHeadline.textContent = `כאן יהיה הלוז של ${destName} לתאריך ${longDate} ${dayNameHe}`;
-      dayTitle.textContent = `לוז ליום ${longDate}`;
-      tripSubtitle.textContent = `${destName} • ${dayNameHe}`;
-      dateChip.textContent = longDate;
+      const dayPart = dayNameHe ? ` ${dayNameHe}` : '';
+      scheduleHeadline.textContent = `כאן יהיה הלוז של ${destName} לתאריך ${dateStr}${dayPart}`;
+      dayTitle.textContent = `לוז ליום ${dateStr}`;
+      tripSubtitle.textContent = `${destName}${dayPart ? ' •' + dayPart : ''}`;
+      dateChip.textContent = dateStr;
     }
 
     // ---------- Schedule render ----------
@@ -262,7 +268,6 @@
         timelineBox.innerHTML = '';
         return;
       }
-      // sort by time "HH:MM"
       events.sort((a,b) => (a.time||'') > (b.time||'') ? 1 : -1);
       noScheduleBox.classList.add('hidden');
       timelineBox.classList.remove('hidden');
@@ -309,7 +314,6 @@
       document.getElementById('hamburger-btn').addEventListener('click', toggleSidebar);
       document.getElementById('close-sidebar-btn').addEventListener('click', toggleSidebar);
       document.getElementById('overlay').addEventListener('click', toggleSidebar);
-
       if (backBtn) {
         backBtn.addEventListener('click', () => {
           if (window.history.length > 1) history.back();
@@ -322,14 +326,23 @@
     async function initPage() {
       const url = new URLSearchParams(window.location.search);
       tripId = url.get('tripId');
-      dateStr = url.get('date'); // dd/mm/yyyy
+      // מציגים את התאריך בדיוק כפי שמגיע ב־URL (כולל בלי אפסים וכו')
+      dateStr = decodeURIComponent(url.get('date') || '').trim();
+
+      // ננסה לפרש רק לצורך ISO/שם יום; אם לא מצליחים – ממשיכים בלי "Invalid Date"
+      const parsed = parseLocalDateFlexible(dateStr);
+      if (parsed) {
+        dateISO = toISODateUTC(parsed);
+        dayNameHe = hebWeekdayUTC(parsed);
+      } else {
+        dateISO = null;
+        dayNameHe = "";
+      }
+
       if (!tripId || !dateStr) {
         alert('כתובת שגויה: חסר tripId או date.');
         location.href = 'index.html'; return;
       }
-      const d = parseLocalDate(dateStr);
-      dayNameHe = hebWeekday(d);
-      dateISO = toISODate(d);
 
       attachEvents();
 
@@ -349,34 +362,40 @@
           alert('אין לך הרשאה לצפות בטיול זה.'); location.href = 'index.html'; return;
         }
 
-        // Which destination belongs to the date?
+        // יעד לאותו תאריך
         destForDate = findDestinationForDate(tripData, dateStr);
         setBackgroundForDest(destForDate);
         buildMenuFromTrip();
         renderHeadline();
 
-        // Link to create page
+        // קישור "צור לוז"
         const destNameParam = encodeURIComponent(destForDate?.nameHe || destForDate?.name || '');
         createBtn.href = `create-schedule.html?tripId=${encodeURIComponent(tripId)}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
 
-        // Listen to schedule for that date
-        // Structure assumed: collection(trips/{tripId}/schedules) doc id = yyyy-mm-dd, field: events (array)
-        const schedDocRef = doc(db, 'trips', tripId, 'schedules', dateISO);
-        const schedSnap = await getDoc(schedDocRef);
-        if (schedSnap.exists()) {
-          const data = schedSnap.data();
-          renderTimeline(Array.isArray(data.events) ? data.events : []);
+        // קריאת הלוז: אם יש ISO – נשתמש במסמך schedules/{ISO}; אחרת ננסה לפי שדה 'date' = המחרוזת הגולמית
+        if (dateISO) {
+          const schedDocRef = doc(db, 'trips', tripId, 'schedules', dateISO);
+          const schedSnap = await getDoc(schedDocRef);
+          if (schedSnap.exists()) {
+            const data = schedSnap.data();
+            renderTimeline(Array.isArray(data.events) ? data.events : []);
+          } else {
+            // fallback ל־events עם dateISO
+            const eventsCol = collection(db, 'trips', tripId, 'events');
+            const q1 = query(eventsCol, where('dateISO','==', dateISO), orderBy('time'));
+            onSnapshot(q1, (snap) => {
+              const items = snap.docs.map(d => d.data());
+              renderTimeline(items);
+            }, () => renderTimeline([]));
+          }
         } else {
-          // Try fallback: collection "events" filtered by dateISO (optional support)
+          // אין ISO – נשען על 'events' עם 'date' = המחרוזת כמו שבאה מה־URL
           const eventsCol = collection(db, 'trips', tripId, 'events');
-          const q1 = query(eventsCol, where('dateISO','==', dateISO), orderBy('time'));
-          onSnapshot(q1, (snap) => {
+          const q2 = query(eventsCol, where('date','==', dateStr), orderBy('time'));
+          onSnapshot(q2, (snap) => {
             const items = snap.docs.map(d => d.data());
             renderTimeline(items);
-          }, () => {
-            // If even that fails, keep empty state
-            renderTimeline([]);
-          });
+          }, () => renderTimeline([]));
         }
 
         // Reveal UI
