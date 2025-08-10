@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>לוז יומי • מסע חלומות</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Assistant', sans-serif; }
+    #sidebar { transition: transform 0.3s ease-in-out; }
+    .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
+    .submenu.open { max-height: 1200px; }
+    .leaf-badge { border-inline-start: 4px solid #38bdf8; }
+    .timeline { position: relative; }
+    .timeline::before {
+      content: ""; position: absolute; right: 20px; top: 0; bottom: 0; width: 2px; background: rgba(30,41,59,.15);
+    }
+    .timeline-item { position: relative; padding-right: 56px; }
+    .timeline-dot {
+      position: absolute; right: 12px; top: .75rem; width: 16px; height: 16px; border-radius: 9999px;
+      background: white; box-shadow: 0 0 0 4px #e2e8f0 inset, 0 0 0 2px rgba(30,41,59,.1);
+    }
+    .bg-fixed-image { background-size: cover; background-position: center; }
+    #initial-loader { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; transition: opacity .5s ease-out; }
+    @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+    .plane-spinner { animation: spin 2s linear infinite; }
+  </style>
+</head>
+<body class="bg-slate-100">
+
+  <!-- Loader -->
+  <div id="initial-loader">
+    <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+    <div class="fixed inset-0 z-0 bg-black/50"></div>
+    <div class="text-white text-center relative z-10">
+      <i class="fas fa-calendar-day fa-4x plane-spinner mb-4"></i>
+      <p class="text-2xl font-bold">טוען את הלוז...</p>
+    </div>
+  </div>
+
+  <!-- Background -->
+  <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+  <div class="fixed inset-0 z-0 bg-black/50"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
+    <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
+      <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
+      <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+    </div>
+    <nav id="main-menu" class="p-4 space-y-2"></nav>
+  </aside>
+  <div id="overlay" class="fixed inset-0 bg-black/60 z-50 hidden"></div>
+
+  <!-- Content -->
+  <div id="main-content" class="relative z-10 opacity-0 transition-opacity duration-500">
+    <header class="bg-white/70 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center gap-4">
+            <button id="back-btn" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה">
+              <i class="fas fa-arrow-right fa-lg"></i>
+            </button>
+            <h1 class="text-xl font-bold text-slate-800">לוז יומי</h1>
+          </div>
+          <div class="flex items-center gap-4">
+            <div id="auth-container" class="flex items-center"></div>
+            <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Trip/title banner -->
+    <div class="bg-white/70 backdrop-blur-md border-b">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
+        <p id="schedule-headline" class="text-center text-slate-700 font-bold">טוען פרטי תאריך...</p>
+      </div>
+    </div>
+
+    <main class="p-4 sm:p-6 lg:p-8">
+      <div class="max-w-5xl mx-auto space-y-8">
+
+        <!-- Summary card -->
+        <section class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-5 leaf-badge">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 id="day-title" class="text-2xl md:text-3xl font-extrabold text-slate-800">לוז ליום</h2>
+              <p id="trip-subtitle" class="text-slate-500 mt-1"></p>
+            </div>
+            <div class="flex items-center gap-2 text-slate-600">
+              <i class="fa-regular fa-calendar"></i>
+              <span id="date-chip" class="font-semibold">--/--/----</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Timeline -->
+        <section id="timeline-section" class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-5">
+          <div id="no-schedule" class="text-center p-10">
+            <i class="fa-regular fa-clock fa-3x text-slate-400 mb-4"></i>
+            <h3 class="text-xl font-bold text-slate-700 mb-1">עדיין אין לוז ליום זה</h3>
+            <p class="text-slate-500">לחץ על “צור לוז” כדי להתחיל לתכנן את היום.</p>
+          </div>
+          <div id="timeline" class="timeline space-y-4 hidden"></div>
+        </section>
+
+        <!-- CTA -->
+        <section class="flex justify-center">
+          <a id="create-schedule-btn" href="#" class="inline-flex items-center gap-2 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            צור לוז
+          </a>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Firebase + App -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    // ---------- Firebase ----------
+    const firebaseConfig = {
+      apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+      authDomain: "tiool-loz.firebaseapp.com",
+      projectId: "tiool-loz",
+      storageBucket: "tiool-loz.appspot.com",
+      messagingSenderId: "226069823505",
+      appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // ---------- State ----------
+    let currentUser = null;
+    let tripId = null;
+    let tripData = null;
+    let dateStr = null;       // dd/mm/yyyy from URL
+    let dateISO = null;       // yyyy-mm-dd normalized
+    let dayNameHe = null;     // e.g. "יום שני"
+    let destForDate = null;   // destination object for date
+
+    // UI refs
+    const initialLoader = document.getElementById('initial-loader');
+    const mainContent = document.getElementById('main-content');
+    const pageBg = document.getElementById('page-bg');
+    const loaderBg = document.getElementById('loader-bg');
+    const sidebar = document.getElementById('sidebar');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+    const overlay = document.getElementById('overlay');
+    const mainMenu = document.getElementById('main-menu');
+    const authContainer = document.getElementById('auth-container');
+    const backBtn = document.getElementById('back-btn');
+
+    const scheduleHeadline = document.getElementById('schedule-headline');
+    const dayTitle = document.getElementById('day-title');
+    const tripSubtitle = document.getElementById('trip-subtitle');
+    const dateChip = document.getElementById('date-chip');
+
+    const noScheduleBox = document.getElementById('no-schedule');
+    const timelineBox = document.getElementById('timeline');
+    const createBtn = document.getElementById('create-schedule-btn');
+
+    // ---------- Helpers ----------
+    function toggleSidebar(){ sidebar.classList.toggle('translate-x-full'); overlay.classList.toggle('hidden'); }
+
+    function parseLocalDate(ddmmyyyy) {
+      const [d, m, y] = ddmmyyyy.split('/').map(Number);
+      return new Date(y, m-1, d);
+    }
+    function toISODate(d) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function hebWeekday(d) {
+      // משתמש ב־Intl כדי לתת "יום שני" וכן הלאה
+      const s = d.toLocaleDateString('he-IL', { weekday:'long' });
+      // חלק מהדפדפנים מחזירים רק "שני" — נוסיף "יום " אם חסר
+      return s.startsWith('יום') ? s : `יום ${s}`;
+    }
+
+    function generateDatesFromRange(rangeStr) {
+      if (!rangeStr || !rangeStr.includes(' - ')) return [];
+      const [startStr, endStr] = rangeStr.split(' - ');
+      const [sd, sm, sy] = startStr.split('/').map(Number);
+      const [ed, em, ey] = endStr.split('/').map(Number);
+      const start = new Date(sy, sm-1, sd);
+      const end = new Date(ey, em-1, ed);
+      const out = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+        out.push(d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'}));
+      }
+      return out;
+    }
+
+    function findDestinationForDate(trip, ddmmyyyy) {
+      if (!trip?.destinations) return null;
+      return trip.destinations.find(dest => {
+        const list = generateDatesFromRange(dest.dates);
+        return list.includes(ddmmyyyy);
+      }) || null;
+    }
+
+    function setBackgroundForDest(dest) {
+      const url = dest?.bgUrl || dest?.imageUrl || 'https://i.imgur.com/MjekTyd.jpeg';
+      pageBg.style.backgroundImage = `url('${url}')`;
+      loaderBg.style.backgroundImage = `url('${url}')`;
+    }
+
+    function buildMenuFromTrip() {
+      mainMenu.innerHTML = '';
+      if (!tripData?.destinations) return;
+      tripData.destinations.forEach(dest => {
+        const div = document.createElement('div');
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center';
+        btn.innerHTML = `<span>${dest.nameHe || dest.name}</span> <i class="fas fa-chevron-down"></i>`;
+        const submenu = document.createElement('div');
+        submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
+        generateDatesFromRange(dest.dates).forEach(dateStrInner => {
+          const a = document.createElement('a');
+          a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStrInner)}`;
+          a.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md';
+          a.textContent = `לו"ז ליום ${dateStrInner}`;
+          submenu.appendChild(a);
+        });
+        btn.addEventListener('click', () => {
+          submenu.classList.toggle('open');
+          btn.querySelector('i').classList.toggle('rotate-180');
+        });
+        div.append(btn, submenu);
+        mainMenu.appendChild(div);
+      });
+    }
+
+    function renderHeadline() {
+      const destName = destForDate?.nameHe || destForDate?.name || 'היעד';
+      const d = parseLocalDate(dateStr);
+      const longDate = d.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' });
+      scheduleHeadline.textContent = `כאן יהיה הלוז של ${destName} לתאריך ${longDate} ${dayNameHe}`;
+      dayTitle.textContent = `לוז ליום ${longDate}`;
+      tripSubtitle.textContent = `${destName} • ${dayNameHe}`;
+      dateChip.textContent = longDate;
+    }
+
+    // ---------- Schedule render ----------
+    function renderTimeline(events) {
+      if (!events || events.length === 0) {
+        noScheduleBox.classList.remove('hidden');
+        timelineBox.classList.add('hidden');
+        timelineBox.innerHTML = '';
+        return;
+      }
+      // sort by time "HH:MM"
+      events.sort((a,b) => (a.time||'') > (b.time||'') ? 1 : -1);
+      noScheduleBox.classList.add('hidden');
+      timelineBox.classList.remove('hidden');
+      timelineBox.innerHTML = '';
+
+      const typeIcon = (type) => {
+        switch ((type||'').trim()) {
+          case 'ארוחה': return 'fa-utensils';
+          case 'אטרקציה': return 'fa-map-location-dot';
+          case 'תחבורה': return 'fa-bus';
+          case 'קניות': return 'fa-bag-shopping';
+          case 'מנוחה': return 'fa-bed';
+          default: return 'fa-circle-info';
+        }
+      };
+
+      events.forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'timeline-item bg-white/90 rounded-xl shadow p-4';
+        item.innerHTML = `
+          <span class="timeline-dot"></span>
+          <div class="flex items-start gap-4">
+            <div class="shrink-0 text-center">
+              <div class="text-sm font-bold text-slate-700">${ev.time || '--:--'}</div>
+              <div class="text-xs text-slate-500">${ev.type || ''}</div>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid ${typeIcon(ev.type)} text-sky-500"></i>
+                <h4 class="text-lg font-bold text-slate-800">${ev.title || 'פריט ללא שם'}</h4>
+              </div>
+              ${ev.location ? `<div class="mt-1 text-sm text-slate-600"><i class="fa-solid fa-location-dot mr-1 text-slate-400"></i>${ev.location}</div>` : ''}
+              ${ev.notes ? `<p class="mt-2 text-slate-700 whitespace-pre-wrap">${ev.notes}</p>` : ''}
+              ${ev.link ? `<a class="inline-flex items-center gap-1 mt-2 text-sky-700 hover:underline" href="${ev.link}" target="_blank"><i class="fa-solid fa-link"></i> קישור</a>` : ''}
+            </div>
+          </div>
+        `;
+        timelineBox.appendChild(item);
+      });
+    }
+
+    // ---------- Events ----------
+    function attachEvents() {
+      document.getElementById('hamburger-btn').addEventListener('click', toggleSidebar);
+      document.getElementById('close-sidebar-btn').addEventListener('click', toggleSidebar);
+      document.getElementById('overlay').addEventListener('click', toggleSidebar);
+
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          if (window.history.length > 1) history.back();
+          else window.location.href = 'index.html';
+        });
+      }
+    }
+
+    // ---------- Init ----------
+    async function initPage() {
+      const url = new URLSearchParams(window.location.search);
+      tripId = url.get('tripId');
+      dateStr = url.get('date'); // dd/mm/yyyy
+      if (!tripId || !dateStr) {
+        alert('כתובת שגויה: חסר tripId או date.');
+        location.href = 'index.html'; return;
+      }
+      const d = parseLocalDate(dateStr);
+      dayNameHe = hebWeekday(d);
+      dateISO = toISODate(d);
+
+      attachEvents();
+
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) { location.replace('login.html'); return; }
+        currentUser = user;
+        const displayName = user.displayName || user.email.split('@')[0];
+        authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${displayName} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
+        document.getElementById('sign-out-btn').addEventListener('click', ()=>signOut(auth));
+
+        // Load trip
+        const tripRef = doc(db, 'trips', tripId);
+        const tripSnap = await getDoc(tripRef);
+        if (!tripSnap.exists()) { alert('הטיול לא נמצא.'); location.href = 'index.html'; return; }
+        tripData = tripSnap.data();
+        if (tripData.ownerId && tripData.ownerId !== currentUser.uid) {
+          alert('אין לך הרשאה לצפות בטיול זה.'); location.href = 'index.html'; return;
+        }
+
+        // Which destination belongs to the date?
+        destForDate = findDestinationForDate(tripData, dateStr);
+        setBackgroundForDest(destForDate);
+        buildMenuFromTrip();
+        renderHeadline();
+
+        // Link to create page
+        const destNameParam = encodeURIComponent(destForDate?.nameHe || destForDate?.name || '');
+        createBtn.href = `create-schedule.html?tripId=${encodeURIComponent(tripId)}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+
+        // Listen to schedule for that date
+        // Structure assumed: collection(trips/{tripId}/schedules) doc id = yyyy-mm-dd, field: events (array)
+        const schedDocRef = doc(db, 'trips', tripId, 'schedules', dateISO);
+        const schedSnap = await getDoc(schedDocRef);
+        if (schedSnap.exists()) {
+          const data = schedSnap.data();
+          renderTimeline(Array.isArray(data.events) ? data.events : []);
+        } else {
+          // Try fallback: collection "events" filtered by dateISO (optional support)
+          const eventsCol = collection(db, 'trips', tripId, 'events');
+          const q1 = query(eventsCol, where('dateISO','==', dateISO), orderBy('time'));
+          onSnapshot(q1, (snap) => {
+            const items = snap.docs.map(d => d.data());
+            renderTimeline(items);
+          }, () => {
+            // If even that fails, keep empty state
+            renderTimeline([]);
+          });
+        }
+
+        // Reveal UI
+        initialLoader.style.opacity = '0';
+        mainContent.style.opacity = '1';
+        setTimeout(()=>{ initialLoader.style.display='none'; }, 500);
+      });
+    }
+
+    initPage();
+  </script>
+</body>
+</html>
