@@ -45,7 +45,7 @@
     </div>
 
     <!-- Fixed Background -->
-    <div id="page-bg" class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/PXLTIi4.jpeg');"></div>
+    <div id="page-bg" class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-1000" style="background-image: url('https://i.imgur.com/PXLTIi4.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/50"></div>
 
     <!-- Scrollable Content Wrapper -->
@@ -74,6 +74,42 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[101] p-4">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h2 class="text-2xl font-bold">הגדרות תצוגה</h2>
+                    <button id="close-settings-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label for="main-bg-input" class="block text-sm font-medium text-slate-700 mb-1">רקע כללי לדף הטיול</label>
+                        <input type="url" id="main-bg-input" class="w-full p-2 border rounded-md" placeholder="הדבק קישור (URL) לתמונה">
+                    </div>
+                    
+                    <hr>
+                    
+                    <div>
+                        <label for="destination-bg-select" class="block text-sm font-medium text-slate-700 mb-1">רקע ללו"ז יומי לפי יעד</label>
+                        <select id="destination-bg-select" class="w-full p-2 border rounded-md">
+                            <option value="">-- בחר יעד --</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                        <div id="destination-bg-input-container" class="mt-2 hidden">
+                             <label for="destination-bg-input" class="block text-sm font-medium text-slate-700 mb-1">רקע עבור <span id="dest-name-label" class="font-bold"></span></label>
+                             <input type="url" id="destination-bg-input" class="w-full p-2 border rounded-md" placeholder="הדבק קישור (URL) לתמונה">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex justify-end gap-4">
+                    <div id="settings-feedback" class="text-green-600 font-bold flex-grow"></div>
+                    <button id="save-settings-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור הגדרות</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Sidebar (Full Navigation Menu) -->
         <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
@@ -90,9 +126,10 @@
                 <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between h-16">
                         <a href="index.html" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-home"></i> דף הבית</a>
-                        <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 sm:gap-4">
                             <div id="auth-container"></div>
                             <button id="navigate-hotel-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="נווט למלון"><i class="fas fa-hotel fa-lg"></i></button>
+                            <button id="settings-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="הגדרות"><i class="fas fa-cog fa-lg"></i></button>
                             <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
                         </div>
                     </div>
@@ -145,7 +182,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -163,6 +200,7 @@
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
+            pageBg: document.getElementById('page-bg'),
             sidebar: document.getElementById('sidebar'),
             hamburgerBtn: document.getElementById('hamburger-btn'),
             closeSidebarBtn: document.getElementById('close-sidebar-btn'),
@@ -181,6 +219,17 @@
             hotelSummaryContainer: document.getElementById('hotel-summary-container'),
             transportSummaryContainer: document.getElementById('transport-summary-container'),
             costsSummaryContainer: document.getElementById('costs-summary-container'),
+            // Settings Modal Elements
+            settingsBtn: document.getElementById('settings-btn'),
+            settingsModal: document.getElementById('settings-modal'),
+            closeSettingsBtn: document.getElementById('close-settings-btn'),
+            mainBgInput: document.getElementById('main-bg-input'),
+            destinationBgSelect: document.getElementById('destination-bg-select'),
+            destinationBgInputContainer: document.getElementById('destination-bg-input-container'),
+            destinationBgInput: document.getElementById('destination-bg-input'),
+            destNameLabel: document.getElementById('dest-name-label'),
+            saveSettingsBtn: document.getElementById('save-settings-btn'),
+            settingsFeedback: document.getElementById('settings-feedback'),
         };
 
         let currentUser = null;
@@ -216,8 +265,9 @@
             if (tripSnap.exists() && tripSnap.data().ownerId === currentUser.uid) {
                 tripData = tripSnap.data();
                 document.title = tripData.name;
+                applySettings(); // Apply visual settings first
                 populateUI();
-                listenForLogistics(); // <-- ADDED: Start listening for logistics data
+                listenForLogistics();
                 DOM.loadingOverlay.style.display = 'none';
             } else {
                 alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
@@ -225,21 +275,91 @@
             }
         }
 
-        // --- NEW: Function to listen for logistics updates ---
         function listenForLogistics() {
-            if (logisticsUnsubscribe) logisticsUnsubscribe(); // Detach previous listener
+            if (logisticsUnsubscribe) logisticsUnsubscribe();
 
             const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
             const q = query(logisticsCollectionRef);
             
             logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
                 const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                populateSummaries(allItems); // Update summaries whenever data changes
+                populateSummaries(allItems);
             }, (error) => {
                 console.error("Logistics snapshot error:", error);
             });
         }
+        
+        // --- Settings Logic ---
+        function applySettings() {
+            if (tripData.backgroundUrl) {
+                DOM.pageBg.style.backgroundImage = `url('${tripData.backgroundUrl}')`;
+            }
+        }
 
+        function openSettingsModal() {
+            // Reset fields
+            DOM.mainBgInput.value = tripData.backgroundUrl || '';
+            DOM.destinationBgSelect.innerHTML = '<option value="">-- בחר יעד --</option>';
+            DOM.destinationBgInputContainer.classList.add('hidden');
+            DOM.destinationBgInput.value = '';
+            DOM.settingsFeedback.textContent = '';
+
+            // Populate destination dropdown
+            if (tripData && tripData.destinations) {
+                tripData.destinations.forEach(dest => {
+                    const option = document.createElement('option');
+                    option.value = dest.nameHe;
+                    option.textContent = dest.nameHe;
+                    DOM.destinationBgSelect.appendChild(option);
+                });
+            }
+            
+            DOM.settingsModal.classList.remove('hidden');
+        }
+
+        function closeSettingsModal() {
+            DOM.settingsModal.classList.add('hidden');
+        }
+
+        async function saveSettings() {
+            const tripRef = doc(db, "trips", tripId);
+            
+            // Get new values from inputs
+            const newMainBg = DOM.mainBgInput.value.trim();
+            const selectedDestName = DOM.destinationBgSelect.value;
+            const newDestBg = DOM.destinationBgInput.value.trim();
+
+            // Create a temporary copy of tripData to modify
+            let updatedTripData = { ...tripData };
+            
+            // Update main background
+            updatedTripData.backgroundUrl = newMainBg;
+
+            // Update destination-specific background
+            if (selectedDestName) {
+                const destIndex = updatedTripData.destinations.findIndex(d => d.nameHe === selectedDestName);
+                if (destIndex !== -1) {
+                    updatedTripData.destinations[destIndex].backgroundUrl = newDestBg;
+                }
+            }
+
+            try {
+                await updateDoc(tripRef, updatedTripData);
+                tripData = updatedTripData; // Update local state
+                applySettings(); // Re-apply settings visually
+                DOM.settingsFeedback.textContent = 'ההגדרות נשמרו!';
+                setTimeout(() => {
+                    DOM.settingsFeedback.textContent = '';
+                    closeSettingsModal();
+                }, 1500);
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                DOM.settingsFeedback.textContent = 'שגיאה בשמירה.';
+                DOM.settingsFeedback.classList.remove('text-green-600');
+                DOM.settingsFeedback.classList.add('text-red-600');
+            }
+        }
+        
         // --- UI Population ---
         function populateUI() {
             DOM.tripTitle.textContent = tripData.name;
@@ -248,7 +368,6 @@
             buildNavButtons();
         }
         
-        // --- NEW: Function to populate all summary sections ---
         function populateSummaries(items) {
             const hotels = items.filter(item => item.type === 'hotel');
             const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
@@ -258,7 +377,6 @@
             renderCostsSummary(items);
         }
 
-        // --- NEW: Function to render hotel summary cards ---
         function renderHotelSummary(hotels) {
             const container = DOM.hotelSummaryContainer;
             if (hotels.length === 0) {
@@ -277,7 +395,6 @@
             `).join('');
         }
 
-        // --- NEW: Function to render transport summary cards ---
         function renderTransportSummary(transports) {
             const container = DOM.transportSummaryContainer;
             if (transports.length === 0) {
@@ -313,7 +430,6 @@
             `}).join('');
         }
 
-        // --- NEW: Function to render the costs summary table ---
         function renderCostsSummary(items) {
             const container = DOM.costsSummaryContainer;
             let totalCost = 0;
@@ -470,7 +586,6 @@
         DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
         DOM.overlay.addEventListener('click', toggleSidebar);
         DOM.navigateHotelBtn.addEventListener('click', () => {
-            // This will be implemented fully when hotel data is available
             openNavModal('ניווט למלון', null);
         });
         DOM.navModalClose.addEventListener('click', () => {
@@ -482,6 +597,22 @@
             signOut(auth).then(() => {
                 window.location.href = 'index.html';
             });
+        });
+
+        // Settings Listeners
+        DOM.settingsBtn.addEventListener('click', openSettingsModal);
+        DOM.closeSettingsBtn.addEventListener('click', closeSettingsModal);
+        DOM.saveSettingsBtn.addEventListener('click', saveSettings);
+        DOM.destinationBgSelect.addEventListener('change', (e) => {
+            const selectedDestName = e.target.value;
+            if (selectedDestName) {
+                const destData = tripData.destinations.find(d => d.nameHe === selectedDestName);
+                DOM.destNameLabel.textContent = selectedDestName;
+                DOM.destinationBgInput.value = destData?.backgroundUrl || '';
+                DOM.destinationBgInputContainer.classList.remove('hidden');
+            } else {
+                DOM.destinationBgInputContainer.classList.add('hidden');
+            }
         });
 
         // --- Start the page ---
