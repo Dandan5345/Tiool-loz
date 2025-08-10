@@ -87,7 +87,9 @@
       <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-4">
-            <a href="index.html" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הבית"><i class="fas fa-home fa-lg"></i></a>
+            <button id="back-btn" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה">
+              <i class="fas fa-arrow-right fa-lg"></i>
+            </button>
             <h1 class="text-xl font-bold text-slate-800">אטרקציות ומסעדות</h1>
           </div>
           <div class="flex items-center gap-4">
@@ -98,10 +100,19 @@
       </div>
     </header>
 
+    <!-- Trip title banner -->
+    <div id="trip-banner" class="bg-white/70 backdrop-blur-md border-b">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <p id="trip-title-line" class="py-3 text-center text-slate-700 font-bold">
+          אטרקציות ומסעדות לטיול - טוען...
+        </p>
+      </div>
+    </div>
+
     <main class="p-4 sm:p-6 lg:p-8">
       <div class="max-w-7xl mx-auto">
         <div class="text-center mb-12">
-          <h2 class="text-5xl font-extrabold text-white drop-shadow-lg">תחנות במסע ✨</h2>
+          <h2 class="text-5ל font-extrabold text-white drop-shadow-lg">תחנות במסע ✨</h2>
           <p class="mt-4 text-lg text-slate-200 max-w-2xl mx-auto">הבנק המרכזי שלנו להמלצות, תגליות ומקומות שאסור לפספס.</p>
           <div class="mt-8 flex justify-center items-center gap-4 flex-wrap">
             <button id="open-modal-btn" class="bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
@@ -123,7 +134,7 @@
   <!-- Add/Edit Item Modal -->
   <div id="item-modal" class="fixed inset-0 bg-black/60 z-40 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col">
-      <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+      <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2ל">
         <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת מקום חדש</h3>
         <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
       </div>
@@ -173,9 +184,9 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc, setDoc, arrayUnion, where, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc, setDoc, arrayUnion, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-    // ---------- Firebase (אותו פרויקט כמו הדף הראשי) ----------
+    // ---------- Firebase ----------
     const firebaseConfig = {
       apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
       authDomain: "tiool-loz.firebaseapp.com",
@@ -193,9 +204,6 @@
     let tripId = null;
     let tripData = null;
 
-    // איסוף פריטים לפי טיול (תת־אוסף)
-    let placesColRef = null;
-
     // UI refs
     const initialLoader = document.getElementById('initial-loader');
     const mainContent = document.getElementById('main-content');
@@ -204,13 +212,14 @@
     const closeSidebarBtn = document.getElementById('close-sidebar-btn');
     const overlay = document.getElementById('overlay');
     const mainMenu = document.getElementById('main-menu');
+    const backBtn = document.getElementById('back-btn');
 
     const modal = document.getElementById('item-modal');
     const form = document.getElementById('item-form');
     const openModalBtn = document.getElementById('open-modal-btn');
     const closeModalBtn = document.getElementById('modal-close-btn');
     const nextBtn = document.getElementById('modal-next-btn');
-    const backBtn = document.getElementById('modal-back-btn');
+    const backStepBtn = document.getElementById('modal-back-btn');
     const finishBtn = document.getElementById('modal-finish-btn');
     const stepsIndicator = document.getElementById('modal-steps-indicator');
     const progressBar = document.getElementById('step-progress-bar');
@@ -221,14 +230,14 @@
     const getLocationBtn = document.getElementById('get-location-btn');
     const detailsModal = document.getElementById('details-modal');
     const deleteModal = document.getElementById('delete-confirm-modal');
-
     const authContainer = document.getElementById('auth-container');
+    const tripTitleLine = document.getElementById('trip-title-line');
 
-    // נתוני אתר (סוגים בסיסיים) + נטען סוגים מותאמים מ־Firestore
+    // נתוני אתר (סוגים בסיסיים) + סוגים מותאמים מ־Firestore
     const settingsDocRef = doc(db, 'app_settings', 'custom_types');
     const siteData = {
-      destinations: [], // יתמלא מתוך tripData.destinations
-      destinationEmojis: {}, // אופציונלי
+      destinations: [],
+      destinationEmojis: {},
       basePlaceTypes: ["מסעדה/אוכל","סופר","מוזיאון","קניון/מרכז קניות","אטרקציה","חוף","סיור"],
       customPlaceTypes: [],
       get placeTypes() { return [...this.basePlaceTypes, ...this.customPlaceTypes]; },
@@ -238,9 +247,8 @@
       placeTypeEmojis: { "מסעדה/אוכל":"🍔","סופר":"🛒","מוזיאון":"🏛️","קניון/מרכז קניות":"🛍️","אטרקציה":"🎢","חוף":"🏖️","סיור":"🚶‍♂️" }
     };
 
-    // רשימות
     let allItems = [];
-    let activeFilters = {}; // { [dest]: { [type]: {kosher, foodType, sortByDistance} } }
+    let activeFilters = {};
     let isInitialLoad = true;
 
     // מודאל צעדים
@@ -249,14 +257,14 @@
     let editingItemId = null;
     let isRestaurant = false;
 
-    // מיקום משתמש (למיון מרחק אווירי)
+    // מיקום משתמש
     let userLocation = null;
 
     // Leaflet maps
     let addEditMap = null, addEditMarker = null;
     let detailsMap = null, detailsMarker = null;
 
-    // פרטי מקום שנבחר מהשלמה אוטומטית (OSM)
+    // פרטי מקום שנבחר מה־OSM
     let selectedOSMPlaceDetails = null;
 
     // ---------- Utils ----------
@@ -301,7 +309,7 @@
 
     async function handleSortByAirDistance(destination, type, itemsForType) {
       if (!userLocation) {
-        try { await handleGetLocation(); } catch { 
+        try { await handleGetLocation(); } catch {
           const toggleId = `sort-toggle-${destination.replace(/\s/g,'')}-${type.replace(/[\s/]/g,'')}`;
           const toggle = document.getElementById(toggleId);
           if (toggle) toggle.checked = false;
@@ -353,12 +361,10 @@
           el.innerHTML = `<div class="font-semibold">${r.display_name.split(',')[0]}</div><div class="text-sm text-slate-500 truncate">${r.display_name}</div>`;
           el.addEventListener('click', async () => {
             list.classList.add('hidden');
-            // עדכון מפה ושדות
             const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
             document.getElementById('item-location').value = r.display_name || '';
             initAddEditMap({ lat, lng: lon });
 
-            // נסה למשוך extratags (website, opening_hours, image)
             try {
               const osmPrefix = r.osm_type === 'node' ? 'N' : r.osm_type === 'way' ? 'W' : 'R';
               const lookupUrl = `${NOM_BASE}/lookup?format=jsonv2&osm_ids=${osmPrefix}${r.osm_id}&extratags=1&addressdetails=1&accept-language=he`;
@@ -366,21 +372,16 @@
               const det = await detRes.json();
               const d0 = det && det[0] ? det[0] : null;
 
-              // קבע שם
               const nameField = document.getElementById('item-name');
               const prettyName = r.name || (d0 && (d0.namedetails?.name || d0.extratags?.name)) || r.display_name?.split(',')[0] || '';
               if (nameField && (!nameField.value || nameField.value.trim()==='')) nameField.value = prettyName;
 
-              // שעות ואתר
               const hours = d0?.extratags?.opening_hours || '';
               const website = d0?.extratags?.website || d0?.extratags?.contact_website || '';
               const image = d0?.extratags?.image || '';
-              const hoursEl = document.getElementById('item-hours');
-              const linkEl = document.getElementById('item-link');
-              if (hoursEl && hours) hoursEl.value = hours;
-              if (linkEl && website) linkEl.value = website;
+              if (hours) document.getElementById('item-hours').value = hours;
+              if (website) document.getElementById('item-link').value = website;
 
-              // נשמור פרטי בחירה
               selectedOSMPlaceDetails = {
                 name: prettyName,
                 location: r.display_name,
@@ -394,7 +395,6 @@
               const msg = document.getElementById('google-place-filled-msg');
               if (msg) { msg.classList.remove('hidden'); msg.innerHTML = `<i class="fa-solid fa-check-circle mr-2"></i> פרטי המקום מולאו מה־OpenStreetMap. ניתן לערוך ולהמשיך.`; }
             } catch (e) { console.warn('OSM lookup failed', e); }
-
           });
           list.appendChild(el);
         });
@@ -403,7 +403,7 @@
 
       input.addEventListener('input', () => {
         const q = input.value.trim();
-        selectedOSMPlaceDetails = null; // מאפס בחירה קודמת
+        selectedOSMPlaceDetails = null;
         if (acState.timer) clearTimeout(acState.timer);
         if (q.length < 2) { list.classList.add('hidden'); return; }
         acState.timer = setTimeout(async () => {
@@ -437,7 +437,6 @@
         addEditMarker = L.marker([location.lat, location.lng], { draggable: true }).addTo(addEditMap);
         addEditMarker.on('dragend', () => {
           const { lat, lng } = addEditMarker.getLatLng();
-          // עדכון פרטי מיקום שנבחר
           if (!selectedOSMPlaceDetails) selectedOSMPlaceDetails = {};
           selectedOSMPlaceDetails.coords = { lat, lng };
         });
@@ -464,27 +463,24 @@
       }
     }
 
-    // ---------- טענת סוגים מותאמים ----------
+    // ---------- סוגים מותאמים ----------
     async function loadCustomSettings() {
       try {
         const snap = await getDoc(settingsDocRef);
         if (snap.exists()) {
           const data = snap.data();
           siteData.customPlaceTypes = data.placeTypes || [];
-          if (data.foodTypes) {
-            data.foodTypes.forEach(t => { siteData.customFoodTypes[t] = '🍴'; });
-          }
+          if (data.foodTypes) data.foodTypes.forEach(t => { siteData.customFoodTypes[t] = '🍴'; });
         } else {
           await setDoc(settingsDocRef, { placeTypes: [], foodTypes: [] });
         }
       } catch (e) { console.error('loadCustomSettings', e); }
     }
 
-    // ---------- בניית תפריט צד (דינמי מהטיול) ----------
+    // ---------- תפריט צד מהטיול ----------
     function buildMenuFromTrip() {
       mainMenu.innerHTML = '';
       if (!tripData?.destinations || !Array.isArray(tripData.destinations)) return;
-      // רשימת יעדים ושמות
       siteData.destinations = tripData.destinations.map(d => d.nameHe || d.name || 'יעד');
       tripData.destinations.forEach(dest => {
         const div = document.createElement('div');
@@ -493,7 +489,6 @@
         btn.innerHTML = `<span>${dest.nameHe || dest.name}</span> <i class="fas fa-chevron-down chevron-icon"></i>`;
         const submenu = document.createElement('div');
         submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
-        // ימים לפי טווח תאריכים אם קיים
         if (dest.dates) {
           generateDatesFromRange(dest.dates).forEach(dateStr => {
             const link = document.createElement('a');
@@ -523,7 +518,7 @@
       return out;
     }
 
-    // ---------- תאימות UI ----------
+    // ---------- UI helpers ----------
     function showModalError(message) {
       modalError.textContent = message || '';
       if (message) setTimeout(() => { modalError.textContent = ''; }, 4000);
@@ -615,7 +610,7 @@
         initAddEditMap(item?.coords || undefined);
       }
 
-      backBtn.classList.toggle('hidden', currentModalStep === 1);
+      backStepBtn.classList.toggle('hidden', currentModalStep === 1);
       nextBtn.classList.toggle('hidden', currentModalStep === totalModalSteps);
       finishBtn.classList.toggle('hidden', currentModalStep !== totalModalSteps);
       stepsIndicator.textContent = `שלב ${currentModalStep} מתוך ${totalModalSteps}`;
@@ -728,7 +723,6 @@
 
           let itemsForType = [...byType[type]];
 
-          // סרגל כלים מקומי
           const toolsId = `${dest.replace(/\s/g,'')}-${type.replace(/[\s/]/g,'')}`;
           let filterHtml = `<div class="local-filters bg-slate-100 p-3 rounded-lg flex flex-wrap items-center justify-between gap-4 mb-4">`;
           if (type === 'מסעדה/אוכל') {
@@ -757,12 +751,10 @@
           filterHtml += `</div>`;
           typeContent.insertAdjacentHTML('afterbegin', filterHtml);
 
-          // יישום פילטרים
           if (type === 'מסעדה/אוכל') {
             if (activeFilters[dest][type].kosher) itemsForType = itemsForType.filter(i=>i.isKosher==='כן');
             if (activeFilters[dest][type].foodType) itemsForType = itemsForType.filter(i=>i.foodType===activeFilters[dest][type].foodType);
           }
-          // מיון לפי מרחק אווירי
           if (activeFilters[dest][type].sortByDistance) {
             itemsForType.sort((a,b)=> (a.airDistanceKm??Infinity) - (b.airDistanceKm??Infinity));
           }
@@ -882,137 +874,145 @@
     }
 
     // ---------- אירועים ----------
-    hamburgerBtn.addEventListener('click', toggleSidebar);
-    closeSidebarBtn.addEventListener('click', toggleSidebar);
-    overlay.addEventListener('click', toggleSidebar);
+    function attachEvents() {
+      hamburgerBtn.addEventListener('click', toggleSidebar);
+      closeSidebarBtn.addEventListener('click', toggleSidebar);
+      overlay.addEventListener('click', toggleSidebar);
 
-    openModalBtn.addEventListener('click', () => openModalHandler());
-    closeModalBtn.addEventListener('click', closeModalHandler);
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          if (window.history.length > 1) history.back();
+          else window.location.href = 'index.html';
+        });
+      }
 
-    nextBtn.addEventListener('click', () => { if (currentModalStep < totalModalSteps) { currentModalStep++; updateModalView(); } });
-    backBtn.addEventListener('click', () => { if (currentModalStep > 1) { currentModalStep--; updateModalView(); } });
+      openModalBtn.addEventListener('click', () => openModalHandler());
+      closeModalBtn.addEventListener('click', closeModalHandler);
 
-    getLocationBtn.addEventListener('click', handleGetLocation);
-    detailsModal.addEventListener('click', (e)=>{ if (e.target.id==='details-modal') closeDetailsModal(); });
+      nextBtn.addEventListener('click', () => { if (currentModalStep < totalModalSteps) { currentModalStep++; updateModalView(); } });
+      backStepBtn.addEventListener('click', () => { if (currentModalStep > 1) { currentModalStep--; updateModalView(); } });
 
-    form.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      getLocationBtn.addEventListener('click', handleGetLocation);
+      detailsModal.addEventListener('click', (e)=>{ if (e.target.id==='details-modal') closeDetailsModal(); });
+
+      form.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          if (!nextBtn.classList.contains('hidden')) nextBtn.click();
+          else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
+        }
+      });
+
+      itemsContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.item-card'); if (!card) return;
+        const actionBtn = e.target.closest('.action-btn');
+        const id = card.dataset.id;
+        const item = allItems.find(i=>i.id===id);
+        if (actionBtn) {
+          e.stopPropagation();
+          if (actionBtn.matches('.delete-btn')) {
+            const confirmBtn = document.getElementById('delete-modal-confirm');
+            const title = document.getElementById('delete-modal-title');
+            title.textContent = `האם למחוק את "${item?.name||''}"?`;
+            const closeDelete = () => { deleteModal.classList.add('hidden'); deleteModal.classList.remove('flex'); };
+            const handler = async () => {
+              try { await deleteDoc(doc(db, 'trips', tripId, 'places', id)); } catch(e){ console.error(e); } finally { closeDelete(); }
+            };
+            confirmBtn.addEventListener('click', handler, { once:true });
+            document.getElementById('delete-modal-cancel').addEventListener('click', closeDelete, { once:true });
+            deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
+          } else if (actionBtn.matches('.edit-btn')) {
+            openModalHandler(id);
+          }
+          return;
+        }
+        openDetailsModal(id);
+      });
+
+      itemsContainer.addEventListener('change', async e => {
+        const t = e.target; const dest = t.dataset.destination; const type = t.dataset.type;
+        if (!dest || !type) return;
+        if (t.matches('.local-filter-kosher')) { activeFilters[dest][type].kosher = t.checked; renderAllItems(); }
+        if (t.matches('.local-filter-food-type')) { activeFilters[dest][type].foodType = t.value; renderAllItems(); }
+        if (t.matches('.sort-distance-toggle')) {
+          activeFilters[dest][type].sortByDistance = t.checked;
+          if (t.checked) {
+            const itemsForType = allItems.filter(i=>i.destination===dest && i.type===type);
+            await handleSortByAirDistance(dest, type, itemsForType);
+          } else renderAllItems();
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!nextBtn.classList.contains('hidden')) nextBtn.click();
-        else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
-      }
-    });
+        if (currentModalStep !== totalModalSteps) return;
+        const gv = id => document.getElementById(id) ? document.getElementById(id).value : null;
 
-    itemsContainer.addEventListener('click', (e) => {
-      const card = e.target.closest('.item-card'); if (!card) return;
-      const actionBtn = e.target.closest('.action-btn');
-      const id = card.dataset.id;
-      const item = allItems.find(i=>i.id===id);
-      if (actionBtn) {
-        e.stopPropagation();
-        if (actionBtn.matches('.delete-btn')) {
-          const confirmBtn = document.getElementById('delete-modal-confirm');
-          const title = document.getElementById('delete-modal-title');
-          title.textContent = `האם למחוק את "${item?.name||''}"?`;
-          const closeDelete = () => { deleteModal.classList.add('hidden'); deleteModal.classList.remove('flex'); };
-          const handler = async () => {
-            try { await deleteDoc(doc(db, 'trips', tripId, 'places', id)); } catch(e){ console.error(e); } finally { closeDelete(); }
-          };
-          confirmBtn.addEventListener('click', handler, { once:true });
-          document.getElementById('delete-modal-cancel').addEventListener('click', closeDelete, { once:true });
-          deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
-        } else if (actionBtn.matches('.edit-btn')) {
-          openModalHandler(id);
+        const name = gv('item-name');
+        if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
+
+        let finalType = gv('item-type');
+        if (finalType === 'אחר') {
+          finalType = (gv('item-type-other')||'').trim() || 'כללי';
+          if (finalType !== 'כללי' && !siteData.placeTypes.includes(finalType)) {
+            await setDoc(settingsDocRef, { placeTypes: arrayUnion(finalType) }, { merge:true });
+            siteData.customPlaceTypes.push(finalType);
+          }
         }
-        return;
-      }
-      openDetailsModal(id);
-    });
 
-    itemsContainer.addEventListener('change', async e => {
-      const t = e.target; const dest = t.dataset.destination; const type = t.dataset.type;
-      if (!dest || !type) return;
-      if (t.matches('.local-filter-kosher')) { activeFilters[dest][type].kosher = t.checked; renderAllItems(); }
-      if (t.matches('.local-filter-food-type')) { activeFilters[dest][type].foodType = t.value; renderAllItems(); }
-      if (t.matches('.sort-distance-toggle')) {
-        activeFilters[dest][type].sortByDistance = t.checked;
-        if (t.checked) {
-          const itemsForType = allItems.filter(i=>i.destination===dest && i.type===type);
-          await handleSortByAirDistance(dest, type, itemsForType);
-        } else renderAllItems();
-      }
-    });
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (currentModalStep !== totalModalSteps) return;
-      const gv = id => document.getElementById(id) ? document.getElementById(id).value : null;
-
-      const name = gv('item-name');
-      if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
-
-      let finalType = gv('item-type');
-      if (finalType === 'אחר') {
-        finalType = (gv('item-type-other')||'').trim() || 'כללי';
-        if (finalType !== 'כללי' && !siteData.placeTypes.includes(finalType)) {
-          await setDoc(settingsDocRef, { placeTypes: arrayUnion(finalType) }, { merge:true });
-          siteData.customPlaceTypes.push(finalType);
+        let finalFoodType = isRestaurant ? gv('item-food-type') : null;
+        if (isRestaurant && finalFoodType === 'אחר') {
+          finalFoodType = (gv('item-food-type-other')||'').trim() || null;
+          if (finalFoodType && !siteData.foodTypes[finalFoodType]) {
+            await setDoc(settingsDocRef, { foodTypes: arrayUnion(finalFoodType) }, { merge:true });
+            siteData.customFoodTypes[finalFoodType] = '🍴';
+          }
         }
-      }
 
-      let finalFoodType = isRestaurant ? gv('item-food-type') : null;
-      if (isRestaurant && finalFoodType === 'אחר') {
-        finalFoodType = (gv('item-food-type-other')||'').trim() || null;
-        if (finalFoodType && !siteData.foodTypes[finalFoodType]) {
-          await setDoc(settingsDocRef, { foodTypes: arrayUnion(finalFoodType) }, { merge:true });
-          siteData.customFoodTypes[finalFoodType] = '🍴';
+        const existing = editingItemId ? allItems.find(i=>i.id===editingItemId) : null;
+        let coords = existing?.coords || null;
+        let photos = existing?.photos || [];
+        if (selectedOSMPlaceDetails) {
+          coords = selectedOSMPlaceDetails.coords || coords;
+          photos = selectedOSMPlaceDetails.photos?.length ? selectedOSMPlaceDetails.photos : photos;
         }
-      }
 
-      const existing = editingItemId ? allItems.find(i=>i.id===editingItemId) : null;
-      let coords = existing?.coords || null;
-      let photos = existing?.photos || [];
-      if (selectedOSMPlaceDetails) {
-        coords = selectedOSMPlaceDetails.coords || coords;
-        photos = selectedOSMPlaceDetails.photos?.length ? selectedOSMPlaceDetails.photos : photos;
-      }
+        const data = {
+          name: name,
+          destination: gv('item-destination'),
+          type: finalType,
+          shortDescription: gv('item-short-description'),
+          description: gv('item-description'),
+          isKosher: isRestaurant ? gv('item-kosher') : null,
+          foodType: finalFoodType,
+          location: gv('item-location'),
+          hours: gv('item-hours'),
+          link: gv('item-link'),
+          reservation: gv('item-reservation'),
+          author: currentUser.uid,
+          coords: coords,
+          photos: photos
+        };
 
-      const data = {
-        name: name,
-        destination: gv('item-destination'),
-        type: finalType,
-        shortDescription: gv('item-short-description'),
-        description: gv('item-description'),
-        isKosher: isRestaurant ? gv('item-kosher') : null,
-        foodType: finalFoodType,
-        location: gv('item-location'),
-        hours: gv('item-hours'),
-        link: gv('item-link'),
-        reservation: gv('item-reservation'),
-        author: currentUser.uid,
-        coords: coords,
-        photos: photos
-      };
-
-      try {
-        if (editingItemId) {
-          await updateDoc(doc(db, 'trips', tripId, 'places', editingItemId), { ...data, updatedAt: serverTimestamp() });
-        } else {
-          await addDoc(collection(db, 'trips', tripId, 'places'), { ...data, createdAt: serverTimestamp() });
+        try {
+          if (editingItemId) {
+            await updateDoc(doc(db, 'trips', tripId, 'places', editingItemId), { ...data, updatedAt: serverTimestamp() });
+          } else {
+            await addDoc(collection(db, 'trips', tripId, 'places'), { ...data, createdAt: serverTimestamp() });
+          }
+          closeModalHandler();
+        } catch (err) {
+          console.error('save err', err);
+          showModalError('שגיאה בשמירת הפריט.');
         }
-        closeModalHandler();
-      } catch (err) {
-        console.error('save err', err);
-        showModalError('שגיאה בשמירת הפריט.');
-      }
-    });
+      });
+    }
 
-    // ---------- טעינת טיול + האזנה לפריטים ----------
+    // ---------- האזנה לפריטים ----------
     function listenPlaces() {
       const qRef = query(collection(db, 'trips', tripId, 'places'), orderBy('createdAt','desc'));
       onSnapshot(qRef, (snap) => {
         const newItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // שימור מרחקים מחושבים
         newItems.forEach(n => {
           const old = allItems.find(i=>i.id===n.id);
           if (old?.airDistanceKm) n.airDistanceKm = old.airDistanceKm;
@@ -1031,14 +1031,17 @@
       });
     }
 
+    // ---------- Init ----------
     async function initPage() {
       const urlParams = new URLSearchParams(window.location.search);
-      tripId = urlParams.get('tripId'); // מגיע מהדף הראשי
+      tripId = urlParams.get('tripId');
       if (!tripId) {
         alert("שגיאה: לא נמצא tripId.");
         location.href = 'index.html';
         return;
       }
+      attachEvents();
+
       onAuthStateChanged(auth, async (user) => {
         if (!user) { location.replace('login.html'); return; }
         currentUser = user;
@@ -1046,9 +1049,8 @@
         authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${displayName} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
         document.getElementById('sign-out-btn').addEventListener('click', ()=>signOut(auth));
 
-        await loadCustomSettings();
+        await (async function loadSettings(){ try{ await loadCustomSettings(); }catch(_){} })();
 
-        // טען את המסמך של הטיול ואשר הרשאה
         const tripRef = doc(db, 'trips', tripId);
         const snap = await getDoc(tripRef);
         if (!snap.exists()) { alert('הטיול לא נמצא.'); location.href='index.html'; return; }
@@ -1056,6 +1058,11 @@
         if (tripData.ownerId && tripData.ownerId !== currentUser.uid) {
           alert('אין לך הרשאה לצפות בטיול זה.');
           location.href='index.html'; return;
+        }
+
+        // עדכון כותרת שם הטיול
+        if (tripTitleLine && tripData?.name) {
+          tripTitleLine.textContent = `אטרקציות ומסעדות לטיול - ${tripData.name}`;
         }
 
         buildMenuFromTrip();
