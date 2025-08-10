@@ -12,24 +12,35 @@
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
-        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        #loading-overlay, .modal { transition: opacity 0.5s ease-in-out; }
+        .modal-content { transition: transform 0.3s ease; }
     </style>
 </head>
 <body class="bg-slate-100">
 
-    <div id="loading-overlay" class="fixed inset-0 bg-white/90 z-[100] flex items-center justify-center">
-        <i class="fas fa-spinner fa-spin fa-3x text-blue-600"></i>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
+        <p class="text-xl font-bold text-slate-700">טוען סיכום טיול...</p>
     </div>
 
-    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/NSS7bvI.webp');"></div>
+    <!-- Fixed Background -->
+    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/50"></div>
 
+    <!-- Scrollable Content Wrapper -->
     <div class="relative z-10">
         <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-                <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
-                <h1 class="text-xl font-bold text-slate-800">סיכום מלונות ומעברים</h1>
-                <div id="auth-container"></div>
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-4">
+                        <a id="back-to-edit-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לעריכת הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
+                        <h1 id="header-title" class="text-xl font-bold text-slate-800">סיכום לוגיסטיקה</h1>
+                    </div>
+                     <a id="edit-mode-link" href="#" class="text-sm font-bold text-blue-600 hover:text-blue-800 flex items-center gap-2">
+                        <i class="fas fa-pencil"></i> עבור למצב עריכה
+                    </a>
+                </div>
             </div>
         </header>
 
@@ -39,25 +50,56 @@
                     <h2 id="trip-title" class="text-5xl font-extrabold text-white drop-shadow-lg"></h2>
                 </div>
 
+                <!-- Hotels Section -->
                 <section id="hotel-summary">
-                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">🏨 מלונות</h3>
+                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">🏨 סיכום המלונות שלנו</h3>
                     <div id="hotel-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
                 </section>
 
+                <!-- Transport Section -->
                 <section id="transport-summary">
-                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ מעברים</h3>
+                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום המעברים שלנו</h3>
                     <div id="transport-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </section>
+
+                <!-- Cost Summaries Section -->
+                <section id="cost-summary">
+                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">📊 סיכומי עלויות</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Hotel & Transport Costs -->
+                        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
+                            <h4 class="font-bold text-xl text-slate-700 mb-4">🏨 פירוט עלויות</h4>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-right">
+                                    <thead class="bg-slate-50"><tr><th class="p-3 font-semibold">פריט</th><th class="p-3 font-semibold text-left">עלות</th></tr></thead>
+                                    <tbody id="cost-summary-tbody" class="divide-y divide-slate-200"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- Grand Total -->
+                        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg flex flex-col justify-center items-center">
+                            <h4 class="font-bold text-xl text-slate-700 mb-4">💰 השורה התחתונה</h4>
+                            <div id="grand-total-display" class="text-5xl font-extrabold text-blue-600"></div>
+                        </div>
+                    </div>
                 </section>
             </div>
         </main>
+    </div>
+    
+    <!-- Details View Modal -->
+    <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4 opacity-0">
+        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[95vh] flex flex-col transform scale-95">
+            <!-- Content is injected dynamically -->
+        </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, onSnapshot, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // --- Firebase Init ---
+        // --- Firebase Config ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -66,117 +108,238 @@
             messagingSenderId: "226069823505",
             appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
         };
+        
+        // --- App Initialization ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         // --- Global State ---
-        let currentUser, tripId, logisticsUnsubscribe = null;
+        let tripId = null;
 
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
             tripTitle: document.getElementById('trip-title'),
-            backToTripBtn: document.getElementById('back-to-trip-btn'),
+            backToEditTripBtn: document.getElementById('back-to-edit-trip-btn'),
+            editModeLink: document.getElementById('edit-mode-link'),
             hotelContainer: document.getElementById('hotel-cards-container'),
             transportContainer: document.getElementById('transport-cards-container'),
+            costSummaryBody: document.getElementById('cost-summary-tbody'),
+            grandTotalDisplay: document.getElementById('grand-total-display'),
+            detailsModal: document.getElementById('details-modal'),
         };
 
+        // --- Helper Functions ---
+        function formatPrice(price, currency = 'USD') {
+            const amount = (price || 0).toLocaleString();
+            switch (currency) {
+                case 'USD': return `$${amount}`;
+                case 'EUR': return `€${amount}`;
+                case 'ILS': return `${amount} ₪`;
+                default: return `$${amount}`;
+            }
+        }
+
         // --- Page Initialization ---
-        function initPage() {
+        function init() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
+                alert('מזהה טיול חסר.');
                 window.location.href = 'index.html';
                 return;
             }
-            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+
+            DOM.backToEditTripBtn.href = `edit-trip.html?id=${tripId}`;
+            DOM.editModeLink.href = `logistics.html?tripId=${tripId}`;
 
             onAuthStateChanged(auth, user => {
                 if (user) {
-                    currentUser = user;
-                    loadTripData();
+                    loadData(user.uid);
                 } else {
                     window.location.href = 'login.html';
                 }
             });
         }
 
-        async function loadTripData() {
-            const tripRef = doc(db, "trips", tripId);
+        async function loadData(userId) {
+            const tripRef = doc(db, 'trips', tripId);
             const tripSnap = await getDoc(tripRef);
-            if (tripSnap.exists() && tripSnap.data().ownerId === currentUser.uid) {
-                DOM.tripTitle.textContent = `סיכום עבור: ${tripSnap.data().name}`;
-                listenToLogistics();
-            } else {
-                alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
+            if (!tripSnap.exists() || tripSnap.data().ownerId !== userId) {
+                alert('הטיול לא נמצא או שאין לך גישה אליו.');
                 window.location.href = 'index.html';
+                return;
             }
-        }
+            DOM.tripTitle.textContent = `סיכום לוגיסטיקה: ${tripSnap.data().name}`;
+            document.title = `סיכום: ${tripSnap.data().name}`;
 
-        function listenToLogistics() {
-            if (logisticsUnsubscribe) logisticsUnsubscribe();
-            const logisticsColRef = collection(db, "trips", tripId, "logistics");
-            logisticsUnsubscribe = onSnapshot(logisticsColRef, snapshot => {
+            const logisticsColRef = collection(db, `trips/${tripId}/logistics`);
+            onSnapshot(query(logisticsColRef), snapshot => {
                 const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderItems(allItems);
+                renderAll(allItems);
                 DOM.loadingOverlay.style.display = 'none';
             });
         }
 
         // --- Render Functions ---
-        function renderItems(items) {
+        function renderAll(items) {
             const hotels = items.filter(item => item.type === 'hotel');
-            const transports = items.filter(item => item.type === 'transport');
+            const transports = items.filter(item => ['flight', 'ferry', 'car_rental'].includes(item.type));
             
             renderCards(DOM.hotelContainer, hotels, createHotelCard);
             renderCards(DOM.transportContainer, transports, createTransportCard);
+            renderSummaryTables(items);
         }
 
         function renderCards(container, items, cardCreator) {
             container.innerHTML = '';
             if (items.length === 0) {
-                container.innerHTML = `<p class="text-white/70 text-center col-span-full">אין פריטים להצגה בקטגוריה זו.</p>`;
+                container.innerHTML = `<div class="text-center bg-white/20 p-8 rounded-xl col-span-full"><p class="text-white text-lg">עדיין לא נוספו פריטים בקטגוריה זו.</p></div>`;
                 return;
             }
             items.sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).forEach(item => {
-                container.appendChild(cardCreator(item));
+                const card = cardCreator(item);
+                container.appendChild(card);
             });
         }
 
         function createHotelCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg";
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            card.dataset.id = item.id;
+            
             card.innerHTML = `
-                <h4 class="font-bold text-lg text-slate-800 mb-2">${item.name}</h4>
-                <p class="text-sm text-slate-500 mb-3">${item.dates}</p>
-                <ul class="text-sm space-y-1">
-                    <li><strong>מחיר:</strong> $${(item.price || 0).toLocaleString()}</li>
-                    <li><strong>ארוחת בוקר:</strong> ${item.breakfast || 'לא צוין'}</li>
-                    <li><strong>מטבחון:</strong> ${item.kitchen || 'לא צוין'}</li>
-                </ul>
-                <div class="mt-4 pt-3 border-t flex gap-2">
-                    <a href="${item.link || '#'}" target="_blank" class="flex-1 text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg text-sm ${!item.link ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}">אתר</a>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address || '')}" target="_blank" class="flex-1 text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg text-sm ${!item.address ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-700'}">ניווט</a>
+                <div class="flex-grow">
+                    <h4 class="font-bold text-lg text-slate-800">${item.name}</h4>
+                    <p class="text-sm text-slate-500 mb-3">${item.destination} | ${item.dates}</p>
+                    <ul class="space-y-2 text-slate-600 text-sm mb-4">
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> ${formatPrice(item.price, item.currency)}</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-utensils fa-fw ${item.kitchen === 'אין' ? 'text-red-500' : 'text-green-500'}"></i> <strong>מטבחון:</strong> ${item.kitchen || 'לא צוין'}</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-mug-saucer fa-fw text-blue-500"></i> <strong>א. בוקר:</strong> ${item.breakfast || 'לא צוין'}</li>
+                    </ul>
                 </div>
-            `;
+                <div class="mt-4 pt-4 border-t grid grid-cols-2 gap-2">
+                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">לאתר <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">נווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                </div>`;
+            card.addEventListener('click', () => viewDetails(item));
             return card;
         }
 
         function createTransportCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg";
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            card.dataset.id = item.id;
+
+            let title, icon, details;
+            const priceText = formatPrice(item.price, item.currency);
+
+            switch(item.type) {
+                case 'flight':
+                    icon = 'fa-plane-departure';
+                    title = `טיסה: ${item.from || ''} ← ${item.to || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p><p class="text-sm text-slate-600 font-semibold">${priceText}</p>`;
+                    break;
+                case 'ferry':
+                    icon = 'fa-ship';
+                    title = `מעבורת: ${item.from || ''} ← ${item.to || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p><p class="text-sm text-slate-600 font-semibold">${priceText}</p>`;
+                    break;
+                case 'car_rental':
+                    icon = 'fa-car';
+                    title = `רכב שכור: ${item.destination || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p><p class="text-sm text-slate-600 font-semibold">${priceText}</p>`;
+                    break;
+            }
+
             card.innerHTML = `
-                <h4 class="font-bold text-lg text-slate-800 mb-2">${item.company}: ${item.from} <i class="fas fa-arrow-left"></i> ${item.to}</h4>
-                <p class="text-sm text-slate-500 mb-3">${item.date} | ${item.time}</p>
-                <p class="text-sm"><strong>מספר טיסה/הזמנה:</strong> ${item.refNumber || 'לא צוין'}</p>
-            `;
+                <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-3">
+                        <i class="fas ${icon} fa-2x text-sky-500"></i>
+                        <div>
+                            <h4 class="font-bold text-lg text-slate-800">${title}</h4>
+                            ${details}
+                        </div>
+                    </div>
+                </div>`;
+            card.addEventListener('click', () => viewDetails(item));
             return card;
         }
 
+        function renderSummaryTables(items) {
+            let grandTotal = { USD: 0, EUR: 0, ILS: 0 };
+            DOM.costSummaryBody.innerHTML = '';
+
+            items.forEach(item => {
+                const price = item.price || 0;
+                const currency = item.currency || 'USD';
+                grandTotal[currency] += price;
+                
+                let name = item.name || item.company || 'פריט';
+                if(item.type === 'flight' || item.type === 'ferry') {
+                    name = `${item.company}: ${item.from} ← ${item.to}`;
+                } else if (item.type === 'car_rental') {
+                    name = `רכב שכור ב${item.destination}`;
+                }
+
+                DOM.costSummaryBody.innerHTML += `<tr><td class="p-3">${name}</td><td class="p-3 font-mono text-left">${formatPrice(price, currency)}</td></tr>`;
+            });
+
+            let totalHtml = Object.keys(grandTotal)
+                .filter(key => grandTotal[key] > 0)
+                .map(key => `<div>${formatPrice(grandTotal[key], key)}</div>`)
+                .join('<div class="text-2xl mx-2">+</div>');
+            
+            DOM.grandTotalDisplay.innerHTML = totalHtml || formatPrice(0);
+        }
+
+        // --- Details Modal ---
+        function viewDetails(item) {
+            const content = document.createElement('div');
+            let detailsHtml = '';
+
+            for (const [key, value] of Object.entries(item)) {
+                if (['id', 'createdAt', 'type'].includes(key) || !value) continue;
+                let formattedValue = value;
+                if (key === 'price') {
+                    formattedValue = formatPrice(value, item.currency);
+                }
+                detailsHtml += `<div class="grid grid-cols-3 gap-4 border-b py-2">
+                    <p class="font-semibold text-slate-500 col-span-1">${key}</p>
+                    <p class="text-slate-800 col-span-2 whitespace-pre-wrap">${formattedValue}</p>
+                </div>`;
+            }
+
+            content.innerHTML = `
+                <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <h3 class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
+                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+                <div class="flex-grow overflow-y-auto p-6 space-y-4">${detailsHtml}</div>
+            `;
+            
+            DOM.detailsModal.innerHTML = '';
+            DOM.detailsModal.appendChild(content);
+            
+            DOM.detailsModal.querySelector('#details-modal-close-btn').addEventListener('click', closeDetailsModal);
+            
+            DOM.detailsModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.detailsModal.classList.remove('opacity-0');
+                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeDetailsModal() {
+            DOM.detailsModal.classList.add('opacity-0');
+            const content = DOM.detailsModal.querySelector('.modal-content');
+            if(content) content.classList.add('scale-95');
+            setTimeout(() => DOM.detailsModal.classList.add('hidden'), 300);
+        }
+
         // --- Start Page ---
-        initPage();
+        init();
     </script>
 </body>
 </html>
