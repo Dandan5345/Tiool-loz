@@ -27,6 +27,13 @@
             box-shadow: 0 10px 20px rgba(0,0,0,0.2);
         }
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        .summary-card {
+            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+        }
+        .summary-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
@@ -110,22 +117,22 @@
 
                     <section id="hotel-summary-section">
                         <h3 class="text-3xl font-bold text-white text-center drop-shadow-md mb-6">🏨 סיכום מלונות</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                           <p class="text-white/80 text-center col-span-full">כאן יוצגו כרטיסיות המלונות לאחר שתוסיף אותן בעריכת הטיול.</p>
+                        <div id="hotel-summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                           <p class="text-white/80 text-center col-span-full">טוען סיכום מלונות...</p>
                         </div>
                     </section>
                     
-                    <section id="flight-summary-section">
+                    <section id="transport-summary-section">
                         <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום מעברים</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <p class="text-white/80 text-center col-span-full">כאן יוצגו כרטיסיות המעברים (טיסות, רכבים וכו') לאחר שתוסיף אותן.</p>
+                        <div id="transport-summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
                         </div>
                     </section>
 
-                    <section>
-                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">📊 סיכומי עלויות</h3>
-                        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
-                           <p class="text-slate-600 text-center">טבלאות סיכום העלויות יוצגו כאן.</p>
+                    <section id="costs-summary-section">
+                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">📊 סיכום עלויות</h3>
+                        <div id="costs-summary-container" class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
+                           <p class="text-slate-600 text-center">טוען סיכום עלויות...</p>
                         </div>
                     </section>
                 </div>
@@ -138,7 +145,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -171,11 +178,15 @@
             tripTitle: document.getElementById('trip-title'),
             tripMapContainer: document.getElementById('trip-map-container'),
             mainNavButtons: document.getElementById('main-nav-buttons'),
+            hotelSummaryContainer: document.getElementById('hotel-summary-container'),
+            transportSummaryContainer: document.getElementById('transport-summary-container'),
+            costsSummaryContainer: document.getElementById('costs-summary-container'),
         };
 
         let currentUser = null;
         let tripId = null;
         let tripData = null;
+        let logisticsUnsubscribe = null;
 
         // --- Page Initialization ---
         function initPage() {
@@ -206,11 +217,27 @@
                 tripData = tripSnap.data();
                 document.title = tripData.name;
                 populateUI();
+                listenForLogistics(); // <-- ADDED: Start listening for logistics data
                 DOM.loadingOverlay.style.display = 'none';
             } else {
                 alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
                 window.location.href = 'index.html';
             }
+        }
+
+        // --- NEW: Function to listen for logistics updates ---
+        function listenForLogistics() {
+            if (logisticsUnsubscribe) logisticsUnsubscribe(); // Detach previous listener
+
+            const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+            const q = query(logisticsCollectionRef);
+            
+            logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
+                const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                populateSummaries(allItems); // Update summaries whenever data changes
+            }, (error) => {
+                console.error("Logistics snapshot error:", error);
+            });
         }
 
         // --- UI Population ---
@@ -220,6 +247,94 @@
             buildTripMap();
             buildNavButtons();
         }
+        
+        // --- NEW: Function to populate all summary sections ---
+        function populateSummaries(items) {
+            const hotels = items.filter(item => item.type === 'hotel');
+            const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
+
+            renderHotelSummary(hotels);
+            renderTransportSummary(transports);
+            renderCostsSummary(items);
+        }
+
+        // --- NEW: Function to render hotel summary cards ---
+        function renderHotelSummary(hotels) {
+            const container = DOM.hotelSummaryContainer;
+            if (hotels.length === 0) {
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מלונות עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                return;
+            }
+            container.innerHTML = hotels.map(hotel => `
+                <div class="summary-card bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-md">
+                    <h4 class="font-bold text-slate-800">${hotel.name}</h4>
+                    <p class="text-sm text-slate-600">${hotel.destination}</p>
+                    <p class="text-sm text-slate-500 mt-1">${hotel.dates}</p>
+                    <div class="mt-2 pt-2 border-t text-right font-bold text-blue-600">
+                        $${(hotel.price || 0).toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- NEW: Function to render transport summary cards ---
+        function renderTransportSummary(transports) {
+            const container = DOM.transportSummaryContainer;
+            if (transports.length === 0) {
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מעברים עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                return;
+            }
+
+            const getIcon = (type) => {
+                switch(type) {
+                    case 'flight': return 'fa-plane-departure';
+                    case 'car_rental': return 'fa-car';
+                    case 'ferry': return 'fa-ship';
+                    case 'train': return 'fa-train';
+                    default: return 'fa-ticket-alt';
+                }
+            };
+            
+            container.innerHTML = transports.map(item => {
+                let title = '';
+                if (item.type === 'flight') title = `${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+                else if (item.type === 'car_rental') title = `רכב שכור ב${item.destination}`;
+                else if (item.type === 'ferry') title = `מעבורת מ${item.from_destination} ל${item.to_destination}`;
+                else if (item.type === 'train') title = `רכבת מ${item.from_station} ל${item.to_station}`;
+
+                return `
+                <div class="summary-card bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-md flex items-center gap-4">
+                    <i class="fas ${getIcon(item.type)} fa-2x text-sky-500 w-8 text-center"></i>
+                    <div>
+                        <h4 class="font-bold text-slate-800">${title}</h4>
+                        <p class="text-sm text-slate-500">${item.dates || item.date}</p>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // --- NEW: Function to render the costs summary table ---
+        function renderCostsSummary(items) {
+            const container = DOM.costsSummaryContainer;
+            let totalCost = 0;
+            items.forEach(item => {
+                 if (item.type === 'flight') {
+                    const numSeats = item.seats?.length || 1;
+                    totalCost += (item.price_per_person || 0) * numSeats;
+                } else {
+                    totalCost += item.price || 0;
+                }
+            });
+
+            container.innerHTML = `
+                <div class="text-center">
+                    <p class="text-slate-600 text-lg">סה"כ עלות משוערת (לוגיסטיקה)</p>
+                    <p class="text-4xl font-bold text-blue-700 mt-2">$${totalCost.toLocaleString()}</p>
+                    <a href="summary.html?tripId=${tripId}" class="inline-block mt-4 text-sm text-blue-600 font-semibold hover:underline">צפה בפירוט המלא ונהל עלויות</a>
+                </div>
+            `;
+        }
+
 
         function setupAuthUI(user) {
             const userDocRef = doc(db, "users", user.uid);
@@ -234,7 +349,7 @@
         
         function buildNavButtons() {
             const buttons = [
-                { title: 'סיכום מעברים ומלונות', icon: 'fa-plane-departure', page: 'summary' },
+                { title: 'ניהול לוגיסטיקה', icon: 'fa-plane-departure', page: 'summary' },
                 { title: 'אטרקציות ומסעדות', icon: 'fa-map-marked-alt', page: 'attractions' },
                 { title: 'רשימות וצ\'ק ליסטים', icon: 'fa-list-check', page: 'checklists' },
                 { title: 'מעקב הוצאות', icon: 'fa-dollar-sign', page: 'expenses' },
@@ -263,7 +378,6 @@
                 const dates = generateDatesFromRange(dest.dates);
                 dates.forEach(dateStr => {
                     const dayLink = document.createElement('a');
-                    // This will eventually link to a daily schedule page
                     dayLink.href = `daily-schedule.html?tripId=${tripId}&date=${dateStr}`;
                     dayLink.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md transition-colors';
                     dayLink.textContent = `לו"ז ליום ${dateStr}`;
@@ -333,16 +447,18 @@
         }
         
         function openNavModal(title, address) {
-            // Placeholder for hotel navigation
             document.getElementById('nav-modal-title').textContent = title;
             const navContent = document.getElementById('nav-modal-content');
             const navMessage = document.getElementById('nav-modal-message');
             
             if (address) {
-                // Logic to show Waze/Google links
+                document.getElementById('nav-waze-link').href = `https://waze.com/ul?q=${encodeURIComponent(address)}`;
+                document.getElementById('nav-gmaps-link').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+                navContent.classList.remove('hidden');
+                navMessage.classList.add('hidden');
             } else {
                 navContent.classList.add('hidden');
-                navMessage.textContent = "לא נמצא מלון לתאריך הנוכחי.";
+                navMessage.textContent = "לא הוגדרה כתובת.";
                 navMessage.classList.remove('hidden');
             }
             DOM.navModal.classList.remove('hidden');
