@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>עריכת מלונות ומעברים</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
+
+    <style>
+        body { font-family: 'Assistant', sans-serif; }
+        .modal { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        .litepicker { z-index: 100 !important; }
+    </style>
+</head>
+<body class="bg-slate-100">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
+        <p class="text-xl font-bold text-slate-700">טוען נתונים לעריכה...</p>
+    </div>
+
+    <!-- Fixed Background -->
+    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/NSS7bvI.webp');"></div>
+    <div class="fixed inset-0 z-0 bg-black/50"></div>
+
+    <!-- Scrollable Content Wrapper -->
+    <div class="relative z-10">
+        <!-- Header -->
+        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-4">
+                        <a id="back-to-edit-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לעריכת הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
+                        <h1 id="header-title" class="text-xl font-bold text-slate-800">עריכת לוגיסטיקה</h1>
+                    </div>
+                     <a id="view-mode-link" href="#" class="text-sm font-bold text-blue-600 hover:text-blue-800 flex items-center gap-2">
+                        <i class="fas fa-eye"></i> עבור למצב צפייה
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <main class="p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl mx-auto space-y-12">
+                <div class="text-center">
+                    <h2 class="text-5xl font-extrabold text-white drop-shadow-lg">ניהול הלוגיסטיקה של הטיול</h2>
+                    <button id="open-add-modal-btn" class="mt-8 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+                        <i class="fas fa-plus mr-2"></i>הוספת פריט חדש
+                    </button>
+                </div>
+
+                <!-- Sections for Hotels and Transport -->
+                <section id="hotel-summary">
+                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">🏨 מלונות</h3>
+                    <div id="hotel-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </section>
+                <section id="transport-summary">
+                    <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ מעברים</h3>
+                    <div id="transport-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Add/Edit Modal -->
+    <div id="item-modal" class="modal fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4 opacity-0">
+        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[95vh] flex flex-col transform scale-95">
+            <header class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                <h3 id="modal-title" class="text-2xl font-bold text-slate-800"></h3>
+                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </header>
+            <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-4"></form>
+            <footer class="p-4 bg-slate-100 border-t flex justify-end rounded-b-2xl">
+                <button type="submit" form="item-form" id="modal-finish-btn" class="py-2 px-5 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition">שמור שינויים</button>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="fixed inset-0 bg-black/60 z-[70] hidden items-center justify-center opacity-0">
+         <div class="modal-content bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full transform scale-95">
+            <div class="text-red-500 mb-4"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
+            <h3 id="delete-modal-title" class="text-xl font-bold text-slate-800 mb-4"></h3>
+            <div class="flex justify-center gap-4 mt-6">
+                <button id="delete-modal-cancel" class="py-2 px-6 bg-slate-200 font-semibold rounded-lg hover:bg-slate-300">ביטול</button>
+                <button id="delete-modal-confirm" class="py-2 px-6 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">מחק</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let tripId = null;
+        let editingItem = null;
+        let itemToDelete = null;
+        let logisticsColRef = null;
+
+        const DOM = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            hotelContainer: document.getElementById('hotel-cards-container'),
+            transportContainer: document.getElementById('transport-cards-container'),
+            modal: document.getElementById('item-modal'),
+            modalTitle: document.getElementById('modal-title'),
+            modalForm: document.getElementById('item-form'),
+            modalFinishBtn: document.getElementById('modal-finish-btn'),
+            modalCloseBtn: document.getElementById('modal-close-btn'),
+            deleteModal: document.getElementById('delete-confirm-modal'),
+            deleteModalTitle: document.getElementById('delete-modal-title'),
+            deleteConfirmBtn: document.getElementById('delete-modal-confirm'),
+            deleteCancelBtn: document.getElementById('delete-modal-cancel'),
+            openAddModalBtn: document.getElementById('open-add-modal-btn'),
+            backToEditTripBtn: document.getElementById('back-to-edit-trip-btn'),
+            viewModeLink: document.getElementById('view-mode-link'),
+            headerTitle: document.getElementById('header-title'),
+        };
+
+        function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('tripId');
+            if (!tripId) {
+                alert('מזהה טיול חסר.');
+                window.location.href = 'index.html';
+                return;
+            }
+
+            DOM.backToEditTripBtn.href = `edit-trip.html?id=${tripId}`;
+            DOM.viewModeLink.href = `summary.html?tripId=${tripId}`;
+
+            onAuthStateChanged(auth, user => {
+                if (user) {
+                    logisticsColRef = collection(db, `trips/${tripId}/logistics`);
+                    loadData(user.uid);
+                } else {
+                    window.location.href = 'login.html';
+                }
+            });
+        }
+
+        async function loadData(userId) {
+            const tripRef = doc(db, 'trips', tripId);
+            const tripSnap = await getDoc(tripRef);
+            if (!tripSnap.exists() || tripSnap.data().ownerId !== userId) {
+                alert('הטיול לא נמצא או שאין לך גישה אליו.');
+                window.location.href = 'index.html';
+                return;
+            }
+            DOM.headerTitle.textContent = `עריכת לוגיסטיקה: ${tripSnap.data().name}`;
+            document.title = `עריכה: ${tripSnap.data().name}`;
+
+            onSnapshot(query(logisticsColRef), snapshot => {
+                const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAll(allItems);
+                DOM.loadingOverlay.style.display = 'none';
+            });
+        }
+
+        function renderAll(items) {
+            const hotels = items.filter(item => item.type === 'hotel');
+            const transports = items.filter(item => ['flight', 'ferry', 'car_rental'].includes(item.type));
+            renderCards(DOM.hotelContainer, hotels, createEditableCard);
+            renderCards(DOM.transportContainer, transports, createEditableCard);
+        }
+
+        function renderCards(container, items, cardCreator) {
+            container.innerHTML = '';
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center bg-white/20 p-8 rounded-xl col-span-full"><p class="text-white text-lg">עדיין לא נוספו פריטים. לחץ על 'הוספת פריט חדש' כדי להתחיל.</p></div>`;
+                return;
+            }
+            items.sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).forEach(item => {
+                const card = cardCreator(item);
+                container.appendChild(card);
+            });
+        }
+
+        function createEditableCard(item) {
+            const card = document.createElement('div');
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col";
+
+            let icon, title, details;
+            switch(item.type) {
+                case 'hotel':
+                    icon = 'fa-hotel';
+                    title = item.name;
+                    details = `<p class="text-sm text-slate-500">${item.destination} | ${item.dates}</p>`;
+                    break;
+                case 'flight':
+                    icon = 'fa-plane-departure';
+                    title = `טיסה: ${item.from || ''} ← ${item.to || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p>`;
+                    break;
+                case 'ferry':
+                    icon = 'fa-ship';
+                    title = `מעבורת: ${item.from || ''} ← ${item.to || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p>`;
+                    break;
+                case 'car_rental':
+                    icon = 'fa-car';
+                    title = `רכב שכור: ${item.destination || ''}`;
+                    details = `<p class="text-sm text-slate-500">${item.company}</p>`;
+                    break;
+            }
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-3">
+                        <i class="fas ${icon} text-xl text-sky-500"></i>
+                        <div>
+                            <h4 class="font-bold text-lg text-slate-800">${title}</h4>
+                            ${details}
+                        </div>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0">
+                         <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}"><i class="fas fa-pencil"></i></button>
+                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-600 font-bold">מחיר: $${(item.price || 0).toLocaleString()}</p>
+            `;
+            card.querySelector('.edit-btn').addEventListener('click', () => openModal(item));
+            card.querySelector('.delete-btn').addEventListener('click', () => openDeleteModal(item.id, title));
+            return card;
+        }
+
+        function openModal(item = null) {
+            editingItem = item;
+            DOM.modalTitle.textContent = item ? 'עריכת פריט' : 'הוספת פריט חדש';
+            DOM.modalForm.innerHTML = ''; // Clear previous form
+            
+            const type = item ? item.type : 'hotel'; // Default to hotel for new items
+            
+            let fieldsHtml = `
+                <div class="mb-4">
+                    <label class="block font-semibold">סוג הפריט</label>
+                    <select id="item-type" class="w-full p-2 border rounded-md bg-gray-100" ${item ? 'disabled' : ''}>
+                        <option value="hotel" ${type === 'hotel' ? 'selected' : ''}>🏨 מלון</option>
+                        <option value="flight" ${type === 'flight' ? 'selected' : ''}>✈️ טיסה</option>
+                        <option value="ferry" ${type === 'ferry' ? 'selected' : ''}>🛳️ מעבורת</option>
+                        <option value="car_rental" ${type === 'car_rental' ? 'selected' : ''}>🚗 רכב שכור</option>
+                    </select>
+                </div>
+                <div id="dynamic-fields"></div>
+            `;
+            DOM.modalForm.innerHTML = fieldsHtml;
+            
+            const typeSelector = document.getElementById('item-type');
+            const dynamicFieldsContainer = document.getElementById('dynamic-fields');
+
+            typeSelector.addEventListener('change', () => generateFormFields(typeSelector.value, null, dynamicFieldsContainer));
+            generateFormFields(type, item, dynamicFieldsContainer);
+
+            DOM.modal.classList.remove('hidden', 'opacity-0');
+            DOM.modal.querySelector('.modal-content').classList.remove('scale-95');
+        }
+
+        function generateFormFields(type, data, container) {
+            let commonFields = `
+                <input type="text" name="price" placeholder="מחיר (בדולרים)" class="w-full p-2 border rounded-md" value="${data?.price || ''}">
+                <input type="text" name="company" placeholder="חברה / שם" class="w-full p-2 border rounded-md" value="${data?.company || data?.name || ''}">
+                <input type="text" name="dates" placeholder="תאריכים" class="w-full p-2 border rounded-md" value="${data?.dates || ''}">
+            `;
+            let specificFields = '';
+
+            switch(type) {
+                case 'hotel':
+                    specificFields = `
+                        <input type="text" name="destination" placeholder="עיר/יעד" class="w-full p-2 border rounded-md" value="${data?.destination || ''}">
+                        <input type="text" name="address" placeholder="כתובת מלאה" class="w-full p-2 border rounded-md" value="${data?.address || ''}">
+                        <input type="text" name="link" placeholder="קישור (לבוקינג וכו')" class="w-full p-2 border rounded-md" value="${data?.link || ''}">
+                        <input type="text" name="kitchen" placeholder="מטבח (כן/אין/הכל כלול)" class="w-full p-2 border rounded-md" value="${data?.kitchen || ''}">
+                        <input type="text" name="breakfast" placeholder="ארוחת בוקר" class="w-full p-2 border rounded-md" value="${data?.breakfast || ''}">
+                    `;
+                    break;
+                case 'flight':
+                case 'ferry':
+                     specificFields = `
+                        <input type="text" name="from" placeholder="מאיפה" class="w-full p-2 border rounded-md" value="${data?.from || ''}">
+                        <input type="text" name="to" placeholder="לאיפה" class="w-full p-2 border rounded-md" value="${data?.to || ''}">
+                        <input type="text" name="time" placeholder="שעה" class="w-full p-2 border rounded-md" value="${data?.time || ''}">
+                        <input type="text" name="details" placeholder="פרטים נוספים (מס' טיסה וכו')" class="w-full p-2 border rounded-md" value="${data?.details || ''}">
+                    `;
+                    break;
+                case 'car_rental':
+                     specificFields = `
+                        <input type="text" name="destination" placeholder="עיר/יעד" class="w-full p-2 border rounded-md" value="${data?.destination || ''}">
+                        <input type="text" name="details" placeholder="פרטים נוספים (סוג רכב וכו')" class="w-full p-2 border rounded-md" value="${data?.details || ''}">
+                    `;
+                    break;
+            }
+            container.innerHTML = commonFields + specificFields;
+            if (document.querySelector('input[name="dates"]')) {
+                new Litepicker({ element: document.querySelector('input[name="dates"]'), singleMode: false, format: 'DD/MM/YYYY' });
+            }
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(DOM.modalForm);
+            const data = Object.fromEntries(formData.entries());
+            data.type = document.getElementById('item-type').value;
+            data.price = parseFloat(data.price) || 0;
+            
+            // Use 'company' field for hotel 'name' for consistency
+            if (data.type === 'hotel') {
+                data.name = data.company;
+            }
+
+            try {
+                if (editingItem) {
+                    await updateDoc(doc(logisticsColRef, editingItem.id), data);
+                } else {
+                    data.createdAt = serverTimestamp();
+                    await addDoc(logisticsColRef, data);
+                }
+                closeModal();
+            } catch (error) {
+                console.error("Error saving item: ", error);
+                alert("שגיאה בשמירת הפריט.");
+            }
+        }
+
+        function closeModal() {
+            DOM.modal.classList.add('opacity-0');
+            DOM.modal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.modal.classList.add('hidden');
+                editingItem = null;
+            }, 300);
+        }
+
+        function openDeleteModal(id, name) {
+            itemToDelete = { id, name };
+            DOM.deleteModalTitle.textContent = `האם למחוק את "${name}"?`;
+            DOM.deleteModal.classList.remove('hidden', 'opacity-0');
+            DOM.deleteModal.querySelector('.modal-content').classList.remove('scale-95');
+        }
+
+        function closeDeleteModal() {
+            DOM.deleteModal.classList.add('opacity-0');
+            DOM.deleteModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.deleteModal.classList.add('hidden');
+                itemToDelete = null;
+            }, 300);
+        }
+
+        async function confirmDeletion() {
+            if (!itemToDelete) return;
+            try {
+                await deleteDoc(doc(logisticsColRef, itemToDelete.id));
+                closeDeleteModal();
+            } catch (error) {
+                console.error("Failed to delete item:", error);
+                alert("שגיאה במחיקת הפריט.");
+            }
+        }
+
+        // --- Event Listeners ---
+        DOM.openAddModalBtn.addEventListener('click', () => openModal(null));
+        DOM.modalCloseBtn.addEventListener('click', closeModal);
+        DOM.modalForm.addEventListener('submit', handleFormSubmit);
+        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
+        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
+
+        init();
+    </script>
+</body>
+</html>
