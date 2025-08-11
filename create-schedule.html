@@ -18,20 +18,18 @@
     html, body { height: 100%; }
     body {
       font-family: 'Assistant', sans-serif;
-      min-height: 100svh;                 /* מונע קפיצות בסוף הדף במובייל */
+      min-height: 100svh;
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
-      scrollbar-gutter: stable both-edges; /* מייצב את הרוחב כשנפתחת גלילה */
+      scrollbar-gutter: stable both-edges;
     }
-    /* רקע יפה ועדין */
+    /* רקע */
     .bg-fixed {
       background:
         radial-gradient(1200px 800px at 85% -10%, rgba(59,130,246,.35), transparent 60%),
         radial-gradient(900px 700px at 10% 110%, rgba(16,185,129,.35), transparent 60%),
         url('https://images.unsplash.com/photo-1526779259212-939e64788e3c?q=80&w=2000&auto=format&fit=crop');
-      background-size: cover;
-      background-position: center;
-      filter: saturate(1.05);
+      background-size: cover; background-position: center; filter: saturate(1.05);
     }
     .sheet { background: rgba(255,255,255,.92); backdrop-filter: blur(6px); }
     .submenu { max-height: 0; overflow: hidden; transition: max-height .4s ease; }
@@ -41,32 +39,38 @@
     .step { display: none; }
     .step.active { display: block; }
 
-    /* Typeahead dropdown – נראה טוב ולא נחתך */
-    .typeahead-wrap { position: relative; }
+    /* תיבות אוטוקומפליט צפות (מעל מפות ומודלים) */
     .typeahead {
-      position: absolute;
-      top: calc(100% + 6px);
-      inset-inline: 0;
-      z-index: 70;
+      position: fixed; /* חשוב! */
+      z-index: 99999;  /* מעל הכל */
       background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: .75rem;
       max-height: 260px;
       overflow: auto;
-      box-shadow: 0 10px 25px rgba(0,0,0,.12);
+      box-shadow: 0 10px 25px rgba(0,0,0,.14);
+      display: none;
     }
+    .typeahead.open { display: block; }
     .typeahead button {
       width: 100%;
       text-align: right;
       padding: .6rem .8rem;
       line-height: 1.35;
-      white-space: normal; /* מציג שורות מלאות */
+      white-space: normal;
     }
     .typeahead button:hover { background:#f8fafc; }
 
-    /* קליק־כרטיס */
     .card { transition: transform .12s ease, box-shadow .12s ease; }
     .card:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(2,6,23,.08); }
+
+    /* chips לבחירות חיבורים */
+    .chip {
+      display: inline-flex; align-items: center; gap:.4rem;
+      padding:.25rem .55rem; border-radius: 999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
+      font-size:.85rem;
+    }
+    .chip .x { cursor: pointer; color:#6366f1; }
   </style>
 </head>
 <body>
@@ -186,7 +190,7 @@
           <textarea id="input-desc" rows="4" class="w-full p-2 border rounded-lg" placeholder="מה הולך להיות כאן?"></textarea>
         </div>
 
-        <!-- שלב E: פרטים נוספים (כפתורים פותחים בלוקים) -->
+        <!-- שלב E: פרטים נוספים -->
         <div id="step-E" class="step space-y-4">
           <h5 class="font-bold">פרטים נוספים (לבחירה)</h5>
           <div class="flex flex-wrap gap-2">
@@ -203,9 +207,9 @@
               <label class="font-semibold">כתובת</label>
               <button id="use-hotel-address" class="text-sm text-blue-700 hover:underline">השתמש בכתובת המלון</button>
             </div>
-            <div class="typeahead-wrap">
+            <div class="relative">
               <input id="addr-input" type="text" class="w-full p-2 border rounded-lg" placeholder="הקלד כתובת">
-              <div id="addr-suggest" class="typeahead hidden"></div>
+              <!-- תיבת הצעות תיצמד ל-body ולכן לא כאן -->
             </div>
             <div id="addr-map" class="w-full h-52 rounded-lg"></div>
           </div>
@@ -223,15 +227,13 @@
           <!-- מסלול -->
           <div id="block-route" class="hidden border rounded-xl p-3 space-y-2">
             <div class="grid sm:grid-cols-2 gap-2">
-              <div class="typeahead-wrap">
+              <div class="relative">
                 <label class="text-sm">מאיפה</label>
                 <input id="route-from" class="w-full p-2 border rounded-lg" placeholder="כתובת יציאה">
-                <div id="route-from-suggest" class="typeahead hidden"></div>
               </div>
-              <div class="typeahead-wrap">
+              <div class="relative">
                 <label class="text-sm">לאן</label>
                 <input id="route-to" class="w-full p-2 border rounded-lg" placeholder="כתובת יעד">
-                <div id="route-to-suggest" class="typeahead hidden"></div>
               </div>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
@@ -248,7 +250,10 @@
 
           <!-- חיבורים -->
           <div id="block-connect" class="hidden border rounded-xl p-3">
-            <p class="text-sm text-slate-600 mb-2">תוכן מתוך “ניהול לוגיסטיקה” ו“אטרקציות ומסעדות”.</p>
+            <div class="mb-2">
+              <div id="selected-refs" class="flex flex-wrap gap-2"></div>
+            </div>
+            <p class="text-sm text-slate-600 mb-3">בחר מקורות לקשר לכרטיס: אטרקציות/מסעדות, מלונות ומעברים (טיסות/רכבות/רכב).</p>
             <div id="connect-lists" class="grid gap-3"></div>
           </div>
         </div>
@@ -318,6 +323,9 @@
       </footer>
     </div>
   </div>
+
+  <!-- תיבת הצעות כללית שמוצמדת ל-body -->
+  <div id="global-typeahead" class="typeahead"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -394,7 +402,6 @@
     const openBlockBtns = document.querySelectorAll('.open-block');
 
     const addrInput   = document.getElementById('addr-input');
-    const addrSuggest = document.getElementById('addr-suggest');
     const addrMapDiv  = document.getElementById('addr-map');
     const useHotelBtn = document.getElementById('use-hotel-address');
     let addrMap=null, addrMarker=null;
@@ -404,8 +411,6 @@
 
     const rFrom       = document.getElementById('route-from');
     const rTo         = document.getElementById('route-to');
-    const rFromSug    = document.getElementById('route-from-suggest');
-    const rToSug      = document.getElementById('route-to-suggest');
     const rMode       = document.getElementById('route-mode');
     const rCalc       = document.getElementById('route-calc');
     const rTime       = document.getElementById('route-time');
@@ -413,6 +418,8 @@
     let routeMap=null, routeLayer=null, routeMarkers=[];
 
     const connectLists = document.getElementById('connect-lists');
+    const selectedRefsWrap = document.getElementById('selected-refs');
+    let selectedRefs = []; // [{type:'logistics'|'attraction', id, label, page}]
 
     // Title small modal
     const titleModal = document.getElementById('title-modal');
@@ -435,6 +442,12 @@
     const viewEditBtn = document.getElementById('view-edit');
     const viewDelBtn  = document.getElementById('view-delete');
     let viewMap=null, viewMarker=null, viewingItem=null;
+
+    // Global typeahead (צמוד ל-body)
+    const globalTA = document.getElementById('global-typeahead');
+    let taActiveInput = null; // input שאליו מוצמדת תיבת ההצעות
+    let taOutsideHandler = null;
+    let taScrollHandler = null;
 
     // State
     let user=null, tripData=null;
@@ -580,6 +593,7 @@
     function openItemModal(item=null){
       editingItemId = item?.id || null;
       modalTitle.textContent = editingItemId ? 'עריכת פריט' : 'הוספת פריט ליום';
+
       // reset/assign
       inputDayTitle.value = dayTitle || '';
       inputItemTitle.value = item?.title || '';
@@ -591,6 +605,10 @@
       linkGeneral.value  = item?.links?.site || '';
       linkBook.value     = item?.links?.booking || '';
       endWrap.classList.toggle('hidden', !item?.endTime);
+
+      // refs קיימים
+      selectedRefs = Array.isArray(item?.refs) ? [...item.refs] : [];
+      renderSelectedRefs();
 
       // כתובת
       if (!addrMap){ addrMap = L.map(addrMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(addrMap); }
@@ -628,7 +646,7 @@
       setTimeout(()=>{ addrMap.invalidateSize(); routeMap.invalidateSize(); }, 160);
     }
     addItemBtn.addEventListener('click', ()=> openItemModal());
-    closeModal.addEventListener('click', ()=> itemModal.classList.remove('show'));
+    closeModal.addEventListener('click', ()=> { itemModal.classList.remove('show'); hideTypeahead(); });
 
     function showStep(code){
       [stepA,stepB,stepC,stepD,stepE,stepF,stepG].forEach(s=>s.classList.remove('active'));
@@ -647,49 +665,93 @@
         await setDoc(dayDocRef,{ title: t || null, updatedAt: serverTimestamp() },{merge:true});
         dayTitle = t || null;
         reflectDayTitleUI();
-        // אחרי פעם ראשונה – לא נציג יותר את A
       }
       showStep(stepsOrder[currentStepIndex+1]);
     });
     prevStepBtn.addEventListener('click', ()=> showStep(stepsOrder[currentStepIndex-1]));
     toggleEnd.addEventListener('click', ()=> endWrap.classList.toggle('hidden'));
 
-    // Typeahead helpers (Nominatim)
-    function attachTypeahead(input, box, onPick){
+    // ---- Typeahead צף (מוצמד ל-body) ----
+    function placeTypeaheadBelow(inputEl){
+      const r = inputEl.getBoundingClientRect();
+      Object.assign(globalTA.style, {
+        left: r.left+'px',
+        top: (r.bottom+6)+'px',
+        width: r.width+'px',
+      });
+    }
+    function showTypeaheadFor(inputEl, items){
+      taActiveInput = inputEl;
+      // בונים כפתורים
+      globalTA.innerHTML = items.map(r=>`<button data-lat="${r.lat}" data-lon="${r.lon}">${r.display_name}</button>`).join('');
+      [...globalTA.querySelectorAll('button')].forEach(b=>{
+        b.addEventListener('click', ()=>{
+          const picked = {
+            lat: parseFloat(b.dataset.lat),
+            lng: parseFloat(b.dataset.lon),
+            label: b.textContent
+          };
+          taActiveInput.dispatchEvent(new CustomEvent('typeahead:pick',{detail:picked}));
+          hideTypeahead();
+        }, {once:true});
+      });
+      placeTypeaheadBelow(inputEl);
+      globalTA.classList.add('open');
+
+      // סגירה בלחיצה בחוץ/ESC/גלילה/resize
+      if (!taOutsideHandler){
+        taOutsideHandler = (e)=>{ if (e.target!==globalTA && e.target!==taActiveInput && !globalTA.contains(e.target)) hideTypeahead(); };
+        document.addEventListener('mousedown', taOutsideHandler);
+        document.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') hideTypeahead(); }, {once:true});
+      }
+      if (!taScrollHandler){
+        taScrollHandler = ()=>{ if (taActiveInput) placeTypeaheadBelow(taActiveInput); };
+        window.addEventListener('scroll', taScrollHandler, true);
+        window.addEventListener('resize', taScrollHandler);
+      }
+    }
+    function hideTypeahead(){
+      globalTA.classList.remove('open');
+      globalTA.innerHTML='';
+      taActiveInput = null;
+      if (taOutsideHandler){ document.removeEventListener('mousedown', taOutsideHandler); taOutsideHandler=null; }
+      if (taScrollHandler){ window.removeEventListener('scroll', taScrollHandler, true); window.removeEventListener('resize', taScrollHandler); taScrollHandler=null; }
+    }
+    function bindTypeahead(inputEl, onPick){
       let timer=null;
-      input.addEventListener('input', ()=>{
+      inputEl.addEventListener('input', ()=>{
+        const q = inputEl.value.trim();
         clearTimeout(timer);
-        const q=input.value.trim();
-        if(!q){ box.classList.add('hidden'); box.innerHTML=''; return; }
-        timer=setTimeout(async ()=>{
-          const url=`https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
-          const res=await fetch(url); const arr=await res.json();
-          box.innerHTML = arr.map(r=>`<button data-lat="${r.lat}" data-lon="${r.lon}">${r.display_name}</button>`).join('');
-          box.classList.remove('hidden');
-          box.querySelectorAll('button').forEach(b=>{
-            b.addEventListener('click', ()=>{
-              box.classList.add('hidden');
-              onPick({lat:parseFloat(b.dataset.lat), lng:parseFloat(b.dataset.lon), label:b.textContent});
-            });
-          });
+        if (!q){ hideTypeahead(); return; }
+        timer = setTimeout(async ()=>{
+          try{
+            const url=`https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${encodeURIComponent(q)}`;
+            const res=await fetch(url); const arr=await res.json();
+            if (Array.isArray(arr) && arr.length) showTypeaheadFor(inputEl, arr);
+            else hideTypeahead();
+          }catch{ hideTypeahead(); }
         }, 220);
       });
-      document.addEventListener('click', (e)=>{ if(!box.contains(e.target) && e.target!==input) box.classList.add('hidden'); });
+      inputEl.addEventListener('blur', ()=>{ /* נשאר פתוח עד קליק/ESC */ });
+      inputEl.addEventListener('typeahead:pick', (ev)=> onPick(ev.detail));
     }
-    attachTypeahead(addrInput, addrSuggest, (p)=>{
+
+    // חיבורי אוטוקומפליט
+    bindTypeahead(addrInput, (p)=>{
       addrInput.value=p.label;
       if(!addrMap){ addrMap = L.map(addrMapDiv).setView([p.lat,p.lng], 13); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(addrMap); }
       if(!addrMarker) addrMarker = L.marker([p.lat,p.lng]).addTo(addrMap); else addrMarker.setLatLng([p.lat,p.lng]);
       addrMarker._data = p; addrMap.setView([p.lat,p.lng], 15);
     });
     function setRoutePoint(idx,p){
+      if(!routeMap){ routeMap = L.map(rMapDiv).setView([p.lat,p.lng], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(routeMap); }
       if(!routeMarkers[idx]) routeMarkers[idx]=L.marker([p.lat,p.lng]).addTo(routeMap);
       else routeMarkers[idx].setLatLng([p.lat,p.lng]);
       routeMarkers[idx]._data=p;
       routeMap.setView([p.lat,p.lng], 13);
     }
-    attachTypeahead(rFrom, rFromSug, (p)=>{ rFrom.value=p.label; setRoutePoint(0,p); });
-    attachTypeahead(rTo,   rToSug,   (p)=>{ rTo.value=p.label;   setRoutePoint(1,p); });
+    bindTypeahead(rFrom, (p)=>{ rFrom.value=p.label; setRoutePoint(0,p); });
+    bindTypeahead(rTo,   (p)=>{ rTo.value=p.label;   setRoutePoint(1,p); });
 
     rCalc.addEventListener('click', async ()=>{
       if (!routeMarkers[0]?._data || !routeMarkers[1]?._data) return alert('בחר גם מוצא וגם יעד.');
@@ -727,18 +789,100 @@
       return byDest || hotels.find(h=> inRange(h.dates||''));
     }
 
-    // חיבורים
-    document.querySelector('[data-open="#block-connect"]').addEventListener('click', async ()=>{
-      const wrap=document.getElementById('block-connect');
-      if (wrap.classList.contains('hidden')) return; // רק כשפתוח
+    // ---- חיבורים (link to logistics/attractions) ----
+    function renderSelectedRefs(){
+      selectedRefsWrap.innerHTML = selectedRefs.length ? selectedRefs.map((r,i)=>(
+        `<span class="chip">${iconForRef(r)} ${r.label}<span class="x" data-i="${i}">&times;</span></span>`
+      )).join(' ') : `<span class="text-slate-400 text-sm">לא נבחרו קישורים.</span>`;
+      selectedRefsWrap.querySelectorAll('.x').forEach(x=>{
+        x.addEventListener('click', ()=>{
+          const idx=parseInt(x.dataset.i,10);
+          selectedRefs.splice(idx,1);
+          renderSelectedRefs();
+        });
+      });
+    }
+    function iconForRef(r){
+      if (r.type==='logistics'){
+        if (r.subType==='hotel') return '🏨';
+        if (r.subType==='flight') return '✈️';
+        if (r.subType==='train') return '🚆';
+        if (r.subType==='car_rental') return '🚗';
+        if (r.subType==='ferry') return '⛴️';
+        return '⬅️';
+      }
+      return '📍';
+    }
+    async function buildConnectLists(){
       connectLists.innerHTML='טוען...';
-      const logistics=(await getDocs(collection(db,'trips',tripId,'logistics'))).docs.map(d=>({id:d.id,...d.data()}));
-      const attractions=(await getDocs(collection(db,'trips',tripId,'attractions'))).docs.map(d=>({id:d.id,...d.data()}));
-      const mk=(t,s,link)=>`<div class="p-3 rounded-lg border bg-white flex items-center justify-between"><div><div class="font-bold">${t}</div><div class="text-xs text-slate-500">${s||''}</div></div><a href="${link}" class="text-blue-600 hover:underline text-sm" target="_blank">פתח</a></div>`;
+      const [logSnap, attSnap] = await Promise.all([
+        getDocs(collection(db,'trips',tripId,'logistics')),
+        getDocs(collection(db,'trips',tripId,'attractions'))
+      ]);
+      const logistics = logSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      const attractions = attSnap.docs.map(d=>({id:d.id, ...d.data()}));
+
+      const card = (title, sub, openHref, pickHandlerText='בחר', picked=false)=>`
+        <div class="p-3 rounded-lg border bg-white flex items-center justify-between">
+          <div>
+            <div class="font-bold">${title}</div>
+            ${sub?`<div class="text-xs text-slate-500">${sub}</div>`:''}
+          </div>
+          <div class="flex gap-2">
+            <a href="${openHref}" class="text-blue-600 hover:underline text-sm" target="_blank">פתח</a>
+            <button class="px-2 py-1 rounded border text-sm ${picked?'bg-green-600 text-white border-green-600':'hover:bg-slate-50'} pick-btn">${picked?'נבחר':'בחר'}</button>
+          </div>
+        </div>`;
+
       let html='';
-      if (logistics.length){ html+=`<div><div class="font-bold mb-2">מעברים ומלונות</div><div class="grid gap-2">`+logistics.map(l=>mk(l.type==='flight'?'✈️ טיסה':l.type==='hotel'?'🏨 מלון':'⬅️ מעבר', l.dates||l.date||'', `summary.html?tripId=${tripId}#${l.id}`)).join('')+`</div></div>`; }
-      if (attractions.length){ html+=`<div class="mt-4"><div class="font-bold mb-2">אטרקציות ומסעדות</div><div class="grid gap-2">`+attractions.map(a=>mk(a.name,a.destination, `attractions.html?tripId=${tripId}#${a.id}`)).join('')+`</div></div>`; }
+      // מעברים ומלונות
+      if (logistics.length){
+        html+=`<div><div class="font-bold mb-2">מעברים ומלונות</div><div class="grid gap-2">`;
+        html+= logistics.map(l=>{
+          const label = (l.type==='hotel'?'מלון: ':'') + (l.name||l.destination||l.type);
+          const sub   = l.dates || l.date || '';
+          const href  = `summary.html?tripId=${tripId}&open=logistics&id=${l.id}`;
+          const picked= selectedRefs.some(r=>r.type==='logistics' && r.id===l.id);
+          return `<div data-ref-type="logistics" data-ref-id="${l.id}" data-ref-subtype="${l.type}" data-ref-label="${label}">${card(iconForRef({type:'logistics',subType:l.type})+' '+label, sub, href, 'בחר', picked)}</div>`;
+        }).join('');
+        html+=`</div></div>`;
+      }
+      // אטרקציות/מסעדות
+      if (attractions.length){
+        html+=`<div class="mt-4"><div class="font-bold mb-2">אטרקציות ומסעדות</div><div class="grid gap-2">`;
+        html+= attractions.map(a=>{
+          const label = a.name || a.title || 'פריט';
+          const sub   = a.destination || '';
+          const href  = `attractions.html?tripId=${tripId}&open=attraction&id=${a.id}`;
+          const picked= selectedRefs.some(r=>r.type==='attraction' && r.id===a.id);
+          return `<div data-ref-type="attraction" data-ref-id="${a.id}" data-ref-label="${label}">${card('📍 '+label, sub, href, 'בחר', picked)}</div>`;
+        }).join('');
+        html+=`</div></div>`;
+      }
+
       connectLists.innerHTML = html || '<div class="text-slate-500">אין נתונים להצגה.</div>';
+
+      // חיבור בחירה
+      connectLists.querySelectorAll('.pick-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const wrap=btn.closest('[data-ref-type]');
+          const type=wrap.dataset.refType;
+          const id  =wrap.dataset.refId;
+          const subType = wrap.dataset.refSubtype || null;
+          const label=wrap.dataset.refLabel;
+          const idx = selectedRefs.findIndex(r=>r.type===type && r.id===id);
+          if (idx>-1){ selectedRefs.splice(idx,1); btn.textContent='בחר'; btn.classList.remove('bg-green-600','text-white','border-green-600'); }
+          else { selectedRefs.push({type, id, label, page:(type==='logistics'?'summary':'attractions'), subType}); btn.textContent='נבחר'; btn.classList.add('bg-green-600','text-white','border-green-600'); }
+          renderSelectedRefs();
+        });
+      });
+    }
+    // פתיחת בלוק חיבורים — טוען פעם ראשונה
+    document.querySelector('[data-open="#block-connect"]').addEventListener('click', async (e)=>{
+      const el=document.querySelector('#block-connect');
+      setTimeout(async ()=>{
+        if (!el.classList.contains('hidden')) await buildConnectLists();
+      }, 0);
     });
 
     // שמירה + חישוב מרחקים
@@ -746,6 +890,7 @@
       const payload = collectItemFromModal();
       await saveItemCore(payload, editingItemId);
       itemModal.classList.remove('show');
+      hideTypeahead();
       editingItemId = null;
     });
 
@@ -761,21 +906,19 @@
         address: addrMarker?._data ? { label: addrMarker._data.label, lat: addrMarker._data.lat, lng: addrMarker._data.lng } : null,
         travel: (routeMarkers[0]?._data && routeMarkers[1]?._data) ? {
           from: routeMarkers[0]._data, to: routeMarkers[1]._data, mode: rMode.value, timeText: rTime.textContent || null
-        } : null
+        } : null,
+        refs: selectedRefs
       };
     }
 
     async function saveItemCore(payload, editId=null){
-      // ודא כותרת יום רשומה
       await setDoc(dayDocRef,{ title: dayTitle || null, updatedAt: serverTimestamp() },{merge:true});
-
       const thisSort = minutesFromHHMM(payload.startTime||'00:00');
       if (editId){
         await updateDoc(doc(db,'trips',tripId,'schedules',dayDocId,'items',editId), { ...payload, sort:thisSort, updatedAt: serverTimestamp() });
       } else {
         await addDoc(collection(db,'trips',tripId,'schedules',dayDocId,'items'), { ...payload, sort:thisSort, date:selectedDate, destination:selectedDest?.nameHe||null, createdAt: serverTimestamp() });
       }
-      // חשב מחדש מרחקים אוויריים לכולם
       await recomputeDistances();
     }
 
@@ -802,9 +945,11 @@
         startTime: inputStart.value, endTime:null,
         summary:'סיום היום וחזרה למלון',
         address: h.address ? { label:h.address, lat:h.coords?.lat, lng:h.coords?.lng } : null,
-        isBackToHotel:true
+        isBackToHotel:true,
+        refs: []
       }, null);
       itemModal.classList.remove('show');
+      hideTypeahead();
     });
 
     // בלוקים לפתיחה/סגירה
@@ -835,6 +980,22 @@
       viewDesc.textContent = it.description || '';
       viewDesc.classList.toggle('hidden', !it.description);
 
+      // קישורי refs (מציג כפתורים לעמודים)
+      let refsHtml='';
+      if (Array.isArray(it.refs) && it.refs.length){
+        refsHtml = it.refs.map(r=>{
+          const href = `${r.page==='summary'?'summary':'attractions'}.html?tripId=${tripId}&open=${r.type==='logistics'?'logistics':'attraction'}&id=${r.id}`;
+          return `<a class="px-3 py-2 rounded-lg bg-indigo-600 text-white" target="_blank" href="${href}">${iconForRef(r)} ${r.label}</a>`;
+        }).join(' ');
+      }
+
+      // קישורים כלליים
+      viewLinks.innerHTML = [
+        it.links?.site ? `<a class="px-3 py-2 rounded-lg bg-slate-800 text-white" target="_blank" href="${it.links.site}"><i class="fa-solid fa-link"></i> אתר</a>` : '',
+        it.links?.booking ? `<a class="px-3 py-2 rounded-lg bg-emerald-600 text-white" target="_blank" href="${it.links.booking}"><i class="fa-solid fa-ticket"></i> הזמנה</a>` : '',
+        refsHtml
+      ].filter(Boolean).join(' ');
+
       if (it.address?.label){
         viewAddress.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${it.address.label}`;
         navWaze.href  = `https://waze.com/ul?q=${encodeURIComponent(it.address.label)}`;
@@ -844,10 +1005,6 @@
         viewAddress.innerHTML = '';
         navWaze.classList.add('hidden'); navGmaps.classList.add('hidden');
       }
-
-      viewLinks.innerHTML = '';
-      if (it.links?.site) viewLinks.innerHTML += `<a class="px-3 py-2 rounded-lg bg-slate-800 text-white" target="_blank" href="${it.links.site}"><i class="fa-solid fa-link"></i> אתר</a>`;
-      if (it.links?.booking) viewLinks.innerHTML += `<a class="px-3 py-2 rounded-lg bg-emerald-600 text-white" target="_blank" href="${it.links.booking}"><i class="fa-solid fa-ticket"></i> הזמנה</a>`;
 
       // מפה
       setTimeout(()=>{
