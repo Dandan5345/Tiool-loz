@@ -560,12 +560,7 @@
       return null;
     }
 
-    // Firestore paths
-    const tripsCol = collection(db, 'trips');
-
-    function schedulesCol(){
-      return collection(db, 'trips', tripId, 'schedules');
-    }
+    // Firestore helpers
     function itemsCol(iso){
       return collection(db, 'trips', tripId, 'schedules', iso, 'items');
     }
@@ -590,7 +585,6 @@
       if (incomingDate){
         setSelectedByDate(incomingDate);
       }else{
-        // fallback first destination first date
         const firstDest = tripData?.destinations?.[0];
         if (firstDest){
           const dates = generateDatesFromRange(firstDest.dates);
@@ -598,7 +592,7 @@
         }
       }
 
-      // Load attach data (best effort from subcollections; fallback to globals with tripId)
+      // Load attach data
       await loadAttachData();
 
       // Bind UI
@@ -616,7 +610,8 @@
         chooserMenu.classList.toggle('hidden');
       });
       document.addEventListener('click', (e)=>{
-        if (!qs('.chooser').contains(e.target)){
+        const chooser = qs('.chooser');
+        if (chooser && !chooser.contains(e.target)){
           chooserMenu.classList.add('hidden');
         }
       });
@@ -630,8 +625,9 @@
       qs('#ai-create').addEventListener('click', createFromAI);
 
       // Edit day title small
-      qs('#edit-day-title-btn').addEventListener('click', ()=>{
-        qs('#edit-title-input').value = qs('#day-title-display').textContent || '';
+      qs('#edit-day-title-btn').addEventListener('click', async ()=>{
+        const daySnap = await getDoc(dayDocRef);
+        qs('#edit-title-input').value = daySnap.data()?.dayTitle || '';
         show(editTitleModal);
       });
       qs('#edit-title-close').addEventListener('click', ()=> hide(editTitleModal));
@@ -702,7 +698,7 @@
         }
       });
 
-      // Autocomplete hookups (ensure suggestions on top)
+      // Autocomplete hookups
       ['#item-address','#route-from','#route-to','#val-address','#val-from','#val-to'].forEach(sel=>{
         const el = qs(sel);
         if (el) {
@@ -1230,7 +1226,6 @@
       const all = list.docs.map(d=>({id:d.id, ...d.data()}));
       const hotel = all.find(x=>x.type==='hotel' && dateInRange(selectedDateStr, x.dates));
       if (!hotel) return null;
-      // try coords if stored
       return {
         name: hotel.name,
         address: hotel.address || hotel.location || '',
@@ -1240,14 +1235,12 @@
     }
 
     async function loadAttachData(){
-      // subcollections under trip preferred
       // attractions:
       const attArr = [];
       try{
         const sub = await getDocs(collection(db, 'trips', tripId, 'attractions'));
         sub.forEach(d=> attArr.push({ id:d.id, typeLabel:'אטרקציה/מסעדה', name:d.data().name, subtitle:d.data().destination||'', path:`trips/${tripId}/attractions/${d.id}` }));
       }catch(e){}
-      // fallback global with tripId
       if (!attArr.length){
         try{
           const q1 = query(collection(db,'attractions'), where('tripId','==',tripId));
@@ -1280,7 +1273,7 @@
       if (!txt.trim()){ msg(qs('#ai-msg'),'יש להדביק טקסט'); return; }
       msg(qs('#ai-msg'),'יוצר פריטים...');
 
-      // If includes day title (!...!) and day has none, save it
+      // Day title
       const daySnap = await getDoc(dayDocRef);
       const day = daySnap.data();
       const mDay = txt.match(/^!([\s\S]*?)!$/m);
@@ -1289,7 +1282,7 @@
         updateDayHeader((await getDoc(dayDocRef)).data());
       }
 
-      // Split into blocks by presence of a title of item: ^״...״
+      // Split into blocks by item title line  ״...״
       const blocks = txt.split(/(?=^״[\s\S]+?״$)/m).map(s=>s.trim()).filter(Boolean);
 
       for (const block of blocks){
@@ -1307,7 +1300,7 @@
         const startRouteHotel = /^>\s*׳₪\s*$/m.test(block);
         const endRouteHotel   = /^<\s*׳₪\s*$/m.test(block);
         const startRouteM = block.match(/^>\s*׳([\s\S]+?)׳\s*$/m);
-        const endRouteM   = block.match/^<\s*׳([\s\S]+?)׳\s*$/m);
+        const endRouteM   = block.match(/^<\s*׳([\s\S]+?)׳\s*$/m); /* <-- FIXED */
         const attachNeeded = /^\*$/m.test(block);
         const summaryM = block.match(/^•([\s\S]+?)•$/m);
         const remarksM = block.match(/^~([\s\S]+?)~$/m);
@@ -1330,22 +1323,12 @@
 
         const attach = attachNeeded ? { type:'(נדרש שיוך)', name:'*', path:null } : null;
 
-        // compute needsValidation
         const needsValidation = (!!address && (!address.lat || !address.lng))
           || (!!route && (!route.from?.text || !route.to?.text))
           || (!!attach && !attach.path);
 
-        // compute air distance from prev (using address/route.to if possible)
+        // (אופציונלי) מרחק אווירי – לרוב יחושב לאחר אימות הכתובת
         let airKmFromPrev = null;
-        try{
-          const itemsSnap = await getDocs(query(itemsCol(selectedISO), orderBy('start','asc')));
-          const all = itemsSnap.docs.map(d=>({id:d.id,...d.data()}));
-          const prev = [...all].filter(x=>x.start && x.start <= (startM?.[1]||'00:00')).pop();
-          const herePt = address?.lat ? { lat:address.lat, lng:address.lng } : null; // unknown yet mostly
-          if (prev?.address?.lat && herePt){
-            airKmFromPrev = haversineKm({lat:prev.address.lat,lng:prev.address.lng}, herePt);
-          }
-        }catch(e){}
 
         const data = {
           title,
@@ -1367,9 +1350,50 @@
       hide(aiModal);
     }
 
+    async function openValidateForItem(id, viewOnly=false){
+      const snap = await getDoc(doc(db, 'trips', tripId, 'schedules', selectedISO, 'items', id));
+      if (!snap.exists()) return;
+      const it = { id, ...snap.data() };
+      validateModal.dataset.itemId = id;
+
+      ['val-address-wrap','val-route-wrap','val-attach-wrap'].forEach(id=>hidePanel(id));
+      msg(qs('#val-msg'),'');
+      pickedAttachValidate = it.attach || null;
+      qs('#val-attach-picked').textContent = pickedAttachValidate ? `נבחר: ${pickedAttachValidate.type} • ${pickedAttachValidate.name}` : '';
+
+      const needs = [];
+      if ( (it.address?.text && (!it.address.lat || !it.address.lng)) || viewOnly ) {
+        showPanel('val-address-wrap');
+        const el = qs('#val-address');
+        el.value = it.address?.text || '';
+        el.dataset.lat = it.address?.lat ?? '';
+        el.dataset.lng = it.address?.lng ?? '';
+        ensureValAddressMap();
+        if (it.address?.lat){ valAddressMap.setView([it.address.lat,it.address.lng],16); valAddressMarker.setLatLng([it.address.lat,it.address.lng]); }
+        needs.push('אימות כתובת');
+      }
+      if ( (it.route && (!it.route.from?.lat || !it.route.to?.lat)) || viewOnly ) {
+        showPanel('val-route-wrap');
+        const fr = qs('#val-from'), to = qs('#val-to');
+        fr.value = it.route?.from?.text || ''; fr.dataset.lat = it.route?.from?.lat ?? ''; fr.dataset.lng = it.route?.from?.lng ?? '';
+        to.value = it.route?.to?.text || '';   to.dataset.lat = it.route?.to?.lat ?? '';   to.dataset.lng = it.route?.to?.lng ?? '';
+        ensureValRouteMap();
+        needs.push('אימות מסלול');
+      }
+      if ( (!it.attach || !it.attach.path) || viewOnly ) {
+        showPanel('val-attach-wrap');
+        renderAttachList('att', qs('#val-attach-list'), true);
+        needs.push('שיוך לפריט קיים');
+      }
+
+      qs('#validate-need').textContent = viewOnly ? 'פרטי הפריט' : ('נדרש: ' + needs.join(' • '));
+      show(validateModal);
+    }
+
     // ---------------------------
 
-    // Attach data loaders are done above
+    // Attach data loaders
+    // (כבר בוצע למעלה)
 
     // ---------------------------
 
