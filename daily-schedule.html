@@ -89,6 +89,11 @@
               <span id="date-chip" class="font-semibold">--/--/----</span>
             </div>
           </div>
+          <div class="mt-3 flex gap-2 justify-end">
+            <a id="edit-schedule-btn" href="#" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-slate-700 hover:bg-slate-50">
+              <i class="fa-solid fa-pen"></i> ערוך לוז
+            </a>
+          </div>
         </section>
 
         <!-- Timeline -->
@@ -96,13 +101,21 @@
           <div id="no-schedule" class="text-center p-10">
             <i class="fa-regular fa-clock fa-3x text-slate-400 mb-4"></i>
             <h3 class="text-xl font-bold text-slate-700 mb-1">עדיין אין לוז ליום זה</h3>
-            <p class="text-slate-500">לחץ על “צור לוז” כדי להתחיל לתכנן את היום.</p>
+            <p class="text-slate-500">לחץ “ערוך לוז” או “צור לוז” כדי להתחיל לתכנן את היום.</p>
           </div>
           <div id="timeline" class="timeline space-y-4 hidden"></div>
         </section>
 
+        <!-- Notes/Tips -->
+        <section id="notes-section" class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-5">
+          <h3 class="text-lg font-bold text-slate-800 mb-3">דגשים וטיפים ליום זה</h3>
+          <div id="notes-list" class="grid gap-3">
+            <div class="text-slate-500">אין עדיין דגשים/טיפים.</div>
+          </div>
+        </section>
+
         <!-- CTA -->
-        <section class="flex justify-center">
+        <section class="flex justify-center gap-3">
           <a id="create-schedule-btn" href="#" class="inline-flex items-center gap-2 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
             <i class="fa-solid fa-wand-magic-sparkles"></i>
             צור לוז
@@ -117,7 +130,9 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import {
+      getFirestore, doc, getDoc, collection, onSnapshot, query, where, orderBy
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     // ---------- Firebase ----------
     const firebaseConfig = {
@@ -137,46 +152,47 @@
     let tripId = null;
     let tripData = null;
 
-    // מה-URL (נשתמש **בדיוק** כפי שהגיע לתצוגה)
-    let dateStr = null;   // dd/m/yyyy או כל וריאציה – מציגים כמו שהוא
-    let dateISO = null;   // yyyy-mm-dd אם הצלחנו לפרש, לשימוש פנימי בלבד
-    let dayNameHe = "";   // יום בשבוע אם הצלחנו לפרש
+    let dateStr = null;   // מוצג כפי שבא ב-URL
+    let dateISO = null;   // yyyy-mm-dd (למסמכי schedules)
+    let dayNameHe = "";
 
     let destForDate = null;
 
     // UI
-    const initialLoader = document.getElementById('initial-loader');
-    const mainContent = document.getElementById('main-content');
-    const pageBg = document.getElementById('page-bg');
-    const loaderBg = document.getElementById('loader-bg');
-    const sidebar = document.getElementById('sidebar');
-    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const initialLoader   = document.getElementById('initial-loader');
+    const mainContent     = document.getElementById('main-content');
+    const pageBg          = document.getElementById('page-bg');
+    const loaderBg        = document.getElementById('loader-bg');
+    const sidebar         = document.getElementById('sidebar');
+    const hamburgerBtn    = document.getElementById('hamburger-btn');
     const closeSidebarBtn = document.getElementById('close-sidebar-btn');
-    const overlay = document.getElementById('overlay');
-    const mainMenu = document.getElementById('main-menu');
-    const authContainer = document.getElementById('auth-container');
-    const backBtn = document.getElementById('back-btn');
+    const overlay         = document.getElementById('overlay');
+    const mainMenu        = document.getElementById('main-menu');
+    const authContainer   = document.getElementById('auth-container');
+    const backBtn         = document.getElementById('back-btn');
 
     const scheduleHeadline = document.getElementById('schedule-headline');
-    const dayTitle = document.getElementById('day-title');
-    const tripSubtitle = document.getElementById('trip-subtitle');
-    const dateChip = document.getElementById('date-chip');
+    const dayTitleEl       = document.getElementById('day-title');
+    const tripSubtitle     = document.getElementById('trip-subtitle');
+    const dateChip         = document.getElementById('date-chip');
 
     const noScheduleBox = document.getElementById('no-schedule');
-    const timelineBox = document.getElementById('timeline');
-    const createBtn = document.getElementById('create-schedule-btn');
+    const timelineBox   = document.getElementById('timeline');
+    const createBtn     = document.getElementById('create-schedule-btn');
+    const editBtn       = document.getElementById('edit-schedule-btn');
+
+    const notesList     = document.getElementById('notes-list');
+    const notesSection  = document.getElementById('notes-section');
 
     // ---------- Helpers ----------
     function toggleSidebar(){ sidebar.classList.toggle('translate-x-full'); overlay.classList.toggle('hidden'); }
 
-    // פענוח עמיד לכל פורמט d/m/yy או d.m.yyyy
     function parseLocalDateFlexible(s) {
       if (!s) return null;
       const m = s.trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);
       if (!m) return null;
       let d = +m[1], mo = +m[2], y = +m[3];
-      if (y < 100) y += 2000;               // 25 -> 2025
-      // משתמשים ב־UTC כדי לא ליפול בהסטי אזור זמן
+      if (y < 100) y += 2000;
       const dt = new Date(Date.UTC(y, mo-1, d));
       return isNaN(dt.getTime()) ? null : dt;
     }
@@ -199,12 +215,11 @@
       if (!start || !end) return [];
       const out = [];
       for (let t = new Date(start); t <= end; t.setUTCDate(t.getUTCDate()+1)) {
-        out.push(new Date(t.getTime())); // copy
+        out.push(new Date(t.getTime()));
       }
       return out;
     }
 
-    // מאתרים יעד לפי תאריך: משווים לפי ISO אחיד
     function findDestinationForDate(trip, rawDDMMYYYY) {
       const target = parseLocalDateFlexible(rawDDMMYYYY);
       if (!target) return null;
@@ -234,7 +249,6 @@
         submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
         const dates = generateDatesFromRange(dest.dates);
         dates.forEach(dObj => {
-          // מציגים כ-dd/m/yyyy בלי אפסים מובילים – נעים לעין ותואם למה שאתה שולח לעיתים
           const nice = `${dObj.getUTCDate()}/${dObj.getUTCMonth()+1}/${dObj.getUTCFullYear()}`;
           const a = document.createElement('a');
           a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(nice)}`;
@@ -251,57 +265,109 @@
       });
     }
 
-    function renderHeadline() {
+    function renderHeadline(dayTitleFromDoc = null) {
       const destName = destForDate?.nameHe || destForDate?.name || 'היעד';
       const dayPart = dayNameHe ? ` ${dayNameHe}` : '';
-      scheduleHeadline.textContent = `כאן יהיה הלוז של ${destName} לתאריך ${dateStr}${dayPart}`;
-      dayTitle.textContent = `לוז ליום ${dateStr}`;
+      scheduleHeadline.textContent = `הלוז של ${destName} לתאריך ${dateStr}${dayPart}`;
+      dayTitleEl.textContent = dayTitleFromDoc
+        ? `${dayTitleFromDoc} • ${dateStr}`
+        : `לוז ליום ${dateStr}`;
       tripSubtitle.textContent = `${destName}${dayPart ? ' •' + dayPart : ''}`;
       dateChip.textContent = dateStr;
     }
 
-    // ---------- Schedule render ----------
-    function renderTimeline(events) {
-      if (!events || events.length === 0) {
+    // Map item -> DOM
+    function itemIcon(it){
+      if (it.isBackToHotel) return 'fa-bed';
+      return (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs) ? 'fa-triangle-exclamation' : 'fa-location-dot';
+    }
+    function timeText(it){
+      if (!it?.startTime && !it?.endTime) return '--:--';
+      return [it.startTime || '', it.endTime ? '– '+it.endTime : ''].filter(Boolean).join(' ');
+    }
+    function distanceText(m){
+      if (m==null) return '';
+      const km = (m/1000).toFixed(2);
+      return `<span class="text-xs text-slate-500"> • מרחק קודם: ${km} ק״מ</span>`;
+    }
+    function verifyBadge(it){
+      const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs);
+      if (!needs) return '';
+      const list = [
+        it.needsVerifyAddress?'כתובת':null,
+        it.needsVerifyRoute?'מסלול':null,
+        it.needsVerifyRefs?'קישור':null
+      ].filter(Boolean).join(' / ');
+      return `<span class="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${list?': '+list:''}</span>`;
+    }
+
+    function renderTimelineFromItems(items){
+      if (!items || items.length === 0) {
         noScheduleBox.classList.remove('hidden');
         timelineBox.classList.add('hidden');
         timelineBox.innerHTML = '';
         return;
       }
-      events.sort((a,b) => (a.time||'') > (b.time||'') ? 1 : -1);
       noScheduleBox.classList.add('hidden');
       timelineBox.classList.remove('hidden');
       timelineBox.innerHTML = '';
 
-      const typeIcon = (type) => {
-        switch ((type||'').trim()) {
-          case 'ארוחה': return 'fa-utensils';
-          case 'אטרקציה': return 'fa-map-location-dot';
-          case 'תחבורה': return 'fa-bus';
-          case 'קניות': return 'fa-bag-shopping';
-          case 'מנוחה': return 'fa-bed';
-          default: return 'fa-circle-info';
-        }
-      };
+      items.forEach(it=>{
+        const hasAddr = !!it.address?.label;
+        const hasSite = !!it.links?.site;
+        const hasBook = !!it.links?.booking;
+        const refs = Array.isArray(it.refs)? it.refs : [];
 
-      events.forEach(ev => {
+        const refsHtml = refs.map(r=>{
+          const href = `${r.page==='summary'?'summary':'attractions'}.html?tripId=${encodeURIComponent(tripId)}&open=${r.type==='logistics'?'logistics':'attraction'}&id=${encodeURIComponent(r.id)}`;
+          const icon = r.type==='logistics' ? (r.subType==='hotel'?'🏨':r.subType==='flight'?'✈️':r.subType==='train'?'🚆':r.subType==='car_rental'?'🚗':r.subType==='ferry'?'⛴️':'⬅️') : '📍';
+          return `<a class="px-2 py-1 rounded bg-indigo-600/90 text-white text-xs" target="_blank" href="${href}">${icon} ${r.label}</a>`;
+        }).join(' ');
+
+        const linksHtml = [
+          hasSite ? `<a class="inline-flex items-center gap-1 text-sky-700 hover:underline" href="${it.links.site}" target="_blank"><i class="fa-solid fa-link"></i> אתר</a>` : '',
+          hasBook ? `<a class="inline-flex items-center gap-1 text-emerald-700 hover:underline" href="${it.links.booking}" target="_blank"><i class="fa-solid fa-ticket"></i> הזמנה</a>` : '',
+          refsHtml
+        ].filter(Boolean).join(' ');
+
+        const navHtml = hasAddr ? `
+          <div class="flex gap-2">
+            <a class="px-2 py-1 rounded bg-[#33ccff] text-white text-xs" target="_blank" href="https://waze.com/ul?q=${encodeURIComponent(it.address.label)}"><i class="fa-brands fa-waze"></i> נווט</a>
+            <a class="px-2 py-1 rounded bg-[#4285F4] text-white text-xs" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}"><i class="fa-solid fa-location-dot"></i> מפות</a>
+          </div>
+        ` : '';
+
+        const travelHtml = it.travel?.from?.label || it.travel?.to?.label ? `
+          <div class="mt-2 text-xs text-slate-600">
+            <i class="fa-solid fa-route text-slate-400"></i>
+            ${it.travel?.from?.label ? `מ־${it.travel.from.label}`:''}
+            ${it.travel?.to?.label ? ` אל ${it.travel.to.label}`:''}
+            ${it.travel?.timeText ? ` • ${it.travel.timeText}` : ''}
+          </div>
+        ` : '';
+
         const item = document.createElement('div');
         item.className = 'timeline-item bg-white/90 rounded-xl shadow p-4';
         item.innerHTML = `
           <span class="timeline-dot"></span>
           <div class="flex items-start gap-4">
             <div class="shrink-0 text-center">
-              <div class="text-sm font-bold text-slate-700">${ev.time || '--:--'}</div>
-              <div class="text-xs text-slate-500">${ev.type || ''}</div>
+              <div class="text-sm font-bold text-slate-700">${timeText(it)}</div>
+              <div class="text-xs text-slate-500">פריט</div>
             </div>
             <div class="flex-1">
-              <div class="flex items-center gap-2">
-                <i class="fa-solid ${typeIcon(ev.type)} text-sky-500"></i>
-                <h4 class="text-lg font-bold text-slate-800">${ev.title || 'פריט ללא שם'}</h4>
+              <div class="flex items-center gap-2 flex-wrap">
+                <i class="fa-solid ${itemIcon(it)} text-sky-500"></i>
+                <h4 class="text-lg font-bold text-slate-800">${it.title || 'פריט ללא שם'}</h4>
+                ${verifyBadge(it)}
+                ${distanceText(it.distanceFromPreviousMeters)}
               </div>
-              ${ev.location ? `<div class="mt-1 text-sm text-slate-600"><i class="fa-solid fa-location-dot mr-1 text-slate-400"></i>${ev.location}</div>` : ''}
-              ${ev.notes ? `<p class="mt-2 text-slate-700 whitespace-pre-wrap">${ev.notes}</p>` : ''}
-              ${ev.link ? `<a class="inline-flex items-center gap-1 mt-2 text-sky-700 hover:underline" href="${ev.link}" target="_blank"><i class="fa-solid fa-link"></i> קישור</a>` : ''}
+              ${it.summary ? `<div class="mt-1 text-slate-700">${it.summary}</div>` : ''}
+              ${it.description ? `<p class="mt-2 text-slate-700 whitespace-pre-wrap">${it.description}</p>` : ''}
+              ${hasAddr ? `<div class="mt-2 text-sm text-slate-600"><i class="fa-solid fa-location-dot mr-1 text-slate-400"></i>${it.address.label}</div>` : ''}
+              ${travelHtml}
+              ${linksHtml ? `<div class="mt-3 flex flex-wrap gap-2">${linksHtml}</div>` : ''}
+              ${navHtml ? `<div class="mt-2">${navHtml}</div>` : ''}
             </div>
           </div>
         `;
@@ -309,11 +375,38 @@
       });
     }
 
+    const colorMap = {
+      red:    {bg:'bg-red-50',    border:'border-red-300',    text:'text-red-800'},
+      green:  {bg:'bg-green-50',  border:'border-green-300',  text:'text-green-800'},
+      blue:   {bg:'bg-blue-50',   border:'border-blue-300',   text:'text-blue-800'},
+      yellow: {bg:'bg-yellow-50', border:'border-yellow-300', text:'text-yellow-800'},
+      orange: {bg:'bg-orange-50', border:'border-orange-300', text:'text-orange-800'},
+    };
+    function classesForColor(c){
+      const m = colorMap[c] || colorMap.yellow;
+      return `${m.bg} ${m.border} ${m.text}`;
+    }
+    function renderNotesList(notes){
+      if (!notes || notes.length===0){
+        notesList.innerHTML = `<div class="text-slate-500">אין עדיין דגשים/טיפים.</div>`;
+        return;
+      }
+      notesList.innerHTML = notes.map(n=>{
+        const cls = classesForColor(n.color);
+        return `
+          <div class="border rounded-xl p-3 ${cls}">
+            <div class="font-bold">${n.kind}: ${n.title || '—'}</div>
+            ${n.details ? `<div class="mt-1 text-sm whitespace-pre-wrap">${n.details}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
     // ---------- Events ----------
     function attachEvents() {
-      document.getElementById('hamburger-btn').addEventListener('click', toggleSidebar);
-      document.getElementById('close-sidebar-btn').addEventListener('click', toggleSidebar);
-      document.getElementById('overlay').addEventListener('click', toggleSidebar);
+      hamburgerBtn.addEventListener('click', toggleSidebar);
+      closeSidebarBtn.addEventListener('click', toggleSidebar);
+      overlay.addEventListener('click', toggleSidebar);
       if (backBtn) {
         backBtn.addEventListener('click', () => {
           if (window.history.length > 1) history.back();
@@ -326,10 +419,8 @@
     async function initPage() {
       const url = new URLSearchParams(window.location.search);
       tripId = url.get('tripId');
-      // מציגים את התאריך בדיוק כפי שמגיע ב־URL (כולל בלי אפסים וכו')
       dateStr = decodeURIComponent(url.get('date') || '').trim();
 
-      // ננסה לפרש רק לצורך ISO/שם יום; אם לא מצליחים – ממשיכים בלי "Invalid Date"
       const parsed = parseLocalDateFlexible(dateStr);
       if (parsed) {
         dateISO = toISODateUTC(parsed);
@@ -362,40 +453,57 @@
           alert('אין לך הרשאה לצפות בטיול זה.'); location.href = 'index.html'; return;
         }
 
-        // יעד לאותו תאריך
+        // יעד לאותו תאריך, רקע ותפריט
         destForDate = findDestinationForDate(tripData, dateStr);
         setBackgroundForDest(destForDate);
         buildMenuFromTrip();
-        renderHeadline();
 
-        // קישור "צור לוז"
+        // קישורים ליצירה/עריכה
         const destNameParam = encodeURIComponent(destForDate?.nameHe || destForDate?.name || '');
-        createBtn.href = `create-schedule.html?tripId=${encodeURIComponent(tripId)}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+        const editHref   = `create-schedule.html?tripId=${encodeURIComponent(tripId)}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+        editBtn.href   = editHref;
+        createBtn.href = editHref;
 
-        // קריאת הלוז: אם יש ISO – נשתמש במסמך schedules/{ISO}; אחרת ננסה לפי שדה 'date' = המחרוזת הגולמית
-        if (dateISO) {
+        // כותרת מהמסמך של היום (title) + הזנות realtime לפריטים/דגשים
+        if (dateISO){
           const schedDocRef = doc(db, 'trips', tripId, 'schedules', dateISO);
           const schedSnap = await getDoc(schedDocRef);
-          if (schedSnap.exists()) {
-            const data = schedSnap.data();
-            renderTimeline(Array.isArray(data.events) ? data.events : []);
-          } else {
-            // fallback ל־events עם dateISO
-            const eventsCol = collection(db, 'trips', tripId, 'events');
-            const q1 = query(eventsCol, where('dateISO','==', dateISO), orderBy('time'));
-            onSnapshot(q1, (snap) => {
-              const items = snap.docs.map(d => d.data());
-              renderTimeline(items);
-            }, () => renderTimeline([]));
-          }
+          const dayTitleFromDoc = schedSnap.exists() ? (schedSnap.data().title || null) : null;
+          renderHeadline(dayTitleFromDoc);
+
+          // items
+          const itemsCol = collection(db, 'trips', tripId, 'schedules', dateISO, 'items');
+          const qItems = query(itemsCol, orderBy('sort','asc'));
+          onSnapshot(qItems, (snap)=>{
+            const arr = snap.docs.map(d => ({id:d.id, ...d.data()}));
+            renderTimelineFromItems(arr);
+          }, ()=> renderTimelineFromItems([]));
+
+          // notes
+          const notesCol = collection(db, 'trips', tripId, 'schedules', dateISO, 'notes');
+          const qNotes = query(notesCol, orderBy('createdAt','asc'));
+          onSnapshot(qNotes, (snap)=>{
+            const arr = snap.docs.map(d => ({id:d.id, ...d.data()}));
+            renderNotesList(arr);
+          }, ()=> renderNotesList([]));
         } else {
-          // אין ISO – נשען על 'events' עם 'date' = המחרוזת כמו שבאה מה־URL
+          // אם לא הצלחנו לפרש את התאריך – עדיין נציג כותרת ויעד
+          renderHeadline(null);
+          // נסיון fallback ישן (אם קיימות ישויות events כלליות לפי המחרוזת)
           const eventsCol = collection(db, 'trips', tripId, 'events');
           const q2 = query(eventsCol, where('date','==', dateStr), orderBy('time'));
           onSnapshot(q2, (snap) => {
-            const items = snap.docs.map(d => d.data());
-            renderTimeline(items);
-          }, () => renderTimeline([]));
+            const items = snap.docs.map(d => d.data()).map(e=>({
+              title: e.title,
+              startTime: e.time, endTime:null,
+              description: e.notes || null,
+              address: e.location ? {label:e.location} : null,
+              links: {site: e.link || null, booking: null},
+            }));
+            renderTimelineFromItems(items);
+          }, () => renderTimelineFromItems([]));
+          // notes section ריק
+          renderNotesList([]);
         }
 
         // Reveal UI
