@@ -16,12 +16,12 @@
 
   <style>
     html, body { height: 100%; }
+    html { scrollbar-gutter: stable both-edges; } /* מייצב סטיות בעת הופעת/היעלמות סרגל גלילה */
     body {
       font-family: 'Assistant', sans-serif;
-      min-height: 100svh;
-      overscroll-behavior-y: contain;
+      min-height: 100dvh;             /* יציב יותר במובייל ומונע "קפיצה" בסוף גלילה */
+      overscroll-behavior-y: none;     /* מונע bounce */
       -webkit-overflow-scrolling: touch;
-      scrollbar-gutter: stable both-edges;
     }
     /* רקע */
     .bg-fixed {
@@ -39,10 +39,10 @@
     .step { display: none; }
     .step.active { display: block; }
 
-    /* תיבות אוטוקומפליט צפות (מעל מפות ומודלים) */
+    /* תיבת אוטוקומפליט צפה (מעל מפות ומודלים) */
     .typeahead {
-      position: fixed; /* חשוב! */
-      z-index: 99999;  /* מעל הכל */
+      position: fixed;
+      z-index: 99999;
       background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: .75rem;
@@ -64,7 +64,6 @@
     .card { transition: transform .12s ease, box-shadow .12s ease; }
     .card:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(2,6,23,.08); }
 
-    /* chips לבחירות חיבורים */
     .chip {
       display: inline-flex; align-items: center; gap:.4rem;
       padding:.25rem .55rem; border-radius: 999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
@@ -72,7 +71,6 @@
     }
     .chip .x { cursor: pointer; color:#6366f1; }
 
-    /* הדגשת פריטים הדורשים אימות */
     .needs-verify { background:#fef2f2 !important; border-color:#fecaca !important; }
     .badge-verify {
       display:inline-flex; align-items:center; gap:.35rem;
@@ -86,9 +84,24 @@
 
     .input-with-btn { display:flex; gap:.5rem; }
     .input-with-btn input { flex:1 1 auto; }
+
+    /* Safelist עבור Tailwind JIT לצבעי הדגשים/טיפים */
+    ._safelist {
+      /* bg + border + text שילובים שהקוד משתמש בהם דינמית */
+      /* אדום */   color: #0000; background: linear-gradient(#fff,#fff);
+    }
   </style>
 </head>
 <body>
+
+  <!-- Safelist בלתי נראה (מונע Purge של מחלקות Tailwind דינמיות) -->
+  <div class="hidden">
+    <div class="bg-red-50 border-red-300 text-red-800"></div>
+    <div class="bg-green-50 border-green-300 text-green-800"></div>
+    <div class="bg-blue-50 border-blue-300 text-blue-800"></div>
+    <div class="bg-yellow-50 border-yellow-300 text-yellow-800"></div>
+    <div class="bg-orange-50 border-orange-300 text-orange-800"></div>
+  </div>
 
   <!-- רקע -->
   <div class="fixed inset-0 -z-10 bg-fixed"></div>
@@ -110,7 +123,7 @@
   </header>
 
   <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-    <!-- בחירת תאריך/יעד + הצגת כותרת יום (עם עיפרון לעריכה) -->
+    <!-- בחירת תאריך/יעד + כותרת יום -->
     <section class="sheet rounded-2xl p-5 shadow space-y-4">
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
@@ -128,7 +141,6 @@
         </div>
       </div>
 
-      <!-- שורת תאריך + כותרת יום -->
       <div class="flex items-center flex-wrap gap-2 text-slate-800">
         <div id="badge-date" class="px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-sm">—</div>
         <div class="flex items-center gap-2">
@@ -152,9 +164,32 @@
           </button>
         </div>
       </div>
+
       <div id="items-list" class="mt-4 space-y-3">
         <div class="text-slate-500 p-6 text-center">אין פריטים עדיין.</div>
       </div>
+
+      <!-- הדגשים/טיפים (תמיד בסוף) -->
+      <div class="mt-8 border-t pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-lg font-bold text-slate-800">דגשים וטיפים ליום זה</h4>
+          <button id="add-note-btn" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white">
+            <i class="fa-solid fa-lightbulb"></i> הוספת דגש/טיפ
+          </button>
+        </div>
+        <div id="notes-list" class="grid gap-3">
+          <div class="text-slate-500">אין עדיין דגשים/טיפים.</div>
+        </div>
+      </div>
+
+      <!-- עזרה קצרה -->
+      <details class="mt-6 bg-white/70 border rounded-xl p-3">
+        <summary class="cursor-pointer font-semibold text-slate-800">איך להשתמש ביצירת לו״ז עם AI?</summary>
+        <div class="text-sm text-slate-700 mt-2 space-y-2">
+          <p>הדבק במודל ה-AI טקסט מסומן לפי הסימנים שהוגדרו (לדוגמה: !כותרת יום!, ״כותרת פריט״, /08:30/, \12:00\ , ׳כתובת׳, >מוצא , <יעד , ?קישור? , $קישור הזמנה$ , •תקציר• , ~הערות~ , ₪ לחזרה למלון, * לבקש קישור לאטרקציות/מעברים).</p>
+          <p>לחץ "פרוס" לתצוגה מקדימה ואז "צור לוז". אם חסר אימות לכתובת/מסלול/קישור — יופיע תג אדום בכרטיסייה, אפשר להשלים דרך "אמת עכשיו".</p>
+        </div>
+      </details>
     </section>
   </main>
 
@@ -171,7 +206,7 @@
           לכרטיסיה זו דרוש אימות: ודא כתובת/מסלול במפה ו/או קישור לאטרקציות/מעברים ואז שמור.
         </div>
 
-        <!-- שלב A: כותרת ליום (מופיע רק אם עדיין אין) -->
+        <!-- שלב A: כותרת ליום -->
         <div id="step-A" class="step">
           <label class="block font-bold mb-1">כותרת כללית ליום</label>
           <input id="input-day-title" type="text" class="w-full p-2 border rounded-lg" placeholder="למשל: 'יום מוזיאונים ואוכל רחוב'">
@@ -360,6 +395,14 @@
         <button id="ai-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
       <main class="p-4 overflow-y-auto space-y-4">
+        <div class="flex flex-wrap gap-2 items-center">
+          <a href="https://chatgpt.com/g/g-6899d3d888d08191b96ce2ccbb43372b-h-vzr-hkhkm-lv-z-tyvl-bqlvt"
+             target="_blank"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-white hover:bg-slate-50">
+            <i class="fa-solid fa-robot"></i> דבר עם AI
+          </a>
+          <span class="text-sm text-slate-600">לחץ כדי להפיק טקסט מסומן ואז הדבק כאן.</span>
+        </div>
         <div class="space-y-2">
           <label class="font-bold">הדבק כאן את הפורמט המסומן מה-AI</label>
           <textarea id="ai-input" rows="10" class="w-full p-3 border rounded-lg" placeholder="הדבק כאן את הטקסט עם הסימונים ( ! ״ / \ ₪ : ׳ ׳₪ ? $ > < * • ~ )"></textarea>
@@ -376,7 +419,7 @@
     </div>
   </div>
 
-  <!-- MODAL: אימות כתובת/מסלול/קישורים (חדש ונפרד) -->
+  <!-- MODAL: אימות כתובת/מסלול/קישורים -->
   <div id="verify-modal" class="modal fixed inset-0 z-[75] items-center justify-center p-4 bg-black/60">
     <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
       <header class="p-4 border-b flex items-center justify-between">
@@ -448,7 +491,49 @@
     </div>
   </div>
 
-  <!-- תיבת הצעות כללית שמוצמדת ל-body -->
+  <!-- MODAL: דגש/טיפ -->
+  <div id="note-modal" class="modal fixed inset-0 z-[80] items-center justify-center p-4 bg-black/60">
+    <div class="bg-white rounded-2xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl">
+      <header class="p-4 border-b flex items-center justify-between">
+        <h4 id="note-modal-title" class="text-lg font-bold">הוספת דגש/טיפ</h4>
+        <button id="note-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <main class="p-4 overflow-y-auto space-y-4">
+        <div>
+          <label class="block font-semibold mb-1">כותרת</label>
+          <input id="note-title" type="text" class="w-full p-2 border rounded-lg" placeholder="כותרת קצרה">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">סוג</label>
+          <select id="note-kind" class="w-full p-2 border rounded-lg">
+            <option value="דגש">דגש</option>
+            <option value="טיפ">טיפ</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">פירוט</label>
+          <textarea id="note-details" rows="4" class="w-full p-2 border rounded-lg" placeholder="פירוט מפורט..."></textarea>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">צבע</label>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <button data-color="red"    class="note-color w-full p-2 rounded-lg border bg-red-50">אדום</button>
+            <button data-color="green"  class="note-color w-full p-2 rounded-lg border bg-green-50">ירוק</button>
+            <button data-color="blue"   class="note-color w-full p-2 rounded-lg border bg-blue-50">כחול</button>
+            <button data-color="yellow" class="note-color w-full p-2 rounded-lg border bg-yellow-50">צהוב</button>
+            <button data-color="orange" class="note-color w-full p-2 rounded-lg border bg-orange-50">כתום</button>
+          </div>
+          <input id="note-color" type="hidden" value="yellow">
+        </div>
+      </main>
+      <footer class="p-4 border-t flex items-center justify-end gap-2">
+        <button id="note-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
+        <button id="note-save" class="px-4 py-2 rounded-lg bg-amber-600 text-white">שמירה</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- תיבת הצעות כללית -->
   <div id="global-typeahead" class="typeahead"></div>
 
   <script type="module">
@@ -493,6 +578,9 @@
     const itemsList     = document.getElementById('items-list');
     const addItemBtn    = document.getElementById('add-item-btn');
     const aiBuildBtn    = document.getElementById('ai-build-btn');
+
+    const notesList     = document.getElementById('notes-list');
+    const addNoteBtn    = document.getElementById('add-note-btn');
 
     // Item modal refs
     const itemModal    = document.getElementById('item-modal');
@@ -547,7 +635,7 @@
 
     const connectLists = document.getElementById('connect-lists');
     const selectedRefsWrap = document.getElementById('selected-refs');
-    let selectedRefs = []; // [{type:'logistics'|'attraction', id, label, page, subType}]
+    let selectedRefs = []; // [{type, id, label, page, subType}]
 
     // Title small modal
     const titleModal = document.getElementById('title-modal');
@@ -572,7 +660,7 @@
     const viewVerifyBtn = document.getElementById('view-verify');
     let viewMap=null, viewMarker=null, viewingItem=null;
 
-    // Verify modal (חדש)
+    // Verify modal
     const vModal = document.getElementById('verify-modal');
     const vTitle = document.getElementById('v-title');
     const vClose = document.getElementById('v-close');
@@ -603,9 +691,9 @@
     let vSelectedRefs = [];
     let vCurrentItem = null;
 
-    // Global typeahead (צמוד ל-body)
+    // Global typeahead
     const globalTA = document.getElementById('global-typeahead');
-    let taActiveInput = null; // input שאליו מוצמדת תיבת ההצעות
+    let taActiveInput = null;
     let taOutsideHandler = null;
     let taScrollHandler = null;
 
@@ -618,6 +706,20 @@
     const aiPreviewContent = document.getElementById('ai-preview-content');
     const aiClose   = document.getElementById('ai-close');
 
+    // Note modal
+    const noteModal = document.getElementById('note-modal');
+    const noteClose = document.getElementById('note-close');
+    const noteCancel= document.getElementById('note-cancel');
+    const noteSave  = document.getElementById('note-save');
+    const noteTitle = document.getElementById('note-title');
+    const noteKind  = document.getElementById('note-kind');
+    const noteDetails = document.getElementById('note-details');
+    const noteColorHidden = document.getElementById('note-color');
+    const noteModalTitle = document.getElementById('note-modal-title');
+
+    let pickedNoteColor = 'yellow';
+    let editingNoteId = null;
+
     // State
     let user=null, tripData=null;
     let selectedDate = urlDate || null; // DD/MM/YYYY
@@ -625,11 +727,15 @@
     let dayDocId=null, dayDocRef=null;
     let dayTitle=null;
 
-    let items=[]; // פריטים קיימים
+    let items=[];     // פריטים קיימים
+    let notes=[];     // דגשים/טיפים קיימים
+    let itemsUnsub = null;
+    let notesUnsub = null;
+
     let currentStepIndex=0;
     const stepsOrder = ['A','B','C','D','E','F','G'];
-    let editingItemId = null; // כשעורכים
-    let requiresRefsFlag = false; // לדבוק לתוך הפריט בעת עריכה/אימות
+    let editingItemId = null;
+    let requiresRefsFlag = false;
 
     // utils
     const pad2 = n => (''+n).padStart(2,'0');
@@ -638,6 +744,14 @@
     const weekdayHe = (s)=>{ const [d,m,y]=s.split('/').map(Number); const dt=new Date(y,m-1,d); const w=dt.toLocaleDateString('he-IL',{weekday:'long'}); return w.startsWith('יום')?w:`יום ${w}`; };
     const minutesFromHHMM = (hhmm)=>{ const [h,m]=(hhmm||'00:00').split(':').map(Number); return h*60+m; };
     const haversineMeters = (a,b) => { const R=6371000, t=x=>x*Math.PI/180; const dLa=t(b.lat-a.lat), dLo=t(b.lng-a.lng); const s1=Math.sin(dLa/2)**2 + Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(s1)); };
+
+    const colorMap = {
+      red:    {bg:'bg-red-50',    border:'border-red-300',    text:'text-red-800'},
+      green:  {bg:'bg-green-50',  border:'border-green-300',  text:'text-green-800'},
+      blue:   {bg:'bg-blue-50',   border:'border-blue-300',   text:'text-blue-800'},
+      yellow: {bg:'bg-yellow-50', border:'border-yellow-300', text:'text-yellow-800'},
+      orange: {bg:'bg-orange-50', border:'border-orange-300', text:'text-orange-800'},
+    };
 
     onAuthStateChanged(auth, async (u)=>{
       if (!u){ location.href='login.html'; return; }
@@ -655,11 +769,7 @@
       await setWorkingDate(selectedDate);
       backToDay.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(selectedDate)}`;
 
-      const qItems = query(collection(db,'trips',tripId,'schedules',dayDocId,'items'), orderBy('sort','asc'));
-      onSnapshot(qItems, (snap)=>{
-        items = snap.docs.map(d=>({id:d.id,...d.data()}));
-        renderItems();
-      });
+      // מנויים ראשוניים לא נדרשים כאן יותר – מתבצע בתוך setWorkingDate()
     });
 
     // Date selector
@@ -677,7 +787,7 @@
           btn.className='w-full text-right p-2 rounded hover:bg-slate-100';
           btn.textContent=`${wd} – (${dest.nameHe}) • ${toDisplayDotted(d)}`;
           btn.addEventListener('click', async ()=>{
-            await setWorkingDate(d);
+            await setWorkingDate(d);          // <-- יחליף גם את ה־onSnapshot
             datePanel.classList.remove('open');
           });
           wrap.appendChild(btn);
@@ -696,6 +806,7 @@
       while(cur<=end){ out.push(`${pad2(cur.getDate())}/${pad2(cur.getMonth()+1)}/${cur.getFullYear()}`); cur.setDate(cur.getDate()+1); }
       return out;
     }
+
     async function setWorkingDate(ddmmyyyy){
       selectedDate=ddmmyyyy;
       const iso=toISOFromDDMMYYYY(ddmmyyyy);
@@ -712,10 +823,31 @@
       reflectDayTitleUI();
 
       backToDay.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(selectedDate)}`;
+
+      // ניתוק מנויים קודמים וחיבור מחדש ליום החדש
+      resubscribeDayStreams();
     }
+
     function reflectDayTitleUI(){
       dayTitleInline.textContent = dayTitle || 'לא נקבעה';
       editDayTitleInline.classList.toggle('hidden', !dayTitle);
+    }
+
+    function resubscribeDayStreams(){
+      if (itemsUnsub) { itemsUnsub(); itemsUnsub=null; }
+      if (notesUnsub) { notesUnsub(); notesUnsub=null; }
+
+      const qItems = query(collection(db,'trips',tripId,'schedules',dayDocId,'items'), orderBy('sort','asc'));
+      itemsUnsub = onSnapshot(qItems, (snap)=>{
+        items = snap.docs.map(d=>({id:d.id,...d.data()}));
+        renderItems();
+      });
+
+      const qNotes = query(collection(db,'trips',tripId,'schedules',dayDocId,'notes'), orderBy('createdAt','asc'));
+      notesUnsub = onSnapshot(qNotes, (snap)=>{
+        notes = snap.docs.map(d=>({id:d.id,...d.data()}));
+        renderNotes();
+      });
     }
 
     // עריכת כותרת יום קטן
@@ -732,7 +864,7 @@
       titleModal.classList.remove('show');
     });
 
-    // Items rendering + open (אם דורש אימות -> מודל אימות; אחרת -> צפייה)
+    // Items rendering
     function renderItems(){
       if (!items.length){
         itemsList.innerHTML = `<div class="text-slate-500 p-6 text-center">אין פריטים עדיין.</div>`;
@@ -760,7 +892,6 @@
         </button>`;
       }).join('');
 
-      // click -> if needs verify => verify modal; else view modal
       itemsList.querySelectorAll('button[data-id]').forEach(b=>{
         b.addEventListener('click',()=>{
           const it = items.find(x=>x.id===b.dataset.id);
@@ -771,12 +902,50 @@
       });
     }
 
+    // Notes rendering
+    function classesForColor(c){
+      const m = colorMap[c] || colorMap.yellow;
+      return `${m.bg} ${m.border} ${m.text}`;
+    }
+    function renderNotes(){
+      if (!notes.length){
+        notesList.innerHTML = `<div class="text-slate-500">אין עדיין דגשים/טיפים.</div>`;
+        return;
+      }
+      notesList.innerHTML = notes.map(n=>{
+        const cls = classesForColor(n.color);
+        return `<div class="border rounded-xl p-3 ${cls}">
+          <div class="flex items-center justify-between">
+            <div class="font-bold">${n.kind}: ${n.title || '—'}</div>
+            <div class="flex gap-2">
+              <button class="px-2 py-1 rounded bg-white/60 border text-sm note-edit" data-id="${n.id}"><i class="fa-solid fa-pen"></i> ערוך</button>
+              <button class="px-2 py-1 rounded bg-white/60 border text-sm note-del" data-id="${n.id}"><i class="fa-solid fa-trash"></i> מחק</button>
+            </div>
+          </div>
+          <div class="mt-2 text-sm">${(n.details||'').replace(/\n/g,'<br>')}</div>
+        </div>`;
+      }).join('');
+
+      notesList.querySelectorAll('.note-edit').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const n = notes.find(x=>x.id===btn.dataset.id);
+          if (!n) return;
+          openNoteModal(n);
+        });
+      });
+      notesList.querySelectorAll('.note-del').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          if (!confirm('למחוק את הדגש/טיפ?')) return;
+          await deleteDoc(doc(db,'trips',tripId,'schedules',dayDocId,'notes',btn.dataset.id));
+        });
+      });
+    }
+
     // ----- Item modal flow -----
     function openItemModal(item=null, opts={verify:false, focus:{address:false, route:false, refs:false}}){
       editingItemId = item?.id || null;
       modalTitle.textContent = editingItemId ? 'עריכת פריט' : 'הוספת פריט ליום';
 
-      // reset/assign
       inputDayTitle.value = dayTitle || '';
       inputItemTitle.value = item?.title || '';
       inputStart.value = item?.startTime || '';
@@ -788,14 +957,11 @@
       linkBook.value     = item?.links?.booking || '';
       endWrap.classList.toggle('hidden', !item?.endTime);
 
-      // flags
       requiresRefsFlag = !!item?.requiresRefs;
 
-      // refs קיימים
       selectedRefs = Array.isArray(item?.refs) ? [...item.refs] : [];
       renderSelectedRefs();
 
-      // כתובת
       if (!addrMap){ addrMap = L.map(addrMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(addrMap); }
       if (addrMarker){ addrMap.removeLayer(addrMarker); addrMarker=null; }
       addrInput.value = item?.address?.label || '';
@@ -805,7 +971,6 @@
         addrMap.setView([item.address.lat,item.address.lng], 14);
       }
 
-      // route
       if (!routeMap){ routeMap = L.map(rMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(routeMap); }
       if (routeLayer){ routeMap.removeLayer(routeLayer); routeLayer=null; }
       routeMarkers.forEach(m=> m && routeMap.removeLayer(m));
@@ -825,7 +990,6 @@
       }
       if (routeMarkers[0] && routeMarkers[1]) routeMap.fitBounds(L.featureGroup(routeMarkers).getBounds(),{padding:[20,20]});
 
-      // steps – אם כבר יש כותרת ליום נדלג על A
       const wantVerify = !!opts.verify;
       verifyBanner.classList.toggle('hidden', !wantVerify);
       showStep(wantVerify ? 'E' : (dayTitle ? 'B' : 'A'));
@@ -859,26 +1023,17 @@
     prevStepBtn.addEventListener('click', ()=> showStep(stepsOrder[currentStepIndex-1]));
     toggleEnd.addEventListener('click', ()=> endWrap.classList.toggle('hidden'));
 
-    // ---- Typeahead צף (מוצמד ל-body) ----
+    // ---- Typeahead צף ----
     function placeTypeaheadBelow(inputEl){
       const r = inputEl.getBoundingClientRect();
-      Object.assign(globalTA.style, {
-        left: r.left+'px',
-        top: (r.bottom+6)+'px',
-        width: r.width+'px',
-      });
+      Object.assign(globalTA.style, { left: r.left+'px', top: (r.bottom+6)+'px', width: r.width+'px' });
     }
     function showTypeaheadFor(inputEl, items){
       taActiveInput = inputEl;
-      // בונים כפתורים
       globalTA.innerHTML = items.map(r=>`<button data-lat="${r.lat}" data-lon="${r.lon}">${r.display_name}</button>`).join('');
       [...globalTA.querySelectorAll('button')].forEach(b=>{
         b.addEventListener('click', ()=>{
-          const picked = {
-            lat: parseFloat(b.dataset.lat),
-            lng: parseFloat(b.dataset.lon),
-            label: b.textContent
-          };
+          const picked = { lat: parseFloat(b.dataset.lat), lng: parseFloat(b.dataset.lon), label: b.textContent };
           taActiveInput.dispatchEvent(new CustomEvent('typeahead:pick',{detail:picked}));
           hideTypeahead();
         }, {once:true});
@@ -886,7 +1041,6 @@
       placeTypeaheadBelow(inputEl);
       globalTA.classList.add('open');
 
-      // סגירה בלחיצה בחוץ/ESC/גלילה/resize
       if (!taOutsideHandler){
         taOutsideHandler = (e)=>{ if (e.target!==globalTA && e.target!==taActiveInput && !globalTA.contains(e.target)) hideTypeahead(); };
         document.addEventListener('mousedown', taOutsideHandler);
@@ -923,7 +1077,6 @@
         if (!q){ hideTypeahead(); return; }
         timer = setTimeout(()=> doSearchForInput(inputEl), 220);
       });
-      inputEl.addEventListener('blur', ()=>{ /* נשאר פתוח עד קליק/ESC */ });
       inputEl.addEventListener('typeahead:pick', (ev)=> onPick(ev.detail));
     }
 
@@ -963,7 +1116,6 @@
       } else rTime.textContent='לא נמצא מסלול.';
     });
 
-    // כתובת מלון (מודל עריכה)
     useHotelBtn.addEventListener('click', async ()=>{
       const h = await findHotelForDate(selectedDate, selectedDest?.nameHe);
       if (!h) return alert('אין מלון מוגדר לתאריך זה.');
@@ -984,7 +1136,7 @@
       return byDest || hotels.find(h=> inRange(h.dates||''));
     }
 
-    // ---- חיבורים (link to logistics/attractions) ----
+    // חיבורים (link to logistics/attractions)
     function renderSelectedRefs(){
       selectedRefsWrap.innerHTML = selectedRefs.length ? selectedRefs.map((r,i)=>(
         `<span class="chip">${iconForRef(r)} ${r.label}<span class="x" data-i="${i}">&times;</span></span>`
@@ -1062,15 +1214,14 @@
           const id  =wrap.dataset.refId;
           const subType = wrap.dataset.refSubtype || null;
           const label=wrap.dataset.refLabel;
-          const idx = selectedRefsArr.findIndex(r=>r.type===type && r.id===id);
-          if (idx>-1){ selectedRefsArr.splice(idx,1); btn.textContent='בחר'; btn.classList.remove('bg-green-600','text-white','border-green-600'); }
+          const idx = selectedRefsArr.findIndex(r=>r.type==='type' && r.id===id);
+          const existed = selectedRefsArr.findIndex(r=>r.type===type && r.id===id);
+          if (existed>-1){ selectedRefsArr.splice(existed,1); btn.textContent='בחר'; btn.classList.remove('bg-green-600','text-white','border-green-600'); }
           else { selectedRefsArr.push({type, id, label, page:(type==='logistics'?'summary':'attractions'), subType}); btn.textContent='נבחר'; btn.classList.add('bg-green-600','text-white','border-green-600'); }
-          // רענון תגים
           if (targetListsEl===connectLists) renderSelectedRefs(); else renderVSelectedRefs();
         });
       });
     }
-    // פתיחת בלוק חיבורים — טוען פעם ראשונה (מודל עריכה)
     document.querySelector('[data-open="#block-connect"]').addEventListener('click', async ()=>{
       const el=document.querySelector('#block-connect');
       setTimeout(async ()=>{
@@ -1113,7 +1264,6 @@
       await setDoc(dayDocRef,{ title: dayTitle || null, updatedAt: serverTimestamp() },{merge:true});
       const thisSort = minutesFromHHMM(payload.startTime||'00:00');
 
-      // חשב דגלי אימות
       const needsVerifyAddress = !!(payload.address && !(payload.address.lat!=null && payload.address.lng!=null));
       const needsVerifyRoute   = !!(payload.travel && !((payload.travel.from?.lat!=null) && (payload.travel.to?.lat!=null)));
       const needsVerifyRefs    = !!(payload.requiresRefs && (!Array.isArray(payload.refs) || payload.refs.length===0));
@@ -1154,7 +1304,7 @@
       }
     }
 
-    // חזרה למלון מיידית (ידני)
+    // חזרה למלון
     addBackHotel.addEventListener('click', async ()=>{
       if (!inputStart.value) return alert('בחר שעת התחלה לחזרה למלון.');
       const h = await findHotelForDate(selectedDate, selectedDest?.nameHe);
@@ -1172,7 +1322,6 @@
       hideTypeahead();
     });
 
-    // בלוקים לפתיחה/סגירה
     openBlockBtns.forEach(b=>{
       b.addEventListener('click', ()=>{
         const el=document.querySelector(b.dataset.open);
@@ -1195,7 +1344,6 @@
       viewDesc.textContent = it.description || '';
       viewDesc.classList.toggle('hidden', !it.description);
 
-      // קישורי refs (מציג כפתורים לעמודים)
       let refsHtml='';
       if (Array.isArray(it.refs) && it.refs.length){
         refsHtml = it.refs.map(r=>{
@@ -1219,7 +1367,6 @@
         navWaze.classList.add('hidden'); navGmaps.classList.add('hidden');
       }
 
-      // מפה
       setTimeout(()=>{
         if (!viewMap){ viewMap = L.map(viewMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMap); }
         if (viewMarker){ viewMap.removeLayer(viewMarker); viewMarker=null; }
@@ -1385,7 +1532,6 @@
       const parsed = aiCreate._parsed;
       if (!parsed) return;
 
-      // עדכון כותרת יום (אם נשלחה)
       if (parsed.dayTitle){
         await setDoc(dayDocRef,{ title: parsed.dayTitle, updatedAt: serverTimestamp()},{merge:true});
         dayTitle = parsed.dayTitle;
@@ -1394,7 +1540,6 @@
 
       const hotel = await findHotelForDate(selectedDate, selectedDest?.nameHe);
 
-      // יצירת פריטים
       for (const it of parsed.items){
         const payload = {
           title: it.title || '(ללא כותרת)',
@@ -1410,7 +1555,6 @@
           requiresRefs: !!it.wantsRefs
         };
 
-        // כתובת
         if (it.address){
           if (it.address.isHotel && hotel){
             payload.address = {
@@ -1425,7 +1569,6 @@
           }
         }
 
-        // מסלול
         if (it.travel){
           const from = it.travel.from;
           const to   = it.travel.to;
@@ -1445,7 +1588,7 @@
       aiModal.classList.remove('show');
     });
 
-    // ======= VERIFY MODAL (חדש) =======
+    // ======= VERIFY MODAL =======
     function renderVSelectedRefs(){
       vSelectedRefsWrap.innerHTML = vSelectedRefs.length ? vSelectedRefs.map((r,i)=>(
         `<span class="chip">${iconForRef(r)} ${r.label}<span class="x" data-i="${i}">&times;</span></span>`
@@ -1463,7 +1606,6 @@
       vCurrentItem = item;
       vTitle.textContent = item.title || '(ללא כותרת)';
 
-      // הצג רק את הבלוקים הנדרשים
       const needAddr = !!item.needsVerifyAddress;
       const needRoute= !!item.needsVerifyRoute;
       const needRefs = !!item.needsVerifyRefs;
@@ -1472,7 +1614,6 @@
       vBlockRoute.classList.toggle('hidden', !needRoute);
       vBlockRefs.classList.toggle('hidden', !needRefs);
 
-      // כתובת
       if (needAddr){
         if (!vAddrMap){ vAddrMap = L.map(vAddrMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(vAddrMap); }
         if (vAddrMarker){ vAddrMap.removeLayer(vAddrMarker); vAddrMarker=null; }
@@ -1484,7 +1625,6 @@
         }
       }
 
-      // מסלול
       if (needRoute){
         if (!vRouteMap){ vRouteMap = L.map(vRouteMapDiv).setView([31.77,35.21], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(vRouteMap); }
         if (vRouteLayer){ vRouteMap.removeLayer(vRouteLayer); vRouteLayer=null; }
@@ -1505,7 +1645,6 @@
         if (vRouteMarkers[0] && vRouteMarkers[1]) vRouteMap.fitBounds(L.featureGroup(vRouteMarkers).getBounds(),{padding:[20,20]});
       }
 
-      // קישורים
       vSelectedRefs = Array.isArray(item.refs) ? [...item.refs] : [];
       if (needRefs){
         renderVSelectedRefs();
@@ -1519,7 +1658,6 @@
     vClose.addEventListener('click', ()=> vModal.classList.remove('show'));
     vCancel.addEventListener('click', ()=> vModal.classList.remove('show'));
 
-    // Bind Typeahead ל־Verify modal
     bindTypeahead(vAddrInput, (p)=>{
       vAddrInput.value=p.label;
       if(!vAddrMap){ vAddrMap = L.map(vAddrMapDiv).setView([p.lat,p.lng], 13); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(vAddrMap); }
@@ -1571,24 +1709,20 @@
     vSave.addEventListener('click', async ()=>{
       if (!vCurrentItem) return;
 
-      // הכנה לערכים חדשים
       let newAddress = vCurrentItem.address || null;
       let newTravel  = vCurrentItem.travel  || null;
       let newRefs    = Array.isArray(vSelectedRefs)? vSelectedRefs : [];
 
-      // כתובת
       if (!vBlockAddr.classList.contains('hidden')){
         if (vAddrMarker?._data){
           newAddress = { label: vAddrMarker._data.label, lat: vAddrMarker._data.lat, lng: vAddrMarker._data.lng };
         } else if (vAddrInput.value.trim()){
-          // אם לא בחר ממפה—נשמור תווית ללא קואורדינטות (יישאר צורך אימות)
           newAddress = { label: vAddrInput.value.trim(), lat: null, lng: null };
         } else {
           newAddress = null;
         }
       }
 
-      // מסלול
       if (!vBlockRoute.classList.contains('hidden')){
         const from = vRouteMarkers[0]?._data ? {label:vRouteMarkers[0]._data.label, lat:vRouteMarkers[0]._data.lat, lng:vRouteMarkers[0]._data.lng}
                     : (vRouteFrom.value.trim()? {label:vRouteFrom.value.trim(), lat:null, lng:null}: null);
@@ -1597,7 +1731,6 @@
         newTravel = (from || to) ? { from, to, mode: vRouteMode.value, timeText: vRouteTime.textContent || null } : null;
       }
 
-      // חשב דגלי אימות חדשים
       const needsVerifyAddress = !!(newAddress && !(newAddress.lat!=null && newAddress.lng!=null));
       const needsVerifyRoute   = !!(newTravel && !((newTravel.from?.lat!=null) && (newTravel.to?.lat!=null)));
       const needsVerifyRefs    = !!(vCurrentItem.requiresRefs && (!Array.isArray(newRefs) || newRefs.length===0));
@@ -1616,7 +1749,53 @@
       vModal.classList.remove('show');
     });
 
-    // ======= END VERIFY MODAL =======
+    // ======= Notes (דגשים/טיפים) =======
+    addNoteBtn.addEventListener('click', ()=> openNoteModal());
+    noteClose.addEventListener('click', ()=> noteModal.classList.remove('show'));
+    noteCancel.addEventListener('click', ()=> noteModal.classList.remove('show'));
+    document.querySelectorAll('.note-color').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        pickedNoteColor = btn.dataset.color;
+        noteColorHidden.value = pickedNoteColor;
+        document.querySelectorAll('.note-color').forEach(b=> b.classList.remove('ring-2','ring-offset-2'));
+        btn.classList.add('ring-2','ring-offset-2');
+      });
+    });
+
+    function openNoteModal(note=null){
+      editingNoteId = note?.id || null;
+      noteModalTitle.textContent = editingNoteId ? 'עריכת דגש/טיפ' : 'הוספת דגש/טיפ';
+      noteTitle.value = note?.title || '';
+      noteKind.value  = note?.kind || 'דגש';
+      noteDetails.value = note?.details || '';
+      pickedNoteColor = note?.color || 'yellow';
+      noteColorHidden.value = pickedNoteColor;
+      document.querySelectorAll('.note-color').forEach(b=>{
+        if (b.dataset.color===pickedNoteColor) b.classList.add('ring-2','ring-offset-2'); else b.classList.remove('ring-2','ring-offset-2');
+      });
+      noteModal.classList.add('show');
+    }
+
+    noteSave.addEventListener('click', async ()=>{
+      const payload = {
+        title: (noteTitle.value||'').trim(),
+        kind: noteKind.value,
+        details: (noteDetails.value||'').trim(),
+        color: noteColorHidden.value || 'yellow',
+        updatedAt: serverTimestamp()
+      };
+      if (!payload.title) { alert('יש למלא כותרת'); return; }
+      await setDoc(dayDocRef,{ updatedAt: serverTimestamp() },{merge:true});
+      if (editingNoteId){
+        await updateDoc(doc(db,'trips',tripId,'schedules',dayDocId,'notes',editingNoteId), payload);
+      } else {
+        await addDoc(collection(db,'trips',tripId,'schedules',dayDocId,'notes'), {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+      }
+      noteModal.classList.remove('show');
+    });
 
     // ----- עזרה: פתיחת אימות מהצפייה -----
     viewClose.addEventListener('click', ()=> viewModal.classList.remove('show'));
