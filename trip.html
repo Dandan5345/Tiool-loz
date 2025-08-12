@@ -377,12 +377,12 @@
         let tripId = null;
         let shareToken = null;
         let permissionLevel = 'owner'; // 'owner', 'edit', 'view'
-        let tripData = null;
+        let tripData = null; // This will hold the trip data once loaded
         let logisticsUnsubscribe = null;
         const editUI = new Map(); // key: destId string, value: {map, marker, el}
 
-        // --- Page Initialization ---
-        async function initPage() {
+        // --- [FIXED] Page Initialization Logic ---
+        function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('id');
             shareToken = urlParams.get('shareToken');
@@ -393,23 +393,43 @@
                 return;
             }
 
-            if (shareToken) {
-                await handleSharedLink();
-            } else {
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        currentUser = user;
+            // This is the main authentication listener. It handles all cases.
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    // A user is signed in (either the owner or an anonymous guest).
+                    currentUser = user;
+                    
+                    // If it's a guest, process the token. We check for !tripData to ensure this runs only once.
+                    if (shareToken && !tripData) {
+                        await processShareToken();
+                    } 
+                    // If it's the owner (no share token), load their data.
+                    else if (!shareToken) {
                         permissionLevel = 'owner';
                         loadTripData();
                         setupAuthUI(user);
+                    }
+                } else {
+                    // No user is signed in.
+                    if (shareToken) {
+                        // This is a new guest. Sign them in anonymously.
+                        // The onAuthStateChanged listener will fire again with the new anonymous user.
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (error) {
+                            console.error("Anonymous sign-in failed:", error);
+                            alert("שגיאה באימות. נסה לרענן את הדף.");
+                        }
                     } else {
+                        // A logged-out user is trying to access directly. Send to login.
                         window.location.href = 'login.html';
                     }
-                });
-            }
+                }
+            });
         }
         
-        async function handleSharedLink() {
+        // This new function processes the token *after* a user (anonymous or otherwise) is confirmed.
+        async function processShareToken() {
             const shareRef = doc(db, "trips", tripId, "shares", shareToken);
             try {
                 const shareSnap = await getDoc(shareRef);
@@ -425,18 +445,10 @@
                 await updateDoc(shareRef, { used: true });
 
                 permissionLevel = shareData.permission; // 'view' or 'edit'
+                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-500">אורח</span>`;
                 
-                // Sign in anonymously to get basic read access based on rules
-                await signInAnonymously(auth);
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                         currentUser = user;
-                         loadTripData();
-                         // Hide auth UI for guests
-                         DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-500">אורח</span>`;
-                    }
-                });
+                // Now that permission is set, load the trip data.
+                loadTripData();
                 
             } catch (error) {
                 alert(error.message);
@@ -446,18 +458,21 @@
         }
 
         async function loadTripData() {
+            // Prevent re-loading if data already exists
+            if (tripData) return;
+
             const tripRef = doc(db, "trips", tripId);
             try {
                  const tripSnap = await getDoc(tripRef);
 
                  if (!tripSnap.exists()) throw new Error("הטיול לא נמצא.");
                  
-                 // Authorization check: either owner or valid guest
-                 const isOwner = permissionLevel === 'owner' && tripSnap.data().ownerId === currentUser.uid;
+                 const data = tripSnap.data();
+                 const isOwner = permissionLevel === 'owner' && data.ownerId === currentUser.uid;
                  const isGuest = permissionLevel === 'view' || permissionLevel === 'edit';
 
                  if (isOwner || isGuest) {
-                     tripData = tripSnap.data();
+                     tripData = data;
                      document.title = tripData.name;
                      applySettings();
                      populateUI();
@@ -468,9 +483,11 @@
                      throw new Error("אין לך הרשאה לצפות בטיול זה.");
                  }
             } catch (error) {
-                console.error(error);
+                console.error("Error loading trip data:", error);
                 alert(error.message);
-                window.location.href = 'index.html';
+                if (permissionLevel === 'owner') {
+                    window.location.href = 'index.html';
+                }
             }
         }
 
@@ -586,12 +603,10 @@
 
         async function saveSettings() {
             const tripRef = doc(db, "trips", tripId);
-            let updatedTripData = { ...tripData };
-            updatedTripData.backgroundUrl = (DOM.mainBgInput.value || '').trim();
-
+            
             try {
-                await updateDoc(tripRef, { backgroundUrl: updatedTripData.backgroundUrl });
-                tripData = updatedTripData;
+                await updateDoc(tripRef, { backgroundUrl: (DOM.mainBgInput.value || '').trim() });
+                tripData.backgroundUrl = (DOM.mainBgInput.value || '').trim();
                 applySettings();
                 DOM.settingsFeedback.textContent = 'ההגדרות נשמרו!';
                 setTimeout(() => { DOM.settingsFeedback.textContent = ''; closeSettingsModal(); }, 1200);
@@ -638,14 +653,6 @@
             renderCostsSummary(items);
         }
 
-        /**
-         * [FIXED] Builds a full URL for another page in the application.
-         * It uses window.location.href as a base to correctly resolve relative paths,
-         * ensuring links work even if the site is not in the root directory.
-         * It also adds the shareToken to the URL if a guest is viewing the page.
-         * @param {string} relativeLink - The relative path to the destination page, e.g., "summary.html?tripId=123".
-         * @returns {string} The full, correct URL.
-         */
         function buildPageUrl(relativeLink) {
             const url = new URL(relativeLink, window.location.href);
             if (shareToken) {
@@ -831,15 +838,10 @@
 
         function buildTripMap() {
             const mapContainer = DOM.tripMapContainer;
-            if (!mapContainer || mapContainer._leaflet_id) {
-                // If map already exists, remove it before re-creating
-                if (mapContainer._leaflet_id) {
-                    mapContainer._leaflet_id = null;
-                    mapContainer.innerHTML = "";
-                } else {
-                    return;
-                }
-            };
+            if (mapContainer._leaflet_id) {
+                mapContainer._leaflet_id = null;
+                mapContainer.innerHTML = "";
+            }
             
             const tripMap = L.map(mapContainer).setView([38, -95], 3.5);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
