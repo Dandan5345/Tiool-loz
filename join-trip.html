@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הצטרפות לטיול</title>
+
+    <!-- Tailwind + Icons + Font -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+    <style>
+        body {
+            font-family: 'Assistant', sans-serif;
+        }
+        #bg-gradient {
+            background:
+                radial-gradient(1200px 800px at 85% -10%, rgba(59,130,246,0.35), transparent 60%),
+                radial-gradient(1000px 700px at 0% 100%, rgba(168,85,247,0.35), transparent 60%),
+                linear-gradient(180deg, #0f172a 0%, #111827 65%, #0b1020 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Background -->
+    <div id="bg-gradient" class="fixed inset-0 -z-10"></div>
+
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div id="status-container" class="w-full max-w-md text-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-8 shadow-2xl">
+            <!-- Initial State -->
+            <div id="loading-state">
+                <i class="fas fa-spinner fa-spin text-5xl text-blue-400"></i>
+                <h1 class="text-2xl font-bold mt-4">מאמת את ההזמנה...</h1>
+                <p class="text-slate-300 mt-2">רק רגע, אנחנו בודקים את הקישור שלך.</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="error-state" class="hidden">
+                <i class="fas fa-exclamation-triangle text-5xl text-red-400"></i>
+                <h1 id="error-title" class="text-2xl font-bold mt-4">אירעה שגיאה</h1>
+                <p id="error-message" class="text-slate-300 mt-2">ההזמנה אינה חוקית או שכבר נעשה בה שימוש.</p>
+                <a href="index.html" class="inline-block mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">חזור לדף הבית</a>
+            </div>
+
+            <!-- Login Required State -->
+            <div id="login-state" class="hidden">
+                <i class="fas fa-sign-in-alt text-5xl text-yellow-400"></i>
+                <h1 class="text-2xl font-bold mt-4">נדרשת התחברות</h1>
+                <p class="text-slate-300 mt-2">כדי להצטרף לטיול, עליך להתחבר או להירשם למערכת.</p>
+                <a href="login.html" id="login-redirect-btn" class="inline-block mt-6 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg">התחברות / הרשמה</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+        // --- Firebase Init ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- DOM Elements ---
+        const DOM = {
+            loadingState: document.getElementById('loading-state'),
+            errorState: document.getElementById('error-state'),
+            loginState: document.getElementById('login-state'),
+            errorTitle: document.getElementById('error-title'),
+            errorMessage: document.getElementById('error-message'),
+            loginRedirectBtn: document.getElementById('login-redirect-btn'),
+        };
+
+        function showState(state, title = '', message = '') {
+            DOM.loadingState.classList.add('hidden');
+            DOM.errorState.classList.add('hidden');
+            DOM.loginState.classList.add('hidden');
+
+            if (state === 'error') {
+                DOM.errorTitle.textContent = title;
+                DOM.errorMessage.textContent = message;
+                DOM.errorState.classList.remove('hidden');
+            } else if (state === 'login') {
+                DOM.loginState.classList.remove('hidden');
+            } else {
+                DOM.loadingState.classList.remove('hidden');
+            }
+        }
+
+        async function processJoinRequest(user) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenId = urlParams.get('token');
+
+            if (!tokenId) {
+                showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
+                return;
+            }
+
+            const tokenRef = doc(db, "shareTokens", tokenId);
+            const tokenSnap = await getDoc(tokenRef);
+
+            // 1. Validate token existence and usage
+            if (!tokenSnap.exists() || tokenSnap.data().used) {
+                showState('error', 'הזמנה לא תקינה', 'הקישור אינו חוקי או שכבר נעשה בו שימוש.');
+                return;
+            }
+
+            const tokenData = tokenSnap.data();
+
+            // 2. Validate token expiration (2 hours)
+            const twoHoursInMillis = 2 * 60 * 60 * 1000;
+            const tokenAge = Date.now() - tokenData.createdAt.toMillis();
+            if (tokenAge > twoHoursInMillis) {
+                showState('error', 'ההזמנה פגה תוקף', 'קישורי שיתוף תקפים לשעתיים בלבד.');
+                // Optionally, mark the token as used anyway to prevent clutter
+                await updateDoc(tokenRef, { used: true, reason: 'expired' });
+                return;
+            }
+            
+            // 3. Prevent owner from joining their own trip via link
+            if (tokenData.createdBy === user.uid) {
+                showState('error', 'פעולה לא נדרשת', 'זהו הטיול שלך, אין צורך להצטרף אליו שוב.');
+                return;
+            }
+
+            // 4. Get trip data and permission
+            const { tripId, permission } = tokenData;
+            const tripRef = doc(db, "trips", tripId);
+            const tripSnap = await getDoc(tripRef);
+
+            if (!tripSnap.exists()) {
+                showState('error', 'טיול לא נמצא', 'הטיול המקורי שאליו הוזמנת נמחק.');
+                return;
+            }
+
+            // 5. Add user to trip and mark token as used
+            try {
+                // Update trip with new member
+                const memberUpdateKey = `members.${user.uid}`;
+                await updateDoc(tripRef, {
+                    [memberUpdateKey]: permission // 'viewer' or 'editor'
+                });
+
+                // Mark token as used
+                await updateDoc(tokenRef, {
+                    used: true,
+                    usedBy: user.uid,
+                    usedAt: serverTimestamp()
+                });
+
+                // 6. Redirect to the trip page
+                window.location.replace(`trip.html?id=${tripId}`);
+
+            } catch (error) {
+                console.error("Error joining trip:", error);
+                showState('error', 'שגיאה בהצטרפות', 'אירעה שגיאה בעת הוספתך לטיול. נסה שוב מאוחר יותר.');
+            }
+        }
+
+        // --- Main Logic ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is logged in, process the request
+                processJoinRequest(user);
+            } else {
+                // User is not logged in, show login prompt
+                // Save the current URL to redirect back after login
+                const loginUrl = new URL(DOM.loginRedirectBtn.href, window.location.origin);
+                loginUrl.searchParams.set('redirectUrl', window.location.href);
+                DOM.loginRedirectBtn.href = loginUrl.toString();
+                
+                showState('login');
+            }
+        });
+    </script>
+</body>
+</html>
