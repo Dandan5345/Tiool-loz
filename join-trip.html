@@ -56,7 +56,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -98,90 +98,86 @@
         }
 
         async function processJoinRequest(user) {
-            // --- FIX START: Added try...catch block for robust error handling ---
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const tokenId = urlParams.get('token');
 
                 if (!tokenId) {
-                    showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
-                    return;
+                    return showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
                 }
 
-                const tokenRef = doc(db, "shareTokens", tokenId);
-                const tokenSnap = await getDoc(tokenRef);
+                // Use a transaction to ensure atomicity: read trip, update trip, and update token together.
+                await runTransaction(db, async (transaction) => {
+                    const tokenRef = doc(db, "shareTokens", tokenId);
+                    const tokenSnap = await transaction.get(tokenRef);
 
-                // 1. Validate token existence and usage
-                if (!tokenSnap.exists() || tokenSnap.data().used) {
-                    showState('error', 'הזמנה לא תקינה', 'הקישור אינו חוקי או שכבר נעשה בו שימוש.');
-                    return;
-                }
+                    if (!tokenSnap.exists() || tokenSnap.data().used) {
+                        throw new Error('הקישור אינו חוקי או שכבר נעשה בו שימוש.');
+                    }
 
-                const tokenData = tokenSnap.data();
+                    const tokenData = tokenSnap.data();
+                    const twoHoursInMillis = 2 * 60 * 60 * 1000;
+                    const tokenAge = Date.now() - tokenData.createdAt.toMillis();
 
-                // 2. Validate token expiration (2 hours)
-                const twoHoursInMillis = 2 * 60 * 60 * 1000;
-                const tokenAge = Date.now() - tokenData.createdAt.toMillis();
-                if (tokenAge > twoHoursInMillis) {
-                    showState('error', 'ההזמנה פגה תוקף', 'קישורי שיתוף תקפים לשעתיים בלבד.');
-                    await updateDoc(tokenRef, { used: true, reason: 'expired' });
-                    return;
-                }
-                
-                // 3. Prevent owner from joining their own trip via link
-                if (tokenData.createdBy === user.uid) {
-                    showState('error', 'פעולה לא נדרשת', 'זהו הטיול שלך, אין צורך להצטרף אליו שוב.');
-                    // Redirect owner back to their trip
-                    window.location.replace(`trip.html?id=${tokenData.tripId}`);
-                    return;
-                }
+                    if (tokenAge > twoHoursInMillis) {
+                        transaction.update(tokenRef, { used: true, reason: 'expired' });
+                        throw new Error('ההזמנה פגה תוקף.');
+                    }
+                    
+                    if (tokenData.createdBy === user.uid) {
+                        // This isn't an error, just redirect the owner.
+                        // We do it outside the transaction.
+                        return { redirect: `trip.html?id=${tokenData.tripId}` };
+                    }
 
-                // 4. Get trip data and permission
-                const { tripId, permission } = tokenData;
-                const tripRef = doc(db, "trips", tripId);
-                const tripSnap = await getDoc(tripRef);
+                    const tripRef = doc(db, "trips", tokenData.tripId);
+                    const tripSnap = await transaction.get(tripRef);
 
-                if (!tripSnap.exists()) {
-                    showState('error', 'טיול לא נמצא', 'הטיול המקורי שאליו הוזמנת נמחק.');
-                    return;
-                }
+                    if (!tripSnap.exists()) {
+                        throw new Error('הטיול המקורי שאליו הוזמנת נמחק.');
+                    }
 
-                // 5. Add user to trip and mark token as used
-                // This is the step that was failing due to security rules
-                const memberUpdateKey = `members.${user.uid}`;
-                await updateDoc(tripRef, {
-                    [memberUpdateKey]: permission // 'viewer' or 'editor'
+                    // --- FIX START: Construct the new members map explicitly ---
+                    const currentMembers = tripSnap.data().members || {};
+                    const newMembers = {
+                        ...currentMembers,
+                        [user.uid]: tokenData.permission // Add the new user
+                    };
+                    // --- FIX END ---
+
+                    // Perform the writes
+                    transaction.update(tripRef, { members: newMembers });
+                    transaction.update(tokenRef, {
+                        used: true,
+                        usedBy: user.uid,
+                        usedAt: serverTimestamp()
+                    });
+
+                    // Return the redirect URL on success
+                    return { redirect: `trip.html?id=${tokenData.tripId}` };
+                }).then(result => {
+                    if (result && result.redirect) {
+                        window.location.replace(result.redirect);
+                    }
+                }).catch(err => {
+                    // Catch errors from inside the transaction
+                    showState('error', 'שגיאה בתהליך ההצטרפות', err.message);
                 });
-
-                // Mark token as used
-                await updateDoc(tokenRef, {
-                    used: true,
-                    usedBy: user.uid,
-                    usedAt: serverTimestamp()
-                });
-
-                // 6. Redirect to the trip page
-                window.location.replace(`trip.html?id=${tripId}`);
 
             } catch (error) {
+                // Catch setup errors before the transaction
                 console.error("Error processing join request:", error);
-                showState('error', 'שגיאה בתהליך ההצטרפות', 'אירעה שגיאה. בדוק את חיבור האינטרנט ונסה שוב. אם הבעיה ממשיכה, ייתכן שיש בעיה בהרשאות.');
+                showState('error', 'שגיאה כללית', 'אירעה שגיאה לא צפויה.');
             }
-            // --- FIX END ---
         }
 
-        // --- Main Logic ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // User is logged in, process the request
                 processJoinRequest(user);
             } else {
-                // User is not logged in, show login prompt
-                // Save the current URL to redirect back after login
                 const loginUrl = new URL(DOM.loginRedirectBtn.href, window.location.origin);
                 loginUrl.searchParams.set('redirectUrl', window.location.href);
                 DOM.loginRedirectBtn.href = loginUrl.toString();
-                
                 showState('login');
             }
         });
