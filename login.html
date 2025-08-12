@@ -147,7 +147,7 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    await setPersistence(auth, browserLocalPersistence); // נשאר מחובר
+    await setPersistence(auth, browserLocalPersistence);
     const db = getFirestore(app);
 
     const DOM = {
@@ -179,9 +179,41 @@
 
     let pendingGoogleUser = null;
 
-    onAuthStateChanged(auth, (user) => {
-      // לא מפנים כאן כדי לא לקפוץ מעל מסך אימות השם בגוגל
-      // הפניה תקרה אחרי "צור חשבון"
+    // === Helpers: בדיקת השלמת פרופיל ===
+    function isProfileCompleteData(data) {
+      if (!data) return false;
+      return data.profileComplete === true || (!!data.firstName && !!data.lastName);
+    }
+
+    async function ensureRedirectIfComplete(user) {
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists() && isProfileCompleteData(snap.data())) {
+          window.location.href = 'index.html';
+          return true;
+        }
+      } catch (e) {
+        console.error('Error checking user doc:', e);
+      }
+      return false;
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      // אם כבר מציגים את טופס ההשלמה – אל תדרוס
+      if (!DOM.googleFinishSignupForm.classList.contains('hidden')) return;
+
+      // אם הפרופיל כבר הושלם – הפניה מידית
+      const redirected = await ensureRedirectIfComplete(user);
+      if (redirected) return;
+
+      // אם לא הושלם והמשתמש מחובר עם Google – הצג טופס השלמה
+      const isGoogle = user.providerData?.some(p => p.providerId === 'google.com');
+      if (isGoogle) {
+        pendingGoogleUser = user;
+        showGoogleFinishSignupStep(user);
+      }
     });
 
     function showMessage(text, isError = false) {
@@ -239,6 +271,7 @@
     }
     DOM.signupPasswordInput?.addEventListener('input', validatePassword);
 
+    // ===== Signup with Email/Password =====
     DOM.signupForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearMessage();
@@ -260,6 +293,7 @@
           lastName: last,
           email: cred.user.email,
           provider: 'password',
+          profileComplete: true,
           createdAt: serverTimestamp()
         }, { merge: true });
         showMessage('הרשמה הושלמה! שלחנו מייל לאימות. אשר/י את המייל ואז התחבר/י.');
@@ -272,6 +306,7 @@
       }
     });
 
+    // ===== Login with Email/Password =====
     DOM.loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearMessage();
@@ -281,7 +316,9 @@
         setLoading(DOM.loginSubmitBtn, true);
         const cred = await signInWithEmailAndPassword(auth, email, password);
         if (!cred.user.emailVerified) return showMessage('עליך לאמת את כתובת המייל לפני התחברות.', true);
-        window.location.href = 'index.html';
+        // אם נמצא פרופיל מלא – הפניה, אחרת (בחשבון סיסמה) אין צורך בטופס השלמה
+        const redirected = await ensureRedirectIfComplete(cred.user);
+        if (!redirected) window.location.href = 'index.html';
       } catch (err) {
         showMessage(getFriendlyErrorMessage(err.code), true);
       } finally {
@@ -289,15 +326,24 @@
       }
     });
 
-    // === Google Sign-In: תמיד מראים מסך אימות שם ===
+    // ===== Google Sign-In =====
     DOM.googleSigninBtn.addEventListener('click', async () => {
       clearMessage();
       const provider = new GoogleAuthProvider();
       try {
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
+
+        // אם למשתמש כבר יש פרופיל מלא – מפנים מיד
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists() && isProfileCompleteData(snap.data())) {
+          window.location.href = 'index.html';
+          return;
+        }
+
+        // אחרת – הצג טופס השלמת שם פעם אחת
         pendingGoogleUser = user;
-        showGoogleFinishSignupStep(user); // תמיד לפתוח את שלב האימות
+        showGoogleFinishSignupStep(user);
       } catch (error) {
         if (error.code === 'auth/operation-not-allowed') {
           showMessage('כניסה עם Google לא מאופשרת ב־Firebase Console (Authentication > Sign-in method).', true);
@@ -333,17 +379,24 @@
       if (!first || !last) return showMessage('אנא מלא שם פרטי ושם משפחה.', true);
 
       try {
-        await setDoc(doc(db, "users", pendingGoogleUser.uid), {
+        const ref = doc(db, "users", pendingGoogleUser.uid);
+        const snap = await getDoc(ref);
+
+        const payload = {
           name: `${first} ${last}`,
           firstName: first,
           lastName: last,
           email: pendingGoogleUser.email,
           provider: 'google',
-          createdAt: serverTimestamp()
-        }, { merge: true });
+          profileComplete: true
+        };
+        if (snap.exists()) payload.updatedAt = serverTimestamp();
+        else payload.createdAt = serverTimestamp();
 
+        await setDoc(ref, payload, { merge: true });
         window.location.href = 'index.html';
       } catch (err) {
+        console.error(err);
         showMessage('שגיאה ביצירת/עדכון החשבון. נסה שוב.', true);
       }
     });
