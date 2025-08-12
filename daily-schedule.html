@@ -92,10 +92,14 @@
         }
 
         /* Map Styles */
-        #route-map {
+        #route-map, #modal-map {
             height: 450px;
             border-radius: 1rem;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            background-color: #e2e8f0; /* Placeholder background */
+        }
+        #modal-map {
+            height: 250px; /* Smaller map for the modal */
         }
         .leaflet-container {
              font-family: 'Assistant', sans-serif;
@@ -429,6 +433,7 @@
         let destForDate = null;
         let currentScheduleItems = [];
         let mapInstance = null;
+        let modalMapInstance = null; // Map for the detail modal
         let currentLayout = 'default'; // default, accordion-summary, accordion-full, line-style
 
         // ---------- UI Elements ----------
@@ -572,10 +577,10 @@
         }
 
         // --- Timeline Item Rendering Logic ---
-        function itemIcon(it) { /* ... same as before ... */ return it.isBackToHotel ? 'fa-bed' : (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs) ? 'fa-triangle-exclamation' : 'fa-location-dot'; }
-        function timeText(it) { /* ... same as before ... */ if (!it?.startTime && !it?.endTime) return '--:--'; return [it.startTime || '', it.endTime ? '– '+it.endTime : ''].filter(Boolean).join(' '); }
-        function distanceText(m) { /* ... same as before ... */ if (m==null) return ''; const km = (m/1000).toFixed(2); return `<span class="text-xs text-slate-500"> • מרחק קודם: ${km} ק״מ</span>`; }
-        function verifyBadge(it) { /* ... same as before ... */ const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs); if (!needs) return ''; const list = [it.needsVerifyAddress?'כתובת':null, it.needsVerifyRoute?'מסלול':null, it.needsVerifyRefs?'קישור':null].filter(Boolean).join(' / '); return `<span class="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${list?': '+list:''}</span>`; }
+        function itemIcon(it) { return it.isBackToHotel ? 'fa-bed' : (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs) ? 'fa-triangle-exclamation' : 'fa-location-dot'; }
+        function timeText(it) { if (!it?.startTime && !it?.endTime) return '--:--'; return [it.startTime || '', it.endTime ? '– '+it.endTime : ''].filter(Boolean).join(' '); }
+        function distanceText(m) { if (m==null) return ''; const km = (m/1000).toFixed(2); return `<span class="text-xs text-slate-500"> • מרחק קודם: ${km} ק״מ</span>`; }
+        function verifyBadge(it) { const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs); if (!needs) return ''; const list = [it.needsVerifyAddress?'כתובת':null, it.needsVerifyRoute?'מסלול':null, it.needsVerifyRefs?'קישור':null].filter(Boolean).join(' / '); return `<span class="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${list?': '+list:''}</span>`; }
 
         function getFullItemDetailsHTML(it) {
             const hasAddr = !!it.address?.label;
@@ -705,7 +710,6 @@
                 itemWrapper.innerHTML = itemHtml;
                 timelineBox.appendChild(itemWrapper);
 
-                // Add event listeners based on layout
                 const card = itemWrapper.querySelector('.timeline-item');
                 if (currentLayout.startsWith('accordion')) {
                     card.addEventListener('click', (e) => {
@@ -723,8 +727,15 @@
                 });
             });
             
-            // After rendering items, try to render the map
             renderRouteMap(items);
+        }
+
+        function closeDetailModal() {
+            if (modalMapInstance) {
+                modalMapInstance.remove();
+                modalMapInstance = null;
+            }
+            itemDetailModal.classList.remove('visible');
         }
 
         function showItemDetailModal(it) {
@@ -741,6 +752,9 @@
                 </div>`;
             
             const fullDetailsHtml = getFullItemDetailsHTML(it);
+            const mapHtml = (it.address && it.address.lat && it.address.lng) 
+                ? `<div id="modal-map" class="h-64 w-full mt-4 rounded-lg z-0 border"></div>` 
+                : '';
             
             itemDetailModalContent.innerHTML = `
                 ${headerHtml}
@@ -748,13 +762,26 @@
                     ${it.summary ? `<p class="text-lg italic" style="color: var(--card-secondary-text-color)">${it.summary}</p>` : ''}
                     ${fullDetailsHtml}
                 </div>
+                ${mapHtml}
             `;
             
             itemDetailModal.classList.add('visible');
             
-            document.getElementById('close-detail-modal-btn').addEventListener('click', () => {
-                itemDetailModal.classList.remove('visible');
-            });
+            if (it.address && it.address.lat && it.address.lng) {
+                // Use a short timeout to allow the modal to become visible and have dimensions
+                setTimeout(() => {
+                    const mapContainer = document.getElementById('modal-map');
+                    if (mapContainer) {
+                        modalMapInstance = L.map('modal-map').setView([it.address.lat, it.address.lng], 15);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        }).addTo(modalMapInstance);
+                        L.marker([it.address.lat, it.address.lng]).addTo(modalMapInstance);
+                    }
+                }, 50); // 50ms delay
+            }
+            
+            document.getElementById('close-detail-modal-btn').addEventListener('click', closeDetailModal);
         }
 
         function renderNotesList(notes) { /* ... same as before ... */ }
@@ -762,7 +789,7 @@
         function renderRouteMap(items) {
             const locations = items.map(it => it.address).filter(addr => addr && addr.lat && addr.lng);
             
-            if (locations.length < 1) {
+            if (locations.length < 2) { // Need at least 2 points for a route
                 mapContainerSection.classList.add('hidden');
                 return;
             }
@@ -777,7 +804,6 @@
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(mapInstance);
 
-            const latLngs = locations.map(loc => [loc.lat, loc.lng]);
             const markers = [];
             const routeColors = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#d946ef'];
             mapLegend.innerHTML = '<p class="font-bold">מקרא מסלול:</p>';
@@ -795,7 +821,7 @@
                     const legendItem = document.createElement('div');
                     legendItem.className = 'flex items-center gap-2';
                     legendItem.innerHTML = `
-                        <span class="w-4 h-1" style="background-color: ${color};"></span>
+                        <span class="w-4 h-1 inline-block" style="background-color: ${color};"></span>
                         <span>מ: ${prevLoc.label} <i class="fa-solid fa-arrow-left fa-xs"></i> ל: ${loc.label}</span>
                     `;
                     mapLegend.appendChild(legendItem);
@@ -826,15 +852,19 @@
             
             itemDetailModal.addEventListener('click', (e) => {
                 if (e.target === itemDetailModal) {
-                    itemDetailModal.classList.remove('visible');
+                    closeDetailModal();
                 }
             });
 
             // Settings Panel Navigation
             document.querySelectorAll('.settings-nav-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.remove('bg-slate-200'));
+                    document.querySelectorAll('.settings-nav-btn').forEach(b => {
+                        b.classList.remove('bg-slate-200');
+                        b.classList.add('text-slate-500');
+                    });
                     btn.classList.add('bg-slate-200');
+                    btn.classList.remove('text-slate-500');
                     const panelId = `settings-panel-${btn.dataset.panel}`;
                     document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
                     document.getElementById(panelId).classList.remove('hidden');
@@ -863,21 +893,28 @@
                 toggleSettings();
             });
             
+            // THEME PRESETS
+            const themePresets = {
+                'glass': { cardBg: 'rgba(255, 255, 255, 0.2)', cardText: '#ffffff', bgHex: '#ffffff', opacity: 20 },
+                'light': { cardBg: 'rgba(255, 255, 255, 0.9)', cardText: '#1e293b', bgHex: '#ffffff', opacity: 90 },
+                'dark': { cardBg: 'rgba(30, 41, 59, 0.9)', cardText: '#f1f5f9', bgHex: '#1e293b', opacity: 90 },
+                'ocean': { cardBg: 'rgba(14, 116, 144, 0.9)', cardText: '#f0f9ff', bgHex: '#0e7490', opacity: 90 },
+                'sunset': { cardBg: 'rgba(234, 88, 12, 0.9)', cardText: '#fff7ed', bgHex: '#ea580c', opacity: 90 },
+                'forest': { cardBg: 'rgba(22, 101, 52, 0.9)', cardText: '#f0fdf4', bgHex: '#166534', opacity: 90 },
+                'lavender': { cardBg: 'rgba(221, 214, 254, 0.9)', cardText: '#4c1d95', bgHex: '#ddd6fe', opacity: 90 },
+                'sand': { cardBg: 'rgba(254, 243, 199, 0.9)', cardText: '#78350f', bgHex: '#fef3c7', opacity: 90 }
+            };
+
             document.querySelectorAll('.theme-preset-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const theme = btn.dataset.theme;
-                    let newTheme;
-                     switch(theme) {
-                        case 'glass': newTheme = { cardBg: 'rgba(255, 255, 255, 0.2)', cardText: '#ffffff' }; break;
-                        case 'light': newTheme = { cardBg: 'rgba(255, 255, 255, 0.9)', cardText: '#1e293b' }; break;
-                        case 'dark': newTheme = { cardBg: 'rgba(30, 41, 59, 0.9)', cardText: '#f1f5f9' }; break;
-                        case 'ocean': newTheme = { cardBg: 'rgba(14, 116, 144, 0.9)', cardText: '#f0f9ff' }; break;
-                        case 'sunset': newTheme = { cardBg: 'rgba(234, 88, 12, 0.9)', cardText: '#fff7ed' }; break;
-                        case 'forest': newTheme = { cardBg: 'rgba(22, 101, 52, 0.9)', cardText: '#f0fdf4' }; break;
-                        case 'lavender': newTheme = { cardBg: 'rgba(221, 214, 254, 0.9)', cardText: '#4c1d95' }; break;
-                        case 'sand': newTheme = { cardBg: 'rgba(254, 243, 199, 0.9)', cardText: '#78350f' }; break;
-                     }
-                     setTheme(newTheme);
+                    const themeName = btn.dataset.theme;
+                    const newTheme = themePresets[themeName];
+                    if (newTheme) {
+                        setTheme(newTheme);
+                        document.getElementById('card-bg-color-picker').value = newTheme.bgHex;
+                        document.getElementById('card-opacity-slider').value = newTheme.opacity;
+                        document.getElementById('card-text-color-picker').value = newTheme.cardText;
+                    }
                 });
             });
 
@@ -886,7 +923,6 @@
                 const opacity = document.getElementById('card-opacity-slider').value;
                 const textColor = document.getElementById('card-text-color-picker').value;
                 
-                // Convert hex to rgb to apply opacity
                 const r = parseInt(bgColor.slice(1, 3), 16);
                 const g = parseInt(bgColor.slice(3, 5), 16);
                 const b = parseInt(bgColor.slice(5, 7), 16);
@@ -932,7 +968,7 @@
                 loaderBg.style.backgroundImage = `url('${bgUrl}')`;
                 
                 buildMenuFromTrip();
-                applyStylingFromTripData(); // Apply saved styles
+                applyStylingFromTripData();
 
                 const destNameParam = encodeURIComponent(destForDate?.nameHe || destForDate?.name || '');
                 const editHref = `create-schedule.html?tripId=${encodeURIComponent(tripId)}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
