@@ -121,14 +121,7 @@
         .timeline.layout-table td:nth-child(2) { width: 60%; }
         .timeline.layout-table td:nth-child(3) { width: 25%; text-align: left; }
 
-        /* NEW: Grid Layout */
-        .timeline.layout-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1rem;
-        }
-
-        /* NEW: Condensed List Layout */
+        /* Condensed List Layout */
         .timeline.layout-condensed-list .timeline-item-wrapper {
              display: flex;
              gap: 1rem;
@@ -392,10 +385,6 @@
                         <div><span class="font-bold">טבלה</span><p class="text-sm text-slate-500">מציג את פריטי היום בטבלה מסודרת וקומפקטית.</p></div>
                     </label>
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="grid">
-                        <div><span class="font-bold">רשת (גריד)</span><p class="text-sm text-slate-500">תצוגה מודרנית של כרטיסיות ברשת דינמית.</p></div>
-                    </label>
-                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="condensed-list">
                         <div><span class="font-bold">רשימה דחוסה</span><p class="text-sm text-slate-500">רשימה פשוטה ונקייה, מתאימה להדפסה.</p></div>
                     </label>
@@ -589,6 +578,7 @@
         let isSmartAccordionActive = false;
         const accordionMaps = {};
         let smartAccordionInterval = null;
+        let currentRouteLayer = null; // Layer for OSRM route
 
         // ---------- UI Elements ----------
         const initialLoader = document.getElementById('initial-loader');
@@ -698,27 +688,25 @@
             currentLayout = layout; 
             isSmartAccordionActive = smartAccordion;
 
-            // Show/hide smart accordion controls based on layout type
             const showSmartControls = layout.includes('accordion');
             smartAccordionControls.classList.toggle('hidden', !showSmartControls);
             if (showSmartControls) {
                 smartAccordionToggle.checked = isSmartAccordionActive;
             } else {
-                isSmartAccordionActive = false; // Turn off if not an accordion layout
+                isSmartAccordionActive = false;
             }
 
-            // Manage the interval for smart accordion
             if (smartAccordionInterval) {
                 clearInterval(smartAccordionInterval);
                 smartAccordionInterval = null;
             }
             if (isSmartAccordionActive) {
-                updateSmartAccordionState(); // Run once immediately
-                smartAccordionInterval = setInterval(updateSmartAccordionState, 30000); // Check every 30 seconds
+                updateSmartAccordionState();
+                smartAccordionInterval = setInterval(updateSmartAccordionState, 30000);
             }
 
             timelineBox.className = `timeline`; // Reset classes
-            if (!['table', 'grid', 'condensed-list'].includes(layout)) {
+            if (!['table', 'condensed-list'].includes(layout)) {
                 timelineBox.classList.add('space-y-4');
             }
             timelineBox.classList.add(`layout-${layout}`);
@@ -874,25 +862,6 @@
                     </div>
                 `;
                 timelineBox.innerHTML = tableHtml;
-            } else if (currentLayout === 'grid') {
-                items.forEach((it, index) => {
-                    const itemWrapper = document.createElement('div');
-                    itemWrapper.className = 'timeline-item-wrapper';
-                    itemWrapper.id = `timeline-item-${index}`;
-                    const navLink = it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
-                    const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
-                    const itemHtml = `
-                        <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn h-full flex flex-col" data-index="${index}">
-                            <div class="text-sm font-bold" style="color: var(--card-secondary-text-color);">${timeText(it)}</div>
-                            <h4 class="text-lg font-bold mt-1">${it.title || 'פריט ללא שם'}</h4>
-                            ${it.summary ? `<p class="mt-1 text-sm flex-grow">${it.summary}</p>` : '<div class="flex-grow"></div>'}
-                            <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color: var(--card-border-color);">
-                                ${navLink} ${siteLink}
-                            </div>
-                        </div>`;
-                    itemWrapper.innerHTML = itemHtml;
-                    timelineBox.appendChild(itemWrapper);
-                });
             } else if (currentLayout === 'condensed-list') {
                 const listContainer = document.createElement('div');
                 listContainer.className = 'themed-card rounded-lg shadow p-2';
@@ -993,7 +962,7 @@
                                 const accordionMap = L.map(mapContainerId);
                                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(accordionMap);
                                 
-                                setupRouteOnMap(accordionMap, item); // Use helper function
+                                setupRouteOnMap(accordionMap, item);
                                 
                                 accordionMaps[mapContainerId] = accordionMap;
                             }, 50);
@@ -1023,7 +992,6 @@
                 if (item.endTime) {
                     endMinutes = parseInt(item.endTime.split(':')[0]) * 60 + parseInt(item.endTime.split(':')[1]);
                 } else {
-                    // Find next item's start time
                     const currentItemSort = item.sort;
                     const nextItem = currentScheduleItems.slice().sort((a,b) => a.sort - b.sort).find(it => it.sort > currentItemSort && it.startTime);
                     if (nextItem) {
@@ -1039,15 +1007,12 @@
                 }
             }
 
-            // Remove previous active states
             document.querySelectorAll('.smart-accordion-active').forEach(el => el.classList.remove('smart-accordion-active'));
 
             if (activeIndex !== -1) {
                 const activeDetails = document.getElementById(`details-${activeIndex}`);
                 if (activeDetails) {
-                    // Check if it's not already open by user interaction
                     if (!activeDetails.hasAttribute('data-user-opened')) {
-                        // Close all others that are not user-opened
                         document.querySelectorAll('details.accordion-item').forEach(d => {
                             if (d.id !== `details-${activeIndex}` && !d.hasAttribute('data-user-opened')) {
                                 d.open = false;
@@ -1072,23 +1037,49 @@
         }
 
         function closeDetailModal() {
-            if (modalMapInstance) { modalMapInstance.remove(); modalMapInstance = null; }
+            if (modalMapInstance) { 
+                if (currentRouteLayer) {
+                    modalMapInstance.removeLayer(currentRouteLayer);
+                    currentRouteLayer = null;
+                }
+                modalMapInstance.remove(); 
+                modalMapInstance = null; 
+            }
             itemDetailModal.classList.remove('visible');
             closeModal();
         }
 
-        function setupRouteOnMap(map, item) {
+        async function setupRouteOnMap(map, item) {
             const hasAddr = !!(item.address?.lat && item.address?.lng);
             const hasTravel = !!(item.travel?.from?.coords && item.travel?.to?.coords);
 
+            if (currentRouteLayer && map.hasLayer(currentRouteLayer)) {
+                map.removeLayer(currentRouteLayer);
+            }
+
             if (hasTravel) {
-                const from = [item.travel.from.coords.lat, item.travel.from.coords.lng];
-                const to = [item.travel.to.coords.lat, item.travel.to.coords.lng];
-                L.marker(from).addTo(map).bindPopup(`מ: ${item.travel.from.label}`);
-                L.marker(to).addTo(map).bindPopup(`אל: ${item.travel.to.label}`);
-                const polyline = L.polyline([from, to], {color: 'blue'}).addTo(map);
-                L.polylineDecorator(polyline, { patterns: [{ offset: '50%', repeat: 0, symbol: L.Symbol.arrowHead({ pixelSize: 15, polygon: false, pathOptions: { stroke: true, color: 'blue' } }) }]}).addTo(map);
-                map.fitBounds([from, to], {padding: [40, 40]});
+                const a = item.travel.from.coords;
+                const b = item.travel.to.coords;
+                const profile = (item.travel.mode === 'foot') ? 'foot' : 'driving';
+                const url = `https://router.project-osrm.org/route/v1/${profile}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+                
+                try {
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data?.routes?.[0]) {
+                        const r = data.routes[0];
+                        currentRouteLayer = L.geoJSON(r.geometry, { style: { color: 'blue', weight: 5 } }).addTo(map);
+                        map.fitBounds(currentRouteLayer.getBounds(), { padding: [40, 40] });
+                    }
+                } catch (e) {
+                    console.error("Could not fetch route from OSRM", e);
+                    // Fallback to straight line
+                    currentRouteLayer = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], {color: 'red', dashArray: '5, 10'}).addTo(map);
+                    map.fitBounds([[a.lat, a.lng], [b.lat, b.lng]], {padding: [40, 40]});
+                }
+                L.marker([a.lat, a.lng]).addTo(map).bindPopup(`מ: ${item.travel.from.label}`);
+                L.marker([b.lat, b.lng]).addTo(map).bindPopup(`אל: ${item.travel.to.label}`);
+
             } else if (hasAddr) {
                 map.setView([item.address.lat, item.address.lng], 15);
                 L.marker([item.address.lat, item.address.lng]).addTo(map);
@@ -1113,7 +1104,7 @@
                     if (mapContainer) {
                         modalMapInstance = L.map('modal-map');
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(modalMapInstance);
-                        setupRouteOnMap(modalMapInstance, it); // Use helper function
+                        setupRouteOnMap(modalMapInstance, it);
                     }
                 }, 50);
             }
@@ -1224,6 +1215,14 @@
                 toggleSettings();
             });
 
+            // NEW: Add event listener for immediate UI change for smart accordion
+            document.querySelectorAll('input[name="timeline-layout"]').forEach(radio => {
+                radio.addEventListener('change', (event) => {
+                    const showSmartControls = event.target.value.includes('accordion');
+                    smartAccordionControls.classList.toggle('hidden', !showSmartControls);
+                });
+            });
+
             smartAccordionToggle.addEventListener('change', () => {
                 isSmartAccordionActive = smartAccordionToggle.checked;
                 setCurrentLayout(currentLayout, isSmartAccordionActive);
@@ -1290,7 +1289,6 @@
                 toggleSettings();
             });
             
-            // For smart accordion, keep track if user opens a details element manually
             timelineBox.addEventListener('click', (e) => {
                 const details = e.target.closest('details.accordion-item');
                 if (details && details.open) {
@@ -1485,7 +1483,7 @@
 
         function renderLogisticsDetailsHTML(item) {
              let detailsHtml = '';
-             switch(item.subType) { // Changed from 'type' to 'subType' to match data structure
+             switch(item.subType) {
                  case 'hotel':
                       detailsHtml = `
                           <p><strong>יעד:</strong> ${item.destination}</p>
@@ -1504,7 +1502,6 @@
                           <p><strong>המראה:</strong> ${item.departure_time}, <strong>נחיתה:</strong> ${item.arrival_time}</p>
                       `;
                       break;
-                 // Add cases for car_rental, ferry, train
                  default:
                       detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
              }
