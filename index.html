@@ -3,307 +3,847 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מתכנן הטיולים שלך</title>
+    <title>מרכז הבקרה של הטיול</title>
     
-    <!-- Libraries -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Litepicker (לטווחי תאריכים במודל העריכה) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+
+    <!-- Icons + Font -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            font-family: 'Assistant', sans-serif;
+        html{height:100%;scrollbar-gutter:stable both-edges}
+        body{
+            font-family:'Assistant',sans-serif;
+            min-height:100%;
+            overflow-y:scroll;           /* מונע שינוי רוחב בעת הופעת סרגל גלילה */
+            overscroll-behavior-y:contain;/* מפחית "ריבאונד" גלילה בסוף הדף */
+            -webkit-font-smoothing:antialiased;
         }
-        #loading-overlay {
-            transition: opacity 0.5s ease-in-out;
+
+        #sidebar { transition: transform 0.3s ease-in-out; }
+        .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
+        .submenu.open { max-height: 1200px; }
+        #trip-map-container { height: 450px; border-radius: 1rem; z-index: 0; }
+        .modal { transition: opacity 0.3s ease; }
+        .no-scrollbar::-webkit-scrollbar{display:none}
+        .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+        .edit-dest-card { border-inline-start: 4px solid #38bdf8; }
+        .date-pill{background:#eef6ff;border-radius:9999px;padding:.15rem .5rem;font-weight:700;font-size:.75rem}
+
+        /* כפתורי נווט ראשיים - בלי תזוזה אנכית שגורמת "קפיצות" */
+        .main-nav-button { transition: transform .2s ease-out, box-shadow .2s ease-out; will-change: transform; }
+        .main-nav-button:hover { transform: scale(1.02); box-shadow: 0 10px 24px rgba(0,0,0,0.18); }
+
+        /* כרטיסים חדשים יפים ויציבים */
+        .card{
+            background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88));
+            border-radius: 16px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+            border: 1px solid rgba(226,232,240,0.7);
+            transition: box-shadow .2s ease, transform .2s ease;
+            will-change: transform;
         }
-        .main-nav-button {
-            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+        .card:hover{
+            /* בלי translateY כדי לא ליצור "קפיצה" בתחתית הדף */
+            box-shadow: 0 12px 28px rgba(0,0,0,0.14);
         }
-        .main-nav-button:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        .badge{
+            display:inline-flex;align-items:center;gap:.4rem;
+            font-weight:700;font-size:.75rem;
+            background:#f1f5f9;border:1px solid #e2e8f0;border-radius:9999px;
+            padding:.2rem .6rem;color:#334155;
         }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .price-chip{
+            background:#e6f2ff;border:1px solid #cfe3ff;color:#1e3a8a;
+            font-weight:800;border-radius:9999px;padding:.35rem .8rem;
+        }
+
+        /* טעינה חלקה */
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+
+        /* רקע */
+        #page-bg { transition: background-image 1s ease, transform .6s ease; }
     </style>
 </head>
-<body class="bg-gray-100">
+<body>
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center gap-4">
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
-        <p class="text-xl font-bold text-slate-700">טוען את מתכנן הטיולים...</p>
+        <p class="text-xl font-bold text-slate-700">טוען את הטיול שלך...</p>
     </div>
 
     <!-- Fixed Background -->
-    <div id="main-bg" class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-500"></div>
+    <div id="page-bg" class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/PXLTIi4.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/50"></div>
 
     <!-- Scrollable Content Wrapper -->
-    <div class="relative z-10 min-h-screen flex flex-col">
-        <!-- Header -->
-        <header class="bg-white/10 backdrop-blur-sm sticky top-0 z-30">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between h-16">
-                    <!-- User Authentication Section -->
-                    <div id="auth-container">
-                        <button id="login-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
-                            התחברות / הרשמה
-                        </button>
-                        <div id="user-info" class="hidden">
-                            <button id="user-name-btn" class="text-lg font-semibold text-white cursor-pointer hover:text-gray-300 transition"></button>
-                        </div>
-                    </div>
+    <div class="relative z-10">
+        <!-- Navigation Modal -->
+        <div id="nav-modal" class="modal fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 hidden opacity-0">
+            <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center">
+                <h3 id="nav-modal-title" class="text-xl font-bold text-slate-800 mb-4">נווט אל...</h3>
+                <div id="nav-modal-content" class="flex flex-col gap-4">
+                    <a id="nav-waze-link" href="#" target="_blank" class="block w-full text-center bg-[#33ccff] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#00bfff] transition text-lg"><i class="fa-brands fa-waze"></i> Waze</a>
+                    <a id="nav-gmaps-link" href="#" target="_blank" class="block w-full text-center bg-[#4285F4] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#3367D6] transition text-lg"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>
+                </div>
+                <p id="nav-modal-message" class="text-slate-600"></p>
+                <button id="nav-modal-close" class="mt-6 text-slate-500 hover:text-slate-700">סגור</button>
+            </div>
+        </div>
 
-                    <!-- Settings Button -->
-                    <button id="settings-btn" class="hidden text-white hover:text-gray-300 transition duration-300">
-                        <i class="fas fa-cog fa-lg"></i>
-                    </button>
+        <!-- Logout Modal -->
+        <div id="logout-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[101] p-4">
+            <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm text-center">
+                <h2 class="text-2xl font-bold mb-4">התנתקות</h2>
+                <p class="text-slate-600 mb-8">האם אתה בטוח שברצונך להתנתק?</p>
+                <div class="flex justify-center gap-4">
+                    <button id="cancel-logout-btn" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">התנתק</button>
                 </div>
             </div>
-        </header>
+        </div>
+        
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[101] p-4">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h2 class="text-2xl font-bold">הגדרות תצוגה</h2>
+                    <button id="close-settings-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label for="main-bg-input" class="block text-sm font-medium text-slate-700 mb-1">רקע כללי לדף הטיול</label>
+                        <input type="url" id="main-bg-input" class="w-full p-2 border rounded-md" placeholder="הדבק קישור (URL) לתמונה">
+                        <p class="text-xs text-slate-500 mt-1">שינוי זה משפיע על כל הדף (לא לפי יעד).</p>
+                    </div>
+
+                    <hr>
+
+                    <!-- כפתור עורך יעדים/תאריכים נשאר כפי שהוא -->
+                    <div class="bg-slate-50 border rounded-lg p-4">
+                        <h3 class="font-bold text-slate-800 mb-2"><i class="fa-solid fa-calendar-days ml-2 text-sky-600"></i> עריכת תאריכים ויעדים בלוז</h3>
+                        <p class="text-slate-600 text-sm mb-3">שנה את טווח התאריכים הכללי של הטיול, הוסף/מחק/ערוך יעדים ותאריכיהם.</p>
+                        <button id="open-edit-destinations-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg">
+                            פתח עורך תאריכים ויעדים
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex justify-end gap-4">
+                    <div id="settings-feedback" class="text-green-600 font-bold flex-grow"></div>
+                    <button id="save-settings-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור הגדרות</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW: Edit Destinations Modal -->
+        <div id="edit-destinations-modal" class="hidden fixed inset-0 bg-black/70 z-[110] p-4 flex items-center justify-center">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
+                <header class="p-4 border-b flex justify-between items-center">
+                    <h2 class="text-xl font-bold">עריכת תאריכים ויעדים בלוז</h2>
+                    <button id="edit-destinations-close" class="p-2 text-slate-500 hover:text-red-600"><i class="fa-solid fa-xmark fa-lg"></i></button>
+                </header>
+                <main class="p-4 overflow-y-auto no-scrollbar flex-1 space-y-5">
+                    <section class="bg-slate-50 p-4 rounded-lg">
+                        <label class="block text-sm font-semibold mb-1">תאריכי הטיול (כללי)</label>
+                        <input type="text" id="trip-dates-edit" class="w-full p-2 border rounded-md text-center" placeholder="DD/MM/YYYY - DD/MM/YYYY">
+                        <p class="text-xs text-slate-500 mt-1">הערה: זהו טווח כללי בלבד – לכל יעד יש טווח משלו.</p>
+                    </section>
+
+                    <section>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-slate-800 text-lg">יעדים</h3>
+                            <button id="add-dest-btn" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold py-2 px-4 rounded-lg"><i class="fa-solid fa-plus ml-2"></i>הוסף יעד</button>
+                        </div>
+                        <div id="destinations-list" class="space-y-4"></div>
+                    </section>
+                </main>
+                <footer class="p-4 border-t flex justify-between">
+                    <button id="edit-destinations-cancel" class="bg-slate-200 hover:bg-slate-300 font-semibold py-2 px-4 rounded-lg">ביטול</button>
+                    <button id="save-destinations-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">שמור שינויים</button>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Sidebar (Full Navigation Menu) -->
+        <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
+            <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
+                <h2 class="text-2xl font-bold text-slate-800">תפריט המסע</h2>
+                <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <nav id="main-menu" class="p-4 space-y-2"></nav>
+        </aside>
 
         <!-- Main Content -->
-        <main class="flex-grow flex items-center justify-center text-center p-4">
-            <div>
-                <h1 class="text-4xl md:text-6xl font-bold text-white mb-4 drop-shadow-lg">מתכנן הטיולים שלך</h1>
-                <p id="login-prompt-message" class="text-xl text-slate-200 mt-4">על מנת להתחיל, יש <a href="login.html" class="font-bold underline hover:text-blue-300">להתחבר או להירשם</a></p>
-                
-                <div id="main-actions" class="hidden mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
-                    <button id="create-trip-btn" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 flex flex-col items-center justify-center p-6 rounded-xl text-white text-center">
-                        <i class="fas fa-plus-circle text-3xl mb-2"></i>
-                        <span class="font-bold text-lg">יצירת טיול חדש</span>
-                    </button>
-
-                    <div class="relative group w-full">
-                        <button id="my-trips-btn" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 flex flex-col items-center justify-center p-6 rounded-xl text-white text-center w-full">
-                            <i class="fas fa-suitcase-rolling text-3xl mb-2"></i>
-                            <span class="font-bold text-lg">הטיולים שלי</span>
-                        </button>
-                        <div id="trips-dropdown" class="absolute right-0 mt-2 w-full bg-white rounded-md shadow-lg py-1 z-20 hidden group-hover:block max-h-60 overflow-y-auto no-scrollbar">
-                            <p class="px-4 py-2 text-sm text-gray-500 text-right">אין טיולים להצגה.</p>
+        <div id="main-content" class="min-h-screen">
+            <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between h-16">
+                        <a href="index.html" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-home"></i> דף הבית</a>
+                        <div class="flex items-center gap-2 sm:gap-4">
+                            <div id="auth-container"></div>
+                            <button id="navigate-hotel-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="נווט למלון"><i class="fas fa-hotel fa-lg"></i></button>
+                            <button id="settings-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="הגדרות"><i class="fas fa-cog fa-lg"></i></button>
+                            <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
                         </div>
                     </div>
                 </div>
-            </div>
-        </main>
-    </div>
+            </header>
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md text-black">
-            <h2 class="text-2xl font-bold mb-6 text-right">הגדרות</h2>
-            <div class="mb-6 text-right">
-                <label for="bg-image-url" class="block mb-2 font-semibold">תמונת רקע (קישור)</label>
-                <input type="url" id="bg-image-url" placeholder="https://example.com/image.jpg" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left" dir="ltr">
-            </div>
-            <div id="default-trip-section" class="mb-6 text-right hidden">
-                <h3 class="font-semibold mb-3">טיול ברירת מחדל</h3>
-                <p class="text-sm text-gray-600 mb-3">בחר טיול שייטען אוטומטית בכניסה לאתר.</p>
-                <div id="default-trip-list" class="space-y-2 max-h-48 overflow-y-auto no-scrollbar pr-2"></div>
-            </div>
-            <div class="flex justify-end space-x-4 space-x-reverse">
-                <button id="close-settings-btn" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded-lg">סגירה</button>
-                <button id="save-settings-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">שמירה</button>
-            </div>
+            <main>
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
+                
+                    <section class="text-center">
+                        <h2 id="trip-title" class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg">טוען את שם הטיול...</h2>
+                        <p class="mt-4 text-lg text-slate-200 max-w-3xl mx-auto">זהו מרכז הבקרה של הטיול! מכאן אפשר לנווט לכל המידע החשוב.</p>
+                        <div id="main-nav-buttons" class="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+                            <!-- Buttons will be generated here -->
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="text-3xl font-bold text-white mb-4 text-center drop-shadow-md">מפת המסע הכללית</h3>
+                        <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg"><div id="trip-map-container"></div></div>
+                    </section>
+
+                    <section id="hotel-summary-section">
+                        <h3 class="text-3xl font-bold text-white text-center drop-shadow-md mb-6">🏨 סיכום מלונות</h3>
+                        <div id="hotel-summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                           <p class="text-white/80 text-center col-span-full">טוען סיכום מלונות...</p>
+                        </div>
+                    </section>
+                    
+                    <section id="transport-summary-section">
+                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום מעברים</h3>
+                        <div id="transport-summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
+                        </div>
+                    </section>
+
+                    <section id="costs-summary-section">
+                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">📊 סיכום עלויות</h3>
+                        <div id="costs-summary-container" class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
+                           <p class="text-slate-600 text-center">טוען סיכום עלויות...</p>
+                        </div>
+                    </section>
+                </div>
+            </main>
         </div>
+        
+        <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden"></div>
     </div>
-
-    <!-- Logout Confirmation Modal -->
-    <div id="logout-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm text-center">
-            <h2 class="text-2xl font-bold mb-4">התנתקות</h2>
-            <p class="text-slate-600 mb-8">האם אתה בטוח שברצונך להתנתק?</p>
-            <div class="flex justify-center gap-4">
-                <button id="cancel-logout-btn" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
-                <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">התנתק</button>
-            </div>
-        </div>
-    </div>
-
 
     <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-      import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-      import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-      const firebaseConfig = {
-        apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-        authDomain: "tiool-loz.firebaseapp.com",
-        projectId: "tiool-loz",
-        storageBucket: "tiool-loz.appspot.com",
-        messagingSenderId: "226069823505",
-        appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-      };
+        // --- Firebase Init ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      
-      const DOM = {
-          loadingOverlay: document.getElementById('loading-overlay'),
-          loginBtn: document.getElementById('login-btn'),
-          userInfo: document.getElementById('user-info'),
-          userNameBtn: document.getElementById('user-name-btn'),
-          mainActions: document.getElementById('main-actions'),
-          settingsBtn: document.getElementById('settings-btn'),
-          createTripBtn: document.getElementById('create-trip-btn'),
-          tripsDropdown: document.getElementById('trips-dropdown'),
-          loginPromptMessage: document.getElementById('login-prompt-message'),
-          settingsModal: document.getElementById('settings-modal'),
-          closeSettingsBtn: document.getElementById('close-settings-btn'),
-          saveSettingsBtn: document.getElementById('save-settings-btn'),
-          bgImageUrlInput: document.getElementById('bg-image-url'),
-          defaultTripSection: document.getElementById('default-trip-section'),
-          defaultTripList: document.getElementById('default-trip-list'),
-          mainBg: document.getElementById('main-bg'),
-          logoutModal: document.getElementById('logout-modal'),
-          confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
-          cancelLogoutBtn: document.getElementById('cancel-logout-btn'),
-      };
+        // --- DOM Elements ---
+        const DOM = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            pageBg: document.getElementById('page-bg'),
+            sidebar: document.getElementById('sidebar'),
+            hamburgerBtn: document.getElementById('hamburger-btn'),
+            closeSidebarBtn: document.getElementById('close-sidebar-btn'),
+            overlay: document.getElementById('overlay'),
+            mainMenu: document.getElementById('main-menu'),
+            navModal: document.getElementById('nav-modal'),
+            navModalClose: document.getElementById('nav-modal-close'),
+            navigateHotelBtn: document.getElementById('navigate-hotel-btn'),
+            logoutModal: document.getElementById('logout-modal'),
+            cancelLogoutBtn: document.getElementById('cancel-logout-btn'),
+            confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
+            authContainer: document.getElementById('auth-container'),
+            tripTitle: document.getElementById('trip-title'),
+            tripMapContainer: document.getElementById('trip-map-container'),
+            mainNavButtons: document.getElementById('main-nav-buttons'),
+            hotelSummaryContainer: document.getElementById('hotel-summary-container'),
+            transportSummaryContainer: document.getElementById('transport-summary-container'),
+            costsSummaryContainer: document.getElementById('costs-summary-container'),
+            // Settings Modal Elements
+            settingsBtn: document.getElementById('settings-btn'),
+            settingsModal: document.getElementById('settings-modal'),
+            closeSettingsBtn: document.getElementById('close-settings-btn'),
+            mainBgInput: document.getElementById('main-bg-input'),
+            saveSettingsBtn: document.getElementById('save-settings-btn'),
+            settingsFeedback: document.getElementById('settings-feedback'),
+            openEditDestBtn: document.getElementById('open-edit-destinations-btn'),
+            // Edit destinations modal
+            editDestModal: document.getElementById('edit-destinations-modal'),
+            editDestClose: document.getElementById('edit-destinations-close'),
+            editDestCancel: document.getElementById('edit-destinations-cancel'),
+            saveDestinationsBtn: document.getElementById('save-destinations-btn'),
+            tripDatesEdit: document.getElementById('trip-dates-edit'),
+            destinationsList: document.getElementById('destinations-list'),
+            addDestBtn: document.getElementById('add-dest-btn'),
+        };
 
-      let currentUser = null;
-      let userUnsubscribe = null; 
-      let tripsUnsubscribe = null;
-      let isInitialLoad = true;
+        let currentUser = null;
+        let tripId = null;
+        let tripData = null;
+        let logisticsUnsubscribe = null;
 
-      function hideLoader() {
-        if (isInitialLoad) {
-            DOM.loadingOverlay.classList.add('opacity-0');
-            setTimeout(() => {
-                DOM.loadingOverlay.style.display = 'none';
-            }, 500);
-            isInitialLoad = false;
-        }
-      }
+        // Keep refs for per-destination map instances inside edit modal
+        const editUI = new Map(); // key: destId string, value: {map, marker, el}
 
-      onAuthStateChanged(auth, (user) => {
-        if (userUnsubscribe) userUnsubscribe();
-        if (tripsUnsubscribe) tripsUnsubscribe();
+        // --- Page Initialization ---
+        function initPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('id');
+            if (!tripId) {
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
+                return;
+            }
 
-        if (user) {
-            currentUser = user;
-            DOM.loginBtn.classList.add('hidden');
-            DOM.userInfo.classList.remove('hidden');
-            DOM.mainActions.classList.remove('hidden');
-            DOM.loginPromptMessage.classList.add('hidden');
-            DOM.settingsBtn.classList.remove('hidden');
-
-            const userDocRef = doc(db, "users", user.uid);
-            
-            userUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
-                const userData = docSnap.exists() ? docSnap.data() : {};
-                DOM.userNameBtn.textContent = `שלום, ${userData.name || 'משתמש'}`;
-                applyUserSettings(userData.settings);
-
-                if (userData.settings?.defaultTripId && !window.location.search.includes('no_redirect')) {
-                    window.location.href = `trip.html?id=${userData.settings.defaultTripId}`;
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    loadTripData();
+                    setupAuthUI(user);
                 } else {
-                    hideLoader();
+                    window.location.href = 'login.html';
                 }
+            });
+        }
+
+        async function loadTripData() {
+            const tripRef = doc(db, "trips", tripId);
+            const tripSnap = await getDoc(tripRef);
+
+            if (tripSnap.exists() && tripSnap.data().ownerId === currentUser.uid) {
+                tripData = tripSnap.data();
+                document.title = tripData.name;
+                applySettings();
+                populateUI();
+                listenForLogistics();
+                DOM.loadingOverlay.style.display = 'none';
+            } else {
+                alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
+                window.location.href = 'index.html';
+            }
+        }
+
+        function listenForLogistics() {
+            if (logisticsUnsubscribe) logisticsUnsubscribe();
+            const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+            const q = query(logisticsCollectionRef);
+            logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
+                const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                populateSummaries(allItems);
             }, (error) => {
-                console.error("Error fetching user data:", error);
-                applyUserSettings(null);
-                hideLoader();
+                console.error("Logistics snapshot error:", error);
+            });
+        }
+        
+        // --- Settings Logic ---
+        function applySettings() {
+            if (tripData.backgroundUrl) {
+                DOM.pageBg.style.backgroundImage = `url('${tripData.backgroundUrl}')`;
+            }
+        }
+
+        function openSettingsModal() {
+            DOM.mainBgInput.value = tripData.backgroundUrl || '';
+            DOM.settingsFeedback.textContent = '';
+            DOM.settingsModal.classList.remove('hidden');
+        }
+        function closeSettingsModal() { DOM.settingsModal.classList.add('hidden'); }
+
+        async function saveSettings() {
+            const tripRef = doc(db, "trips", tripId);
+            let updatedTripData = { ...tripData };
+            updatedTripData.backgroundUrl = (DOM.mainBgInput.value || '').trim();
+
+            try {
+                await updateDoc(tripRef, updatedTripData);
+                tripData = updatedTripData;
+                applySettings();
+                DOM.settingsFeedback.textContent = 'ההגדרות נשמרו!';
+                setTimeout(() => { DOM.settingsFeedback.textContent = ''; closeSettingsModal(); }, 1200);
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                DOM.settingsFeedback.textContent = 'שגיאה בשמירה.';
+                DOM.settingsFeedback.classList.remove('text-green-600');
+                DOM.settingsFeedback.classList.add('text-red-600');
+            }
+        }
+        
+        // --- UI Population ---
+        function populateUI() {
+            DOM.tripTitle.textContent = tripData.name;
+            buildSidebarMenu();
+            buildTripMap();
+            buildNavButtons();
+        }
+        
+        function populateSummaries(items) {
+            const hotels = items.filter(item => item.type === 'hotel');
+            const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
+            renderHotelSummary(hotels);
+            renderTransportSummary(transports);
+            renderCostsSummary(items);
+        }
+
+        // --- New pretty hotel cards ---
+        function renderHotelSummary(hotels) {
+            const container = DOM.hotelSummaryContainer;
+            if (hotels.length === 0) {
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מלונות עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                return;
+            }
+
+            container.innerHTML = hotels.map(hotel => {
+                const title = hotel.name || 'מלון';
+                const place = hotel.destination || '';
+                const dates = hotel.dates || '';
+                const price = hotel.price || 0;
+
+                return `
+                <div class="card p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <h4 class="text-lg font-extrabold text-slate-800 truncate">${title}</h4>
+                      <div class="mt-1 flex flex-wrap items-center gap-2">
+                        ${place ? `<span class="badge"><i class="fa-solid fa-location-dot"></i>${place}</span>` : ''}
+                        ${dates ? `<span class="badge"><i class="fa-regular fa-calendar"></i>${dates}</span>` : ''}
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-end">
+                      <span class="price-chip">$${Number(price).toLocaleString()}</span>
+                      <span class="text-[11px] text-slate-400 mt-1">סה״כ שהייה</span>
+                    </div>
+                  </div>
+                </div>`;
+            }).join('');
+        }
+
+        // --- New pretty transport cards ---
+        function renderTransportSummary(transports) {
+            const container = DOM.transportSummaryContainer;
+            if (transports.length === 0) {
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מעברים עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                return;
+            }
+
+            const getIcon = (type) => {
+                switch(type) {
+                    case 'flight': return 'fa-plane-departure';
+                    case 'car_rental': return 'fa-car';
+                    case 'ferry': return 'fa-ship';
+                    case 'train': return 'fa-train';
+                    default: return 'fa-ticket-alt';
+                }
+            };
+
+            container.innerHTML = transports.map(item => {
+                let title = '';
+                if (item.type === 'flight') title = `${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+                else if (item.type === 'car_rental') title = `רכב שכור ב${item.destination || ''}`;
+                else if (item.type === 'ferry') title = `מעבורת מ${item.from_destination || ''} ל${item.to_destination || ''}`;
+                else if (item.type === 'train') title = `רכבת מ${item.from_station || ''} ל${item.to_station || ''}`;
+
+                const date = item.dates || item.date || '';
+
+                return `
+                <div class="card p-4">
+                  <div class="flex items-center gap-4">
+                    <div class="shrink-0 w-12 h-12 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center">
+                      <i class="fas ${getIcon(item.type)} text-sky-600"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <h4 class="font-bold text-slate-800 truncate">${title || 'מעבר'}</h4>
+                      ${date ? `<div class="mt-1"><span class="badge"><i class="fa-regular fa-calendar"></i>${date}</span></div>` : ''}
+                    </div>
+                  </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderCostsSummary(items) {
+            const container = DOM.costsSummaryContainer;
+            let totalCost = 0;
+            items.forEach(item => {
+                 if (item.type === 'flight') {
+                    const numSeats = item.seats?.length || 1;
+                    totalCost += (item.price_per_person || 0) * numSeats;
+                } else {
+                    totalCost += item.price || 0;
+                }
             });
 
-            listenToUserTrips(user.uid);
-
-        } else {
-            currentUser = null;
-            DOM.loginBtn.classList.remove('hidden');
-            DOM.userInfo.classList.add('hidden');
-            DOM.mainActions.classList.add('hidden');
-            DOM.loginPromptMessage.classList.remove('hidden');
-            DOM.settingsBtn.classList.add('hidden');
-            resetUI();
-            hideLoader();
-        }
-      });
-      
-      function applyUserSettings(settings) {
-        const defaultBg = 'https://i.imgur.com/PXLTIi4.jpeg';
-        const bgUrl = settings?.backgroundImage || defaultBg;
-        DOM.mainBg.style.backgroundImage = `url('${bgUrl}')`;
-        DOM.bgImageUrlInput.value = settings?.backgroundImage || '';
-      }
-
-      function resetUI() {
-          DOM.userNameBtn.textContent = '';
-          DOM.tripsDropdown.innerHTML = `<p class="px-4 py-2 text-sm text-gray-500 text-right">אין טיולים להצגה.</p>`;
-          DOM.defaultTripList.innerHTML = '';
-          DOM.defaultTripSection.classList.add('hidden');
-          applyUserSettings(null);
-      }
-
-      function listenToUserTrips(uid) {
-        const tripsQuery = query(collection(db, "trips"), where("ownerId", "==", uid));
-        tripsUnsubscribe = onSnapshot(tripsQuery, (querySnapshot) => {
-            const trips = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            updateTripsUI(trips);
-        });
-      }
-
-      async function updateTripsUI(trips) {
-        if (trips.length > 0) {
-            DOM.tripsDropdown.innerHTML = trips.map(trip => 
-                `<a href="trip.html?id=${trip.id}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 text-right">${trip.name}</a>`
-            ).join('');
-        } else {
-            DOM.tripsDropdown.innerHTML = `<p class="px-4 py-2 text-sm text-gray-500 text-right">עדיין לא יצרת טיולים.</p>`;
-        }
-
-        if (!currentUser) return;
-        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        const currentSettings = userDoc.data()?.settings || {};
-        const defaultTripId = currentSettings.defaultTripId;
-
-        if (trips.length > 0) {
-            DOM.defaultTripList.innerHTML = trips.map(trip => `
-                <div class="flex items-center justify-between">
-                    <label for="trip-${trip.id}" class="flex-grow">${trip.name}</label>
-                    <input type="radio" name="default-trip" id="trip-${trip.id}" value="${trip.id}" class="form-radio h-5 w-5 text-blue-600" ${trip.id === defaultTripId ? 'checked' : ''}>
+            container.innerHTML = `
+                <div class="text-center">
+                    <p class="text-slate-600 text-lg">סה"כ עלות משוערת (לוגיסטיקה)</p>
+                    <p class="text-4xl font-bold text-blue-700 mt-2">$${totalCost.toLocaleString()}</p>
+                    <a href="summary.html?tripId=${tripId}" class="inline-block mt-4 text-sm text-blue-600 font-semibold hover:underline">צפה בפירוט המלא ונהל עלויות</a>
                 </div>
+            `;
+        }
+
+        function setupAuthUI(user) {
+            const userDocRef = doc(db, "users", user.uid);
+            getDoc(userDocRef).then(docSnap => {
+                const name = docSnap.exists() ? (docSnap.data().name || 'משתמש') : 'משתמש';
+                DOM.authContainer.innerHTML = `<button id="user-name-btn" class="text-slate-700 font-bold hover:text-blue-600">שלום, ${name}</button>`;
+                document.getElementById('user-name-btn').addEventListener('click', () => {
+                    DOM.logoutModal.classList.remove('hidden');
+                });
+            });
+        }
+        
+        function buildNavButtons() {
+            const buttons = [
+                { title: 'ניהול לוגיסטיקה', icon: 'fa-plane-departure', page: 'summary' },
+                { title: 'אטרקציות ומסעדות', icon: 'fa-map-marked-alt', page: 'attractions' },
+                { title: 'רשימות וצ\'ק ליסטים', icon: 'fa-list-check', page: 'checklists' },
+                { title: 'מעקב הוצאות', icon: 'fa-dollar-sign', page: 'expenses' },
+            ];
+            DOM.mainNavButtons.innerHTML = buttons.map(btn => `
+                <a href="${btn.page}.html?tripId=${tripId}" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 flex flex-col items-center justify-center p-4 rounded-xl text-white text-center">
+                    <i class="fas ${btn.icon} text-3xl mb-2"></i><span class="font-bold">${btn.title}</span>
+                </a>
             `).join('');
-            DOM.defaultTripSection.classList.remove('hidden');
-        } else {
-            DOM.defaultTripList.innerHTML = '';
-            DOM.defaultTripSection.classList.add('hidden');
         }
-      }
 
-      // --- Event Listeners ---
-      DOM.loginBtn.addEventListener('click', () => { window.location.href = 'login.html'; });
-      DOM.createTripBtn.addEventListener('click', () => { window.location.href = 'create-trip.html'; });
-      DOM.settingsBtn.addEventListener('click', () => { DOM.settingsModal.classList.remove('hidden'); });
-      DOM.closeSettingsBtn.addEventListener('click', () => { DOM.settingsModal.classList.add('hidden'); });
-      
-      // Logout Modal Listeners
-      DOM.userNameBtn.addEventListener('click', () => { DOM.logoutModal.classList.remove('hidden'); });
-      DOM.cancelLogoutBtn.addEventListener('click', () => { DOM.logoutModal.classList.add('hidden'); });
-      DOM.confirmLogoutBtn.addEventListener('click', () => {
-          signOut(auth).catch(error => console.error("Error signing out: ", error));
-          DOM.logoutModal.classList.add('hidden');
-      });
-
-      DOM.saveSettingsBtn.addEventListener('click', async () => {
-        if (!currentUser) return;
-        const bgImage = DOM.bgImageUrlInput.value;
-        const selectedRadio = document.querySelector('input[name="default-trip"]:checked');
-        const defaultTripId = selectedRadio ? selectedRadio.value : null;
-        try {
-            await setDoc(doc(db, "users", currentUser.uid), { 
-                settings: { backgroundImage: bgImage, defaultTripId: defaultTripId }
-            }, { merge: true });
-            alert('ההגדרות נשמרו!');
-            DOM.settingsModal.classList.add('hidden');
-        } catch (error) {
-            console.error("Error saving settings: ", error);
-            alert('אירעה שגיאה בשמירת ההגדרות.');
+        // ---------- Helper: format + weekday ----------
+        function parseDDMMYYYY(s){
+            const [d,m,y] = s.split('/').map(Number);
+            return new Date(y, m-1, d);
         }
-      });
+        function hebWeekday(d){
+            const n = d.toLocaleDateString('he-IL', { weekday:'long' });
+            return n.startsWith('יום') ? n : `יום ${n}`;
+        }
+        function dotted(d){
+            return `${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()}`;
+        }
 
+        function buildSidebarMenu() {
+            DOM.mainMenu.innerHTML = '';
+            if (!tripData || !tripData.destinations) return;
+
+            tripData.destinations.forEach(dest => {
+                const destinationDiv = document.createElement('div');
+
+                const button = document.createElement('button');
+                button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
+                button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down"></i>`;
+                
+                const submenu = document.createElement('div');
+                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
+
+                const dates = generateDatesFromRange(dest.dates);
+                dates.forEach(dateStr => {
+                    const d = parseDDMMYYYY(dateStr);
+                    const a = document.createElement('a');
+                    a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}`;
+                    a.className = 'block w-full text-right p-3 pr-4 rounded-md transition-colors hover:bg-sky-50';
+                    a.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="text-slate-700 text-sm font-bold">${hebWeekday(d)} – (${dest.nameHe})</span>
+                            <span class="text-slate-500 text-xs">${dotted(d)}</span>
+                        </div>
+                    `;
+                    submenu.appendChild(a);
+                });
+
+                button.addEventListener('click', () => {
+                    submenu.classList.toggle('open');
+                    button.querySelector('i').classList.toggle('rotate-180');
+                });
+
+                destinationDiv.appendChild(button);
+                destinationDiv.appendChild(submenu);
+                DOM.mainMenu.appendChild(destinationDiv);
+            });
+        }
+
+        function buildTripMap() {
+            const mapContainer = DOM.tripMapContainer;
+            if (!mapContainer || mapContainer._leaflet_id) return;
+            
+            const tripMap = L.map(mapContainer).setView([38, -95], 3.5);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(tripMap);
+
+            const points = (tripData.destinations || [])
+                .filter(d => d.coords)
+                .map(d => [d.coords.lat, d.coords.lng]);
+
+            (tripData.destinations || []).forEach(dest => {
+                if (dest.coords) {
+                    L.marker([dest.coords.lat, dest.coords.lng])
+                     .addTo(tripMap)
+                     .bindTooltip(dest.nameHe, {permanent: true, direction: 'top', offset: [0, -10]}).openTooltip();
+                }
+            });
+
+            if (points.length > 1) {
+                L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
+                tripMap.fitBounds(points, { padding: [50, 50] });
+            } else if (points.length === 1) {
+                tripMap.setView(points[0], 8);
+            }
+        }
+
+        // --- Helper Functions ---
+        function generateDatesFromRange(rangeStr) {
+            if (!rangeStr || !rangeStr.includes(' - ')) return [];
+            const [startStr, endStr] = rangeStr.split(' - ');
+            const [startDay, startMonth, startYear] = startStr.split('/').map(Number);
+            const [endDay, endMonth, endYear] = endStr.split('/').map(Number);
+            
+            const startDate = new Date(startYear, startMonth - 1, startDay);
+            const endDate = new Date(endYear, endMonth - 1, endDay);
+            const dates = [];
+            let currentDate = new Date(startDate);
+
+            while (currentDate <= endDate) {
+                const dd = String(currentDate.getDate()).padStart(2,'0');
+                const mm = String(currentDate.getMonth()+1).padStart(2,'0');
+                const yyyy = currentDate.getFullYear();
+                dates.push(`${dd}/${mm}/${yyyy}`);
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            return dates;
+        }
+
+        function toggleSidebar() {
+            DOM.sidebar.classList.toggle('translate-x-full');
+            DOM.overlay.classList.toggle('hidden');
+        }
+        
+        function openNavModal(title, address) {
+            document.getElementById('nav-modal-title').textContent = title;
+            const navContent = document.getElementById('nav-modal-content');
+            const navMessage = document.getElementById('nav-modal-message');
+            
+            if (address) {
+                document.getElementById('nav-waze-link').href = `https://waze.com/ul?q=${encodeURIComponent(address)}`;
+                document.getElementById('nav-gmaps-link').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+                navContent.classList.remove('hidden');
+                navMessage.classList.add('hidden');
+            } else {
+                navContent.classList.add('hidden');
+                navMessage.textContent = "לא הוגדרה כתובת.";
+                navMessage.classList.remove('hidden');
+            }
+            DOM.navModal.classList.remove('hidden');
+            setTimeout(() => DOM.navModal.classList.remove('opacity-0'), 10);
+        }
+
+        // --- Edit Destinations Modal Logic ---
+        function openEditDestinationsModal(){
+            // Trip dates (general)
+            DOM.tripDatesEdit.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
+            // init picker
+            new Litepicker({ element: DOM.tripDatesEdit, singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
+
+            // Fill list
+            DOM.destinationsList.innerHTML = '';
+            editUI.clear();
+
+            (tripData.destinations || []).forEach((dest, idx) => addDestRow(dest, idx));
+
+            DOM.editDestModal.classList.remove('hidden');
+        }
+        function closeEditDestinationsModal(){ DOM.editDestModal.classList.add('hidden'); }
+
+        function addDestRow(dest = {}, idx = Date.now()){
+            const id = `dest-${idx}-${Math.random().toString(36).slice(2,7)}`;
+            const el = document.createElement('div');
+            el.className = 'edit-dest-card bg-white rounded-xl shadow p-4';
+            el.dataset.destId = id;
+            el.innerHTML = `
+                <div class="flex items-start gap-3 justify-between">
+                    <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">שם היעד (עברית)</label>
+                            <input type="text" class="dest-name-he w-full p-2 border rounded-md" value="${dest.nameHe || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">שם היעד (אנגלית לחיפוש)</label>
+                            <div class="flex gap-2">
+                                <input type="text" class="dest-name-en w-full p-2 border rounded-md" value="${dest.nameEn || ''}">
+                                <button class="find-btn bg-sky-600 hover:bg-sky-700 text-white px-3 rounded-md text-sm">מצא</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">תאריכים ביעד</label>
+                            <input type="text" class="dest-dates w-full p-2 border rounded-md text-center" value="${dest.dates || ''}" placeholder="DD/MM/YYYY - DD/MM/YYYY">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">כתובת רקע (אופציונלי)</label>
+                            <input type="url" class="dest-bg w-full p-2 border rounded-md" value="${dest.backgroundUrl || ''}">
+                        </div>
+                    </div>
+                    <button class="remove-btn text-red-600 hover:text-red-700" title="מחק יעד"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div class="mt-3 w-full h-44 rounded-lg overflow-hidden bg-slate-100">
+                    <div class="map w-full h-full"></div>
+                </div>
+                <div class="mt-2 text-xs text-slate-500">נקודת מפה: <span class="coords">${dest.coords ? `${dest.coords.lat.toFixed(5)}, ${dest.coords.lng.toFixed(5)}` : 'לא נבחר'}</span></div>
+            `;
+            DOM.destinationsList.appendChild(el);
+
+            new Litepicker({ element: el.querySelector('.dest-dates'), singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
+
+            // map
+            const mapDiv = el.querySelector('.map');
+            const map = L.map(mapDiv).setView(dest.coords ? [dest.coords.lat, dest.coords.lng] : [20,0], dest.coords ? 10 : 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            const marker = dest.coords ? L.marker([dest.coords.lat, dest.coords.lng]).addTo(map) : null;
+
+            editUI.set(id, { el, map, marker });
+
+            el.querySelector('.find-btn').addEventListener('click', async () => {
+                const q = el.querySelector('.dest-name-en').value.trim();
+                if (!q) { alert('כתוב שם יעד באנגלית לחיפוש.'); return; }
+                try{
+                    const btn = el.querySelector('.find-btn');
+                    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+                    const data = await res.json();
+                    if (data && data.length){
+                        const { lat, lon } = data[0];
+                        const latNum = parseFloat(lat), lngNum = parseFloat(lon);
+                        if (editUI.get(id).marker) editUI.get(id).marker.setLatLng([latNum, lngNum]);
+                        else editUI.get(id).marker = L.marker([latNum, lngNum]).addTo(editUI.get(id).map);
+                        editUI.get(id).map.setView([latNum, lngNum], 12);
+                        el.querySelector('.coords').textContent = `${latNum.toFixed(5)}, ${lngNum.toFixed(5)}`;
+                        el.dataset.coords = JSON.stringify({lat:latNum, lng:lngNum});
+                    } else {
+                        alert('לא נמצאה תוצאה לחיפוש.');
+                    }
+                    btn.disabled = false; btn.textContent = 'מצא';
+                }catch(e){
+                    console.error(e);
+                    alert('שגיאה בחיפוש מיקום.');
+                    const btn = el.querySelector('.find-btn');
+                    btn.disabled = false; btn.textContent = 'מצא';
+                }
+            });
+
+            el.querySelector('.remove-btn').addEventListener('click', () => {
+                if (confirm('למחוק יעד זה?')) {
+                    editUI.get(id).map.remove();
+                    editUI.delete(id);
+                    el.remove();
+                }
+            });
+        }
+
+        function collectEditedDestinations(){
+            const arr = [];
+            DOM.destinationsList.querySelectorAll('[data-dest-id]').forEach(el => {
+                const nameHe = el.querySelector('.dest-name-he').value.trim();
+                const nameEn = el.querySelector('.dest-name-en').value.trim();
+                const dates = el.querySelector('.dest-dates').value.trim();
+                const backgroundUrl = el.querySelector('.dest-bg').value.trim();
+                let coords = null;
+                if (el.dataset.coords) {
+                    try { coords = JSON.parse(el.dataset.coords); } catch {}
+                } else if (editUI.get(el.dataset.destId)?.marker) {
+                    const ll = editUI.get(el.dataset.destId).marker.getLatLng();
+                    coords = { lat: ll.lat, lng: ll.lng };
+                }
+                if (!nameHe || !dates) return;
+                arr.push({ nameHe, nameEn, dates, coords, backgroundUrl });
+            });
+            return arr;
+        }
+
+        async function saveDestinationsChanges(){
+            const tripRef = doc(db, "trips", tripId);
+
+            let startDate = tripData.startDate || null, endDate = tripData.endDate || null;
+            const raw = DOM.tripDatesEdit.value.trim();
+            if (raw && raw.includes(' - ')) {
+                const [s,e] = raw.split(' - ');
+                startDate = s; endDate = e;
+            }
+
+            const destinations = collectEditedDestinations();
+            if (destinations.length === 0) {
+                if (!confirm('לא נבחר אף יעד. לשמור בכל זאת?')) return;
+            }
+
+            const updated = { ...tripData, startDate, endDate, destinations };
+
+            try{
+                DOM.saveDestinationsBtn.disabled = true;
+                DOM.saveDestinationsBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>שומר...';
+                await updateDoc(tripRef, updated);
+                tripData = updated;
+                // refresh UI
+                buildSidebarMenu();
+                buildTripMap();
+                closeEditDestinationsModal();
+            }catch(e){
+                console.error(e);
+                alert('שגיאה בשמירת השינויים.');
+            }finally{
+                DOM.saveDestinationsBtn.disabled = false;
+                DOM.saveDestinationsBtn.textContent = 'שמור שינויים';
+            }
+        }
+
+        // --- Event Listeners ---
+        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
+        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
+        DOM.overlay.addEventListener('click', toggleSidebar);
+        DOM.navigateHotelBtn.addEventListener('click', () => openNavModal('ניווט למלון', null));
+        DOM.navModalClose.addEventListener('click', () => {
+            DOM.navModal.classList.add('opacity-0');
+            setTimeout(() => DOM.navModal.classList.add('hidden'), 300);
+        });
+        DOM.cancelLogoutBtn.addEventListener('click', () => DOM.logoutModal.classList.add('hidden'));
+        DOM.confirmLogoutBtn.addEventListener('click', () => signOut(auth).then(() => window.location.href = 'index.html'));
+
+        // Settings listeners
+        DOM.settingsBtn.addEventListener('click', openSettingsModal);
+        DOM.closeSettingsBtn.addEventListener('click', closeSettingsModal);
+        DOM.saveSettingsBtn.addEventListener('click', saveSettings);
+
+        // Open edit-destinations modal
+        DOM.openEditDestBtn.addEventListener('click', () => {
+            closeSettingsModal();
+            openEditDestinationsModal();
+        });
+
+        // Edit-destinations modal events
+        DOM.editDestClose.addEventListener('click', closeEditDestinationsModal);
+        DOM.editDestCancel.addEventListener('click', closeEditDestinationsModal);
+        DOM.addDestBtn.addEventListener('click', () => addDestRow());
+        DOM.saveDestinationsBtn.addEventListener('click', saveDestinationsChanges);
+
+        // --- Start the page ---
+        initPage();
     </script>
 </body>
 </html>
