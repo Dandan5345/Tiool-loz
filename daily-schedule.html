@@ -62,7 +62,7 @@
 
         /* Timeline Styles */
         .timeline { position: relative; }
-        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before, .timeline.layout-smart-accordion::before { 
+        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before { 
             content: ""; 
             position: absolute; 
             right: 2.5rem;
@@ -74,7 +74,7 @@
         .timeline-item-wrapper {
             position: relative;
         }
-        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper, .timeline.layout-smart-accordion .timeline-item-wrapper {
+        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper {
             padding-right: 6rem; /* Make space for the time */
         }
         .timeline-time-outside {
@@ -219,15 +219,56 @@
         .action-button.ref { background-color: #6366f1; } /* Indigo-500 */
         .action-button.details { background-color: #64748b; } /* Slate-500 */
 
-        /* NEW: Force black text for notes */
+        /* Force black text for notes */
         .force-black-text { color: #1e293b !important; }
         .force-black-text-secondary { color: #334155 !important; }
+
+        /* Smart Accordion Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #25a25a;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+        }
     </style>
 </head>
 <body class="bg-slate-100">
     <!-- Loader -->
     <div id="initial-loader">
-        <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://placehold.co/1920x1080/cccccc/ffffff?text=Loading...');"></div>
+        <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand');"></div>
         <div class="fixed inset-0 z-0 bg-black/50"></div>
         <div class="text-white text-center relative z-10">
             <i class="fas fa-calendar-day fa-4x plane-spinner mb-4"></i>
@@ -236,7 +277,7 @@
     </div>
 
     <!-- Background -->
-    <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://placehold.co/1920x1080/cccccc/ffffff?text=Background');"></div>
+    <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand');"></div>
     <div id="page-bg-overlay" class="fixed inset-0 z-0 bg-black/50"></div>
 
     <!-- Sidebar -->
@@ -311,15 +352,21 @@
                         <input type="radio" name="timeline-layout" value="line-style-accordion-full">
                         <div><span class="font-bold">ציר זמן אקורדיון מלא</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לכל הפרטים.</p></div>
                     </label>
-                    <!-- NEW LAYOUTS -->
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="table">
                         <div><span class="font-bold">טבלה</span><p class="text-sm text-slate-500">מציג את פריטי היום בטבלה מסודרת וקומפקטית.</p></div>
                     </label>
-                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="smart-accordion">
-                        <div><span class="font-bold">אקורדיון חכם</span><p class="text-sm text-slate-500">פותח אוטומטית את הפריט הנוכחי לפי השעה ומדגיש אותו.</p></div>
-                    </label>
+                 </div>
+                 <!-- Smart Accordion Controls -->
+                 <div id="smart-accordion-controls" class="pt-4 border-t space-y-3 hidden">
+                    <div class="flex justify-between items-center">
+                        <label for="smart-accordion-toggle" class="font-bold text-slate-700">מצב אקורדיון חכם</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="smart-accordion-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="text-sm text-slate-500">מפעיל פתיחה אוטומטית של הפריט הנוכחי לפי השעה.</p>
                  </div>
                  <div class="pt-4 border-t">
                     <label class="font-bold text-slate-700">החל הגדרות על:</label>
@@ -496,6 +543,7 @@
         let currentLayout = 'default';
         let currentThemeKey = 'light';
         let currentCustomTheme = {};
+        let isSmartAccordionActive = false;
         const accordionMaps = {};
         let smartAccordionInterval = null;
 
@@ -516,6 +564,8 @@
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
         const customThemeControls = document.getElementById('custom-theme-controls');
+        const smartAccordionControls = document.getElementById('smart-accordion-controls');
+        const smartAccordionToggle = document.getElementById('smart-accordion-toggle');
 
         const authContainer = document.getElementById('auth-container');
         const tripHomeBtn = document.getElementById('trip-home-btn');
@@ -601,13 +651,29 @@
                 Object.values(accordionMaps).forEach(m => m.invalidateSize()); 
             }, 300); 
         }
-        function setCurrentLayout(layout) { 
+        function setCurrentLayout(layout, smartAccordion = false) { 
+            currentLayout = layout; 
+            isSmartAccordionActive = smartAccordion;
+
+            // Show/hide smart accordion controls
+            if (layout.includes('accordion')) {
+                smartAccordionControls.classList.remove('hidden');
+                smartAccordionToggle.checked = isSmartAccordionActive;
+            } else {
+                smartAccordionControls.classList.add('hidden');
+                isSmartAccordionActive = false; // Turn off if not an accordion layout
+            }
+
+            // Manage the interval
             if (smartAccordionInterval) {
                 clearInterval(smartAccordionInterval);
                 smartAccordionInterval = null;
             }
+            if (isSmartAccordionActive) {
+                updateSmartAccordionState(); // Run once immediately
+                smartAccordionInterval = setInterval(updateSmartAccordionState, 30000); // Check every 30 seconds
+            }
 
-            currentLayout = layout; 
             timelineBox.className = `timeline`; // Reset classes
             if (layout !== 'table') {
                 timelineBox.classList.add('space-y-4');
@@ -618,11 +684,6 @@
             if(radio) radio.checked = true; 
             
             renderTimelineFromItems(currentScheduleItems); 
-
-            if (layout === 'smart-accordion') {
-                updateSmartAccordionState();
-                smartAccordionInterval = setInterval(updateSmartAccordionState, 60000); // Check every minute
-            }
         }
 
         // ---------- Rendering Functions ----------
@@ -776,10 +837,10 @@
                     itemWrapper.className = 'timeline-item-wrapper';
                     itemWrapper.id = `timeline-item-${index}`;
                     let itemHtml;
-                    const isLineStyle = currentLayout.startsWith('line-style') || currentLayout === 'smart-accordion';
+                    const isLineStyle = currentLayout.startsWith('line-style');
 
                     if (isLineStyle) {
-                        const isAccordion = currentLayout.includes('accordion') || currentLayout === 'smart-accordion';
+                        const isAccordion = currentLayout.includes('accordion');
                         if (isAccordion) {
                             const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-3"><span class="text-xl">${itemEmoji(it)}</span><h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
                             const detailsContent = getFullItemDetailsHTML(it, index);
@@ -872,29 +933,48 @@
                 });
             });
 
+            if(isSmartAccordionActive) updateSmartAccordionState();
             renderRouteMap(items);
         }
 
         function updateSmartAccordionState() {
-            if (currentLayout !== 'smart-accordion' || currentScheduleItems.length === 0) return;
-            
-            const now = new Date();
-            let activeIndex = -1;
-            let latestPassedTime = null;
+            if (!isSmartAccordionActive || currentScheduleItems.length === 0) return;
 
-            currentScheduleItems.forEach((item, index) => {
-                if (item.startTime) {
-                    try {
-                        const itemStartTime = new Date(`${dateISO}T${item.startTime}:00`);
-                        if (!isNaN(itemStartTime) && itemStartTime <= now) {
-                            if (!latestPassedTime || itemStartTime > latestPassedTime) {
-                                latestPassedTime = itemStartTime;
-                                activeIndex = index;
-                            }
-                        }
-                    } catch(e) { console.error("Could not parse time", item.startTime); }
+            const now = new Date();
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            let activeIndex = -1;
+
+            const timePoints = currentScheduleItems.map((item, index) => ({
+                time: item.startTime,
+                index: index
+            })).filter(p => p.time).sort((a,b) => a.time.localeCompare(b.time));
+
+
+            for (let i = 0; i < currentScheduleItems.length; i++) {
+                const item = currentScheduleItems[i];
+                if (!item.startTime) continue;
+                
+                const startMinutes = parseInt(item.startTime.split(':')[0]) * 60 + parseInt(item.startTime.split(':')[1]);
+                
+                let endMinutes;
+                if (item.endTime) {
+                    endMinutes = parseInt(item.endTime.split(':')[0]) * 60 + parseInt(item.endTime.split(':')[1]);
+                } else {
+                    // Find next item's start time
+                    const currentItemSort = item.sort;
+                    const nextItem = currentScheduleItems.slice().sort((a,b) => a.sort - b.sort).find(it => it.sort > currentItemSort && it.startTime);
+                    if (nextItem) {
+                        endMinutes = parseInt(nextItem.startTime.split(':')[0]) * 60 + parseInt(nextItem.startTime.split(':')[1]);
+                    } else {
+                        endMinutes = 24 * 60; // End of day
+                    }
                 }
-            });
+
+                if (nowMinutes >= startMinutes && nowMinutes < endMinutes) {
+                    activeIndex = i;
+                    break;
+                }
+            }
 
             // Remove previous active states
             document.querySelectorAll('.smart-accordion-active').forEach(el => el.classList.remove('smart-accordion-active'));
@@ -910,29 +990,32 @@
                                 d.open = false;
                             }
                         });
-                        activeDetails.open = true;
+                        if (!activeDetails.open) {
+                           activeDetails.open = true;
+                        }
                     }
                     activeDetails.classList.add('smart-accordion-active');
-                    // Only scroll if it's the first time we are setting it
-                    if (!document.querySelector('.scrolled-to-active')) {
-                        activeDetails.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        activeDetails.classList.add('scrolled-to-active');
-                    }
                 }
             }
+        }
+
+        function openModal() {
+            mainContent.style.filter = 'blur(4px)';
+            mainContent.style.pointerEvents = 'none';
+        }
+        function closeModal() {
+            mainContent.style.filter = 'none';
+            mainContent.style.pointerEvents = 'auto';
         }
 
         function closeDetailModal() {
             if (modalMapInstance) { modalMapInstance.remove(); modalMapInstance = null; }
             itemDetailModal.classList.remove('visible');
-            mainContent.style.filter = 'none';
-            mainContent.style.pointerEvents = 'auto';
+            closeModal();
         }
 
         function showItemDetailModal(it) {
-            mainContent.style.filter = 'blur(4px)';
-            mainContent.style.pointerEvents = 'none';
-
+            openModal();
             const hasAddr = !!(it.address?.lat && it.address?.lng);
             const hasTravel = !!(it.travel?.from?.coords && it.travel?.to?.coords);
 
@@ -1066,9 +1149,15 @@
 
             document.getElementById('apply-layout-settings').addEventListener('click', () => {
                 const newLayout = document.querySelector('input[name="timeline-layout"]:checked').value;
-                setCurrentLayout(newLayout);
-                saveStyleSetting('layout', newLayout, document.getElementById('layout-scope').value);
+                const smartAccordion = smartAccordionToggle.checked;
+                setCurrentLayout(newLayout, smartAccordion);
+                saveStyleSetting('layout', { layout: newLayout, smart: smartAccordion }, document.getElementById('layout-scope').value);
                 toggleSettings();
+            });
+
+            smartAccordionToggle.addEventListener('change', () => {
+                isSmartAccordionActive = smartAccordionToggle.checked;
+                setCurrentLayout(currentLayout, isSmartAccordionActive);
             });
             
             const presetsContainer = document.getElementById('theme-presets-container');
@@ -1166,11 +1255,14 @@
             const destStyle = destForDate ? (styles[`destination_${destForDate.id}`] || {}) : {};
             const dateStyle = dateISO ? (styles[`date_${dateISO}`] || {}) : {};
             
-            const finalLayout = dateStyle.layout || destStyle.layout || tripStyle.layout || 'default';
+            const finalLayoutSetting = dateStyle.layout || destStyle.layout || tripStyle.layout || { layout: 'default', smart: false };
+            const finalLayout = typeof finalLayoutSetting === 'string' ? finalLayoutSetting : finalLayoutSetting.layout;
+            const finalSmartAccordion = typeof finalLayoutSetting === 'string' ? false : finalLayoutSetting.smart;
+
             const finalThemeSetting = dateStyle.theme || destStyle.theme || tripStyle.theme || { key: 'light' };
-            const finalBg = dateStyle.background || destStyle.background || tripStyle.background || { type: 'image', value: destForDate?.bgUrl || destForDate?.imageUrl || 'https://placehold.co/1920x1080/cccccc/ffffff?text=Default+BG', brightness: 50 };
+            const finalBg = dateStyle.background || destStyle.background || tripStyle.background || { type: 'image', value: destForDate?.bgUrl || destForDate?.imageUrl || 'https://i.imgur.com/MjekTyd.jpeg', brightness: 50 };
             
-            setCurrentLayout(finalLayout);
+            setCurrentLayout(finalLayout, finalSmartAccordion);
             if (finalThemeSetting.key === 'custom') {
                 currentCustomTheme = finalThemeSetting.values;
                 setTheme('custom', finalThemeSetting.values);
@@ -1205,7 +1297,7 @@
                 if (tripData.ownerId && tripData.ownerId !== currentUser.uid) { alert('אין לך הרשאה לצפות בטיול זה.'); location.href = 'index.html'; return; }
 
                 destForDate = findDestinationForDate(tripData, dateStr);
-                const defaultBgUrl = 'https://placehold.co/1920x1080/cccccc/ffffff?text=Default+BG';
+                const defaultBgUrl = 'https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand';
                 loaderBg.style.backgroundImage = `url('${destForDate?.bgUrl || destForDate?.imageUrl || defaultBgUrl}')`;
                 
                 buildMenuFromTrip();
@@ -1258,13 +1350,11 @@
         function closeRefDetailModal() {
             if (refModalMapInstance) { refModalMapInstance.remove(); refModalMapInstance = null; }
             refDetailModal.classList.remove('visible');
-            mainContent.style.filter = 'none';
-            mainContent.style.pointerEvents = 'auto';
+            closeModal();
         }
 
         async function showRefDetailModal(refType, refId) {
-            mainContent.style.filter = 'blur(4px)';
-            mainContent.style.pointerEvents = 'none';
+            openModal();
             
             refDetailModalContent.innerHTML = `<div class="flex justify-center items-center h-48"><i class="fas fa-spinner fa-spin fa-2x"></i></div>`;
             refDetailModal.classList.add('visible');
