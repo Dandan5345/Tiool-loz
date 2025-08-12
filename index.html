@@ -183,7 +183,7 @@
       } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
       const firebaseConfig = {
-        apiKey: "AIzaSyAhuk5EfqaT9eZר3CxMYWP7qzjoGLhLq3o",
+        apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
         authDomain: "tiool-loz.firebaseapp.com",
         projectId: "tiool-loz",
         storageBucket: "tiool-loz.appspot.com",
@@ -242,22 +242,21 @@
       function hideLoader() {
         if (isInitialLoad) {
             DOM.loadingOverlay.classList.add('opacity-0');
-            setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 350);
+            setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 500);
             isInitialLoad = false;
         }
       }
 
-      // --- בדיקה: האם הגעתי לדף הזה מ-trip.html? ---
-      function cameFromTrip() {
-        try {
-          const ref = document.referrer || '';
-          if (!ref) return false;
-          // נבנה URL מבוסס origin נוכחי כדי לתמוך גם בנתיבים יחסיים
-          const u = new URL(ref, window.location.origin);
-          return u.pathname.endsWith('/trip.html') || u.pathname.endsWith('trip.html');
-        } catch {
-          return false;
-        }
+      // Helper: האם הגעתי מעמוד ה-trip
+      function cameFromTripPage() {
+        try { return document.referrer.includes('trip.html'); }
+        catch { return false; }
+      }
+
+      // ניווט אוטומטי לטיול ברירת מחדל (תמיד, אלא אם באתי מ-trip.html)
+      function forceRedirectToTrip(tripId) {
+        // אפשר להשאיר את ה-loader גלוי לרגעים הספורים של הניווט; אם תרצה להסתיר לפני, קרא hideLoader() כאן.
+        window.location.replace(`trip.html?id=${encodeURIComponent(tripId)}`);
       }
 
       // --- Auth + טעינת נתוני משתמש ---
@@ -279,18 +278,13 @@
                 DOM.userNameBtn.textContent = `שלום, ${userData.name || 'משתמש'}`;
                 applyUserSettings(userData.settings);
 
-                const defId = userData.settings?.defaultTripId || null;
-
-                // כלל ההפניה המעודכן:
-                // אם יש טיול ברירת מחדל → תמיד מפנים אליו מיידית,
-                // אלא אם הגעתי לכאן מ-trip.html (חזרה/לינק מתוך הטיול).
-                if (defId && !cameFromTrip()) {
-                    hideLoader(); // לא נשאיר Loader בזמן הניווט
-                    window.location.replace(`trip.html?id=${encodeURIComponent(defId)}`);
-                    return; // לא נמשיך ל-UI של האינדקס
+                const defId = userData.settings?.defaultTripId;
+                if (defId && !cameFromTripPage()) {
+                    // תמיד מפנה לטיול שנבחר, אלא אם באתי מ-trip.html
+                    forceRedirectToTrip(defId);
+                } else {
+                    hideLoader();
                 }
-
-                hideLoader();
             }, (error) => {
                 console.error("Error fetching user data:", error);
                 applyUserSettings(null);
