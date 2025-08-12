@@ -25,8 +25,8 @@
         body{
             font-family:'Assistant',sans-serif;
             min-height:100%;
-            overflow-y:scroll;            /* מונע שינוי רוחב בעת הופעת סרגל גלילה */
-            overscroll-behavior-y:contain;/* מפחית "ריבאונד" גלילה בסוף הדף */
+            overflow-y:scroll;
+            overscroll-behavior-y:contain;
             -webkit-font-smoothing:antialiased;
         }
 
@@ -40,11 +40,9 @@
         .edit-dest-card { border-inline-start: 4px solid #38bdf8; }
         .date-pill{background:#eef6ff;border-radius:9999px;padding:.15rem .5rem;font-weight:700;font-size:.75rem}
 
-        /* כפתורי נווט ראשיים - בלי תזוזה אנכית שגורמת "קפיצות" */
         .main-nav-button { transition: transform .2s ease-out, box-shadow .2s ease-out; will-change: transform; }
         .main-nav-button:hover { transform: scale(1.02); box-shadow: 0 10px 24px rgba(0,0,0,0.18); }
 
-        /* כרטיסים חדשים יפים ויציבים */
         .card{
             background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88));
             border-radius: 16px;
@@ -53,10 +51,7 @@
             transition: box-shadow .2s ease, transform .2s ease;
             will-change: transform;
         }
-        .card:hover{
-            /* בלי translateY כדי לא ליצור "קפיצה" בתחתית הדף */
-            box-shadow: 0 12px 28px rgba(0,0,0,0.14);
-        }
+        .card:hover{ box-shadow: 0 12px 28px rgba(0,0,0,0.14); }
         .badge{
             display:inline-flex;align-items:center;gap:.4rem;
             font-weight:700;font-size:.75rem;
@@ -67,12 +62,12 @@
             background:#e6f2ff;border:1px solid #cfe3ff;color:#1e3a8a;
             font-weight:800;border-radius:9999px;padding:.35rem .8rem;
         }
-
-        /* טעינה חלקה */
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
-
-        /* רקע */
         #page-bg { transition: background-image 1s ease, transform .6s ease; }
+
+        /* מצבים לפי הרשאות */
+        .view-only [data-editable="true"]{ pointer-events:none; opacity:.6; filter:grayscale(.1); }
+        .hidden-when-viewer{ display:none; }
     </style>
 </head>
 <body>
@@ -116,7 +111,7 @@
         
         <!-- Settings Modal -->
         <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[101] p-4">
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg" data-editable="true">
                 <div class="flex justify-between items-center mb-4 border-b pb-3">
                     <h2 class="text-2xl font-bold">הגדרות תצוגה</h2>
                     <button id="close-settings-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
@@ -131,7 +126,6 @@
 
                     <hr>
 
-                    <!-- כפתור עורך יעדים/תאריכים נשאר כפי שהוא -->
                     <div class="bg-slate-50 border rounded-lg p-4">
                         <h3 class="font-bold text-slate-800 mb-2"><i class="fa-solid fa-calendar-days ml-2 text-sky-600"></i> עריכת תאריכים ויעדים בלוז</h3>
                         <p class="text-slate-600 text-sm mb-3">שנה את טווח התאריכים הכללי של הטיול, הוסף/מחק/ערוך יעדים ותאריכיהם.</p>
@@ -149,37 +143,44 @@
         </div>
 
         <!-- NEW: Share Modal -->
-        <div id="share-modal" class="hidden fixed inset-0 bg-black/70 z-[102] p-4 flex items-center justify-center">
-            <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-slate-800">שתף את הטיול</h2>
-                    <button id="share-modal-close-btn" class="p-2 text-slate-500 hover:text-red-600"><i class="fa-solid fa-xmark fa-lg"></i></button>
-                </div>
-                <div id="share-options">
-                    <p class="text-slate-600 mb-4">צור קישור הזמנה חד-פעמי (תקף לשעתיים) כדי לשתף את הטיול עם אדם אחר.</p>
-                    <div class="flex flex-col gap-3">
-                        <button id="share-view-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-eye"></i> צור קישור לצפייה בלבד
+        <div id="share-modal" class="hidden fixed inset-0 bg-black/70 z-[110] p-4 flex items-center justify-center">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                <header class="p-4 border-b flex items-center justify-between">
+                    <h2 class="text-xl font-bold">שיתוף הטיול</h2>
+                    <button id="share-close" class="p-2 text-slate-500 hover:text-red-600"><i class="fa-solid fa-xmark fa-lg"></i></button>
+                </header>
+                <main class="p-4 space-y-4">
+                    <p class="text-sm text-slate-600">
+                        צור קישור חד־פעמי לתוקף של שעתיים. ברגע שמישהו יכנס עם הקישור — הוא ייצמד לטיול הזה אוטומטית.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button id="create-view-link" class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-lg">
+                            <i class="fa-regular fa-eye ml-2"></i> קישור לצפייה בלבד
                         </button>
-                        <button id="share-edit-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-pen-to-square"></i> צור קישור לעריכה
+                        <button id="create-edit-link" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg">
+                            <i class="fa-solid fa-pen-to-square ml-2"></i> קישור לעריכה
                         </button>
                     </div>
-                </div>
-                <div id="share-link-container" class="hidden mt-4">
-                    <label class="block text-sm font-semibold mb-1">קישור השיתוף שלך:</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="share-link-input" readonly class="w-full p-2 border rounded-md bg-slate-100 text-slate-700" dir="ltr">
-                        <button id="copy-link-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold px-4 rounded-md">העתק</button>
+
+                    <div id="share-result" class="hidden">
+                        <hr class="my-3">
+                        <div class="text-sm text-slate-600 mb-1">הקישור שנוצר (תוקף: שעתיים, לשימוש אדם אחד):</div>
+                        <div class="flex gap-2">
+                            <input id="share-link-input" type="text" class="flex-1 p-2 border rounded-md" dir="ltr" readonly>
+                            <button id="copy-share-link" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 rounded-md">העתק</button>
+                        </div>
+                        <div id="share-extra" class="text-xs text-slate-500 mt-2"></div>
                     </div>
-                    <p id="share-feedback" class="text-sm text-green-600 font-semibold mt-2"></p>
-                </div>
+                </main>
+                <footer class="p-4 border-t text-right">
+                    <button id="share-cancel" class="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300">סגור</button>
+                </footer>
             </div>
         </div>
 
-        <!-- Edit Destinations Modal -->
+        <!-- NEW: Edit Destinations Modal -->
         <div id="edit-destinations-modal" class="hidden fixed inset-0 bg-black/70 z-[110] p-4 flex items-center justify-center">
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col" data-editable="true">
                 <header class="p-4 border-b flex justify-between items-center">
                     <h2 class="text-xl font-bold">עריכת תאריכים ויעדים בלוז</h2>
                     <button id="edit-destinations-close" class="p-2 text-slate-500 hover:text-red-600"><i class="fa-solid fa-xmark fa-lg"></i></button>
@@ -223,11 +224,26 @@
                         <a href="index.html" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-home"></i> דף הבית</a>
                         <div class="flex items-center gap-2 sm:gap-4">
                             <div id="auth-container"></div>
-                            <button id="navigate-hotel-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="נווט למלון"><i class="fas fa-hotel fa-lg"></i></button>
-                            <!-- NEW: Share Button -->
-                            <button id="share-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="שתף"><i class="fas fa-share-alt fa-lg"></i></button>
-                            <button id="settings-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="הגדרות"><i class="fas fa-cog fa-lg"></i></button>
-                            <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
+
+                            <!-- ניווט למלון -->
+                            <button id="navigate-hotel-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="נווט למלון">
+                                <i class="fas fa-hotel fa-lg"></i>
+                            </button>
+
+                            <!-- כפתור שיתוף חדש (מופיע לבעלים בלבד) -->
+                            <button id="share-btn" class="p-2 text-slate-600 hover:text-blue-600 hidden" aria-label="שיתוף">
+                                <i class="fas fa-share-nodes fa-lg"></i>
+                            </button>
+
+                            <!-- הגדרות -->
+                            <button id="settings-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="הגדרות">
+                                <i class="fas fa-cog fa-lg"></i>
+                            </button>
+
+                            <!-- המבורגר -->
+                            <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none">
+                                <i class="fas fa-bars fa-lg"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -259,7 +275,7 @@
                     <section id="transport-summary-section">
                         <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום מעברים</h3>
                         <div id="transport-summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
+                             <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
                         </div>
                     </section>
 
@@ -279,7 +295,10 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import {
+            getFirestore, doc, getDoc, setDoc, addDoc, collection, query, onSnapshot, updateDoc,
+            runTransaction, serverTimestamp, Timestamp
+        } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -316,7 +335,6 @@
             hotelSummaryContainer: document.getElementById('hotel-summary-container'),
             transportSummaryContainer: document.getElementById('transport-summary-container'),
             costsSummaryContainer: document.getElementById('costs-summary-container'),
-            // Settings Modal Elements
             settingsBtn: document.getElementById('settings-btn'),
             settingsModal: document.getElementById('settings-modal'),
             closeSettingsBtn: document.getElementById('close-settings-btn'),
@@ -324,7 +342,6 @@
             saveSettingsBtn: document.getElementById('save-settings-btn'),
             settingsFeedback: document.getElementById('settings-feedback'),
             openEditDestBtn: document.getElementById('open-edit-destinations-btn'),
-            // Edit destinations modal
             editDestModal: document.getElementById('edit-destinations-modal'),
             editDestClose: document.getElementById('edit-destinations-close'),
             editDestCancel: document.getElementById('edit-destinations-cancel'),
@@ -332,24 +349,29 @@
             tripDatesEdit: document.getElementById('trip-dates-edit'),
             destinationsList: document.getElementById('destinations-list'),
             addDestBtn: document.getElementById('add-dest-btn'),
-            // Share Modal Elements
+            // Share UI
             shareBtn: document.getElementById('share-btn'),
             shareModal: document.getElementById('share-modal'),
-            shareModalCloseBtn: document.getElementById('share-modal-close-btn'),
-            shareOptions: document.getElementById('share-options'),
-            shareViewBtn: document.getElementById('share-view-btn'),
-            shareEditBtn: document.getElementById('share-edit-btn'),
-            shareLinkContainer: document.getElementById('share-link-container'),
+            shareClose: document.getElementById('share-close'),
+            shareCancel: document.getElementById('share-cancel'),
+            createViewLinkBtn: document.getElementById('create-view-link'),
+            createEditLinkBtn: document.getElementById('create-edit-link'),
+            shareResult: document.getElementById('share-result'),
             shareLinkInput: document.getElementById('share-link-input'),
-            copyLinkBtn: document.getElementById('copy-link-btn'),
-            shareFeedback: document.getElementById('share-feedback'),
+            copyShareLink: document.getElementById('copy-share-link'),
+            shareExtra: document.getElementById('share-extra'),
+            mainContent: document.getElementById('main-content'),
         };
 
         let currentUser = null;
-        let currentUserRole = null; // 'owner', 'editor', 'viewer'
         let tripId = null;
         let tripData = null;
         let logisticsUnsubscribe = null;
+
+        // Permissions
+        let isOwner = false;
+        let role = 'none'; // 'viewer' | 'editor' | 'owner'
+        const canEdit = () => isOwner || role === 'editor';
 
         // Keep refs for per-destination map instances inside edit modal
         const editUI = new Map(); // key: destId string, value: {map, marker, el}
@@ -364,10 +386,26 @@
                 return;
             }
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     currentUser = user;
-                    loadTripData();
+
+                    // אם יש פרמטר שיתוף — ננסה לצרוך ולקבל הרשאות
+                    const shareId = urlParams.get('share');
+                    if (shareId) {
+                        try { await consumeShareLink(shareId); 
+                              // להסרת הפרמטר מה־URL
+                              urlParams.delete('share');
+                              history.replaceState({}, '', `${location.pathname}?${urlParams.toString()}`);
+                        } catch (e) {
+                            console.error(e);
+                            alert(e?.message || 'קישור שיתוף אינו זמין.');
+                            window.location.href = 'index.html';
+                            return;
+                        }
+                    }
+
+                    await determineAccessAndLoad();
                     setupAuthUI(user);
                 } else {
                     window.location.href = 'login.html';
@@ -375,50 +413,55 @@
             });
         }
 
-        async function loadTripData() {
+        async function determineAccessAndLoad(){
+            // נקרא מסמך הטיול
             const tripRef = doc(db, "trips", tripId);
             const tripSnap = await getDoc(tripRef);
 
-            if (tripSnap.exists()) {
-                tripData = { id: tripSnap.id, ...tripSnap.data() };
-                
-                // Determine user role
-                let role = null;
-                if (tripData.ownerId === currentUser.uid) {
-                    role = 'owner';
-                } else if (tripData.members && tripData.members[currentUser.uid]) {
-                    role = tripData.members[currentUser.uid]; // 'editor' or 'viewer'
-                }
+            if (!tripSnap.exists()) {
+                alert("הטיול לא נמצא.");
+                window.location.href = 'index.html';
+                return;
+            }
 
-                if (role) {
-                    currentUserRole = role;
-                    document.title = tripData.name;
-                    adjustUIForRole(currentUserRole);
-                    applySettings();
-                    populateUI();
-                    listenForLogistics();
-                    DOM.loadingOverlay.style.opacity = '0';
-                    setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
+            const data = tripSnap.data();
+            isOwner = data.ownerId === currentUser.uid;
+
+            if (isOwner) {
+                role = 'owner';
+            } else {
+                // בדוק חברות ב־members
+                const memRef = doc(db, "trips", tripId, "members", currentUser.uid);
+                const memSnap = await getDoc(memRef);
+                if (memSnap.exists()) {
+                    role = memSnap.data().role === 'editor' ? 'editor' : 'viewer';
                 } else {
                     alert("אין לך הרשאה לצפות בטיול זה.");
                     window.location.href = 'index.html';
+                    return;
                 }
-            } else {
-                alert("הטיול לא נמצא או נמחק.");
-                window.location.href = 'index.html';
             }
+
+            tripData = data;
+            document.title = tripData.name;
+            applySettings();
+            populateUI();
+            applyPermissionUI();
+            listenForLogistics();
+            DOM.loadingOverlay.style.display = 'none';
         }
 
-        function adjustUIForRole(role) {
-            const isViewer = role === 'viewer';
-            
-            // Hide all management buttons for viewers
-            DOM.settingsBtn.style.display = isViewer ? 'none' : 'block';
-            DOM.shareBtn.style.display = isViewer ? 'none' : 'block';
-            
-            // Adjust visibility of edit buttons within modals/sections
-            if (DOM.openEditDestBtn) DOM.openEditDestBtn.style.display = isViewer ? 'none' : 'block';
-            if (DOM.saveSettingsBtn) DOM.saveSettingsBtn.style.display = isViewer ? 'none' : 'block';
+        function applyPermissionUI(){
+            // הגדרות/עריכה זמינים רק לעורכים/בעלים
+            if (!canEdit()){
+                DOM.mainContent.classList.add('view-only');
+            }
+            // כפתור שיתוף — רק לבעלים
+            if (isOwner) {
+                DOM.shareBtn.classList.remove('hidden');
+            } else {
+                DOM.shareBtn.classList.add('hidden');
+            }
         }
 
         function listenForLogistics() {
@@ -440,6 +483,14 @@
             }
         }
 
+        function guardEdit(action){
+            if (!canEdit()){
+                alert('אין לך הרשאה לערוך טיול זה (צפייה בלבד).');
+                return false;
+            }
+            return true;
+        }
+
         function openSettingsModal() {
             DOM.mainBgInput.value = tripData.backgroundUrl || '';
             DOM.settingsFeedback.textContent = '';
@@ -448,15 +499,14 @@
         function closeSettingsModal() { DOM.settingsModal.classList.add('hidden'); }
 
         async function saveSettings() {
-            if (currentUserRole === 'viewer') return;
+            if (!guardEdit()) return;
             const tripRef = doc(db, "trips", tripId);
-            let updatedData = {
-                backgroundUrl: (DOM.mainBgInput.value || '').trim()
-            };
+            let updatedTripData = { ...tripData };
+            updatedTripData.backgroundUrl = (DOM.mainBgInput.value || '').trim();
 
             try {
-                await updateDoc(tripRef, updatedData);
-                tripData.backgroundUrl = updatedData.backgroundUrl;
+                await updateDoc(tripRef, updatedTripData);
+                tripData = updatedTripData;
                 applySettings();
                 DOM.settingsFeedback.textContent = 'ההגדרות נשמרו!';
                 setTimeout(() => { DOM.settingsFeedback.textContent = ''; closeSettingsModal(); }, 1200);
@@ -484,11 +534,11 @@
             renderCostsSummary(items);
         }
 
-        // --- New pretty hotel cards ---
+        // --- Hotel cards ---
         function renderHotelSummary(hotels) {
             const container = DOM.hotelSummaryContainer;
             if (hotels.length === 0) {
-                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מלונות עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מלונות עדיין. ${canEdit() ? `<a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a>` : ''}</p>`;
                 return;
             }
 
@@ -517,11 +567,11 @@
             }).join('');
         }
 
-        // --- New pretty transport cards ---
+        // --- Transport cards ---
         function renderTransportSummary(transports) {
             const container = DOM.transportSummaryContainer;
             if (transports.length === 0) {
-                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מעברים עדיין. <a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו מעברים עדיין. ${canEdit() ? `<a href="summary.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a>` : ''}</p>`;
                 return;
             }
 
@@ -563,7 +613,7 @@
             const container = DOM.costsSummaryContainer;
             let totalCost = 0;
             items.forEach(item => {
-                if (item.type === 'flight') {
+                 if (item.type === 'flight') {
                     const numSeats = item.seats?.length || 1;
                     totalCost += (item.price_per_person || 0) * numSeats;
                 } else {
@@ -575,7 +625,7 @@
                 <div class="text-center">
                     <p class="text-slate-600 text-lg">סה"כ עלות משוערת (לוגיסטיקה)</p>
                     <p class="text-4xl font-bold text-blue-700 mt-2">$${totalCost.toLocaleString()}</p>
-                    <a href="summary.html?tripId=${tripId}" class="inline-block mt-4 text-sm text-blue-600 font-semibold hover:underline">צפה בפירוט המלא ונהל עלויות</a>
+                    ${canEdit() ? `<a href="summary.html?tripId=${tripId}" class="inline-block mt-4 text-sm text-blue-600 font-semibold hover:underline">צפה בפירוט המלא ונהל עלויות</a>` : ''}
                 </div>
             `;
         }
@@ -731,78 +781,13 @@
             setTimeout(() => DOM.navModal.classList.remove('opacity-0'), 10);
         }
 
-        // --- Share Modal Logic ---
-        function openShareModal() {
-            // Reset modal state
-            DOM.shareOptions.style.display = 'block';
-            DOM.shareLinkContainer.classList.add('hidden');
-            DOM.shareLinkInput.value = '';
-            DOM.shareFeedback.textContent = '';
-            DOM.shareModal.classList.remove('hidden');
-        }
-
-        function closeShareModal() {
-            DOM.shareModal.classList.add('hidden');
-        }
-
-        async function generateShareLink(permission) {
-            if (!currentUser || !tripId) return;
-
-            const btn = permission === 'view' ? DOM.shareViewBtn : DOM.shareEditBtn;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> יוצר קישור...';
-
-            try {
-                const tokensRef = collection(db, "shareTokens");
-                const tokenDoc = await addDoc(tokensRef, {
-                    tripId: tripId,
-                    permission: permission, // 'view' or 'edit'
-                    createdAt: serverTimestamp(),
-                    used: false,
-                    createdBy: currentUser.uid
-                });
-
-                // --- FIX START ---
-                // This logic correctly builds the URL, even if the site is in a sub-folder.
-                const currentPath = window.location.pathname; // e.g., /my-repo/trip.html
-                const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1); // e.g., /my-repo/
-                const joinUrl = `${window.location.origin}${basePath}join-trip.html?token=${tokenDoc.id}`;
-                // --- FIX END ---
-                
-                DOM.shareLinkInput.value = joinUrl;
-                DOM.shareOptions.style.display = 'none';
-                DOM.shareLinkContainer.classList.remove('hidden');
-                DOM.shareFeedback.textContent = 'הקישור מוכן! הוא חד-פעמי ותקף לשעתיים.';
-
-            } catch (error) {
-                console.error("Error creating share link:", error);
-                alert("שגיאה ביצירת קישור שיתוף. נסה שוב.");
-            } finally {
-                btn.disabled = false;
-                if (permission === 'view') {
-                    btn.innerHTML = '<i class="fa-solid fa-eye"></i> צור קישור לצפייה בלבד';
-                } else {
-                    btn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> צור קישור לעריכה';
-                }
-            }
-        }
-
-        function copyShareLink() {
-            DOM.shareLinkInput.select();
-            document.execCommand('copy');
-            DOM.copyLinkBtn.textContent = 'הועתק!';
-            setTimeout(() => { DOM.copyLinkBtn.textContent = 'העתק'; }, 1500);
-        }
-
         // --- Edit Destinations Modal Logic ---
         function openEditDestinationsModal(){
-            if (currentUserRole === 'viewer') return;
-            // Trip dates (general)
+            if (!guardEdit()) return;
+
             DOM.tripDatesEdit.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
-            // init picker
             new Litepicker({ element: DOM.tripDatesEdit, singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
 
-            // Fill list
             DOM.destinationsList.innerHTML = '';
             editUI.clear();
 
@@ -851,7 +836,6 @@
 
             new Litepicker({ element: el.querySelector('.dest-dates'), singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
 
-            // map
             const mapDiv = el.querySelector('.map');
             const map = L.map(mapDiv).setView(dest.coords ? [dest.coords.lat, dest.coords.lng] : [20,0], dest.coords ? 10 : 2);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -888,7 +872,6 @@
             });
 
             el.querySelector('.remove-btn').addEventListener('click', () => {
-                // We'll use a custom modal for confirmation later if needed.
                 if (confirm('למחוק יעד זה?')) {
                     editUI.get(id).map.remove();
                     editUI.delete(id);
@@ -918,7 +901,8 @@
         }
 
         async function saveDestinationsChanges(){
-            if (currentUserRole === 'viewer') return;
+            if (!guardEdit()) return;
+
             const tripRef = doc(db, "trips", tripId);
 
             let startDate = tripData.startDate || null, endDate = tripData.endDate || null;
@@ -933,19 +917,13 @@
                 if (!confirm('לא נבחר אף יעד. לשמור בכל זאת?')) return;
             }
 
-            const updated = { startDate, endDate, destinations };
+            const updated = { ...tripData, startDate, endDate, destinations };
 
             try{
                 DOM.saveDestinationsBtn.disabled = true;
                 DOM.saveDestinationsBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>שומר...';
                 await updateDoc(tripRef, updated);
-                
-                // Update local data to avoid full reload
-                tripData.startDate = startDate;
-                tripData.endDate = endDate;
-                tripData.destinations = destinations;
-
-                // refresh UI
+                tripData = updated;
                 buildSidebarMenu();
                 buildTripMap();
                 closeEditDestinationsModal();
@@ -956,6 +934,75 @@
                 DOM.saveDestinationsBtn.disabled = false;
                 DOM.saveDestinationsBtn.textContent = 'שמור שינויים';
             }
+        }
+
+        // --- SHARE LINKS LOGIC ---
+
+        function openShareModal(){
+            if (!isOwner){ alert('רק בעל הטיול יכול ליצור קישורי שיתוף.'); return; }
+            DOM.shareResult.classList.add('hidden');
+            DOM.shareModal.classList.remove('hidden');
+        }
+        function closeShareModal(){ DOM.shareModal.classList.add('hidden'); }
+
+        async function createShareLink(permission){ // 'view' | 'edit'
+            if (!isOwner) return;
+            try {
+                const expiresAt = Timestamp.fromDate(new Date(Date.now() + 2*60*60*1000)); // +2h
+                const ref = await addDoc(collection(db, "trips", tripId, "shareLinks"), {
+                    tripId, ownerId: currentUser.uid, permission,
+                    createdAt: serverTimestamp(),
+                    expiresAt,
+                    usedBy: null, usedAt: null
+                });
+                const url = new URL(window.location.href);
+                url.searchParams.set('id', tripId);
+                url.searchParams.set('share', ref.id);
+                DOM.shareLinkInput.value = url.toString();
+                DOM.shareExtra.textContent = `הרשאה: ${permission === 'view' ? 'צפייה בלבד' : 'עריכה'} · תקף לשעתיים · לשימוש אדם אחד.`;
+                DOM.shareResult.classList.remove('hidden');
+            } catch (e){
+                console.error(e);
+                alert('שגיאה ביצירת קישור שיתוף.');
+            }
+        }
+
+        async function consumeShareLink(shareId){
+            // צורכים קישור: בטרנזקציה — בודקים תוקף/בשימוש, מסמנים usedBy, ומוסיפים חברות והרשאה
+            await runTransaction(db, async (tx) => {
+                const shareRef = doc(db, "trips", tripId, "shareLinks", shareId);
+                const shareSnap = await tx.get(shareRef);
+                if (!shareSnap.exists()) throw new Error('קישור שיתוף לא נמצא.');
+                const s = shareSnap.data();
+                const now = Date.now();
+                if (s.expiresAt?.toMillis && s.expiresAt.toMillis() < now) {
+                    throw new Error('קישור השיתוף פג תוקף.');
+                }
+                if (s.usedBy && s.usedBy !== currentUser.uid) {
+                    throw new Error('קישור השיתוף כבר נוצל.');
+                }
+
+                // סמן שימוש (או הותר אם אותו משתמש חוזר)
+                if (s.usedBy !== currentUser.uid) {
+                    tx.update(shareRef, { usedBy: currentUser.uid, usedAt: serverTimestamp() });
+                }
+
+                // חבר את המשתמש לטיול
+                const memRef = doc(db, "trips", tripId, "members", currentUser.uid);
+                tx.set(memRef, {
+                    role: s.permission === 'edit' ? 'editor' : 'viewer',
+                    source: 'link',
+                    since: serverTimestamp()
+                }, { merge: true });
+
+                // שמור גם בפרופיל המשתמש לצורך תצוגה באינדקס (קטגוריית "שיתפו אותי")
+                const userSharedRef = doc(db, "users", currentUser.uid, "sharedTrips", tripId);
+                tx.set(userSharedRef, {
+                    role: s.permission === 'edit' ? 'editor' : 'viewer',
+                    addedAt: serverTimestamp(),
+                    fromOwner: s.ownerId || null
+                }, { merge: true });
+            });
         }
 
         // --- Event Listeners ---
@@ -975,24 +1022,28 @@
         DOM.closeSettingsBtn.addEventListener('click', closeSettingsModal);
         DOM.saveSettingsBtn.addEventListener('click', saveSettings);
 
-        // Share listeners
-        DOM.shareBtn.addEventListener('click', openShareModal);
-        DOM.shareModalCloseBtn.addEventListener('click', closeShareModal);
-        DOM.shareViewBtn.addEventListener('click', () => generateShareLink('view'));
-        DOM.shareEditBtn.addEventListener('click', () => generateShareLink('edit'));
-        DOM.copyLinkBtn.addEventListener('click', copyShareLink);
-
-        // Open edit-destinations modal
+        // Edit Destinations
         DOM.openEditDestBtn.addEventListener('click', () => {
             closeSettingsModal();
             openEditDestinationsModal();
         });
-
-        // Edit-destinations modal events
         DOM.editDestClose.addEventListener('click', closeEditDestinationsModal);
         DOM.editDestCancel.addEventListener('click', closeEditDestinationsModal);
         DOM.addDestBtn.addEventListener('click', () => addDestRow());
         DOM.saveDestinationsBtn.addEventListener('click', saveDestinationsChanges);
+
+        // Share
+        DOM.shareBtn.addEventListener('click', openShareModal);
+        DOM.shareClose.addEventListener('click', closeShareModal);
+        DOM.shareCancel.addEventListener('click', closeShareModal);
+        DOM.createViewLinkBtn.addEventListener('click', () => createShareLink('view'));
+        DOM.createEditLinkBtn.addEventListener('click', () => createShareLink('edit'));
+        DOM.copyShareLink.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(DOM.shareLinkInput.value); 
+                  DOM.copyShareLink.textContent = 'הועתק!';
+                  setTimeout(()=> DOM.copyShareLink.textContent='העתק', 1200);
+            } catch { /* no-op */ }
+        });
 
         // --- Start the page ---
         initPage();
