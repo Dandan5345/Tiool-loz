@@ -403,14 +403,27 @@
                     await determineAccessAndLoad();
                     setupAuthUI(user);
                 } else {
-                    window.location.href = 'login.html';
+                    // ⇢ שומר את הכתובת עם ה-share כדי לחזור אליה אחרי login
+                    const cont = window.location.href;
+                    try { sessionStorage.setItem('continueAfterLogin', cont); } catch(_) {}
+                    window.location.href = `login.html?continue=${encodeURIComponent(cont)}`;
                 }
             });
         }
 
         async function determineAccessAndLoad(){
             const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
+            let tripSnap;
+            try {
+                tripSnap = await getDoc(tripRef);
+            } catch (e){
+                if (e.code === 'permission-denied') {
+                    alert('אין לך הרשאה לטיול הזה. אם קיבלת קישור שיתוף – ודא שהתחברת ונכנסת דרך הקישור המקורי.');
+                    window.location.href = 'index.html';
+                    return;
+                }
+                throw e;
+            }
 
             if (!tripSnap.exists()) {
                 alert("הטיול לא נמצא.");
@@ -935,7 +948,7 @@
         }
         function closeShareModal(){ DOM.shareModal.classList.add('hidden'); }
 
-        // ✅ תיקון: לא שולחים usedBy/usedAt ביצירה – בהתאם ל-Rules
+        // ✅ לא שולחים usedBy/usedAt ביצירה – בהתאם ל-Rules
         async function createShareLink(permission){ // 'view' | 'edit'
             if (!isOwner) return;
             try {
