@@ -26,6 +26,9 @@
         #sidebar, #settings-modal { 
             transition: transform 0.3s ease-in-out; 
         }
+        #main-content {
+            transition: opacity 0.5s, filter 0.3s ease-in-out;
+        }
         .submenu { 
             max-height: 0; 
             overflow: hidden; 
@@ -57,10 +60,9 @@
         .themed-card .text-slate-500 { color: var(--card-secondary-text-color); }
         .themed-card .text-slate-600 { color: var(--card-secondary-text-color); }
 
-
         /* Timeline Styles */
         .timeline { position: relative; }
-        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before, .timeline.layout-condensed-line::before, .timeline.layout-alternating-cards::before { 
+        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before, .timeline.layout-smart-accordion::before { 
             content: ""; 
             position: absolute; 
             right: 2.5rem;
@@ -72,7 +74,7 @@
         .timeline-item-wrapper {
             position: relative;
         }
-        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper, .timeline.layout-condensed-line .timeline-item-wrapper, .timeline.layout-alternating-cards .timeline-item-wrapper {
+        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper, .timeline.layout-smart-accordion .timeline-item-wrapper {
             padding-right: 6rem; /* Make space for the time */
         }
         .timeline-time-outside {
@@ -91,23 +93,35 @@
             text-align: center;
         }
         
-        /* NEW: Grid Layout */
-        .timeline.layout-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 1rem;
+        /* NEW: Table Layout */
+        .timeline.layout-table .themed-card {
+            overflow: hidden;
         }
+        .timeline.layout-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .timeline.layout-table th, .timeline.layout-table td {
+            padding: 0.75rem 1rem;
+            text-align: right;
+            border-bottom: 1px solid var(--card-border-color);
+        }
+        .timeline.layout-table th {
+            font-weight: 700;
+            background-color: rgba(0,0,0,0.05);
+        }
+        .timeline.layout-table tr:last-child td {
+            border-bottom: none;
+        }
+        .timeline.layout-table td:nth-child(1) { width: 15%; font-weight: 600; }
+        .timeline.layout-table td:nth-child(2) { width: 60%; }
+        .timeline.layout-table td:nth-child(3) { width: 25%; text-align: left; }
 
-        /* NEW: Condensed Line Layout */
-        .timeline.layout-condensed-line .timeline-item-wrapper { padding-right: 5.5rem; }
-        .timeline.layout-condensed-line .timeline-time-outside { width: 4.5rem; font-size: 0.7rem; top: 0.8rem; padding: 0.2rem 0.4rem; }
-        .timeline.layout-condensed-line .themed-card { padding: 0.75rem; }
-        .timeline.layout-condensed-line .themed-card h4 { font-size: 1rem; }
-        .timeline.layout-condensed-line .themed-card p { font-size: 0.8rem; }
-
-        /* NEW: Alternating Cards Layout */
-        .timeline.layout-alternating-cards .timeline-item-wrapper { transition: margin 0.3s ease-out; }
-        .timeline.layout-alternating-cards .timeline-item-wrapper:nth-child(even) { margin-left: 2rem; }
+        /* NEW: Smart Accordion Highlight */
+        .smart-accordion-active {
+            box-shadow: 0 0 0 3px #10b981; /* Green ring */
+            border-color: #10b981 !important;
+        }
 
         /* Fix for scroll jitter */
         .bg-fixed-image, header {
@@ -148,7 +162,7 @@
              font-family: 'Assistant', sans-serif;
         }
 
-        /* Accordion styles based on user example */
+        /* Accordion styles */
         details > summary { 
             list-style: none; /* Remove default marker */
             cursor: pointer;
@@ -165,7 +179,7 @@
         
         /* Custom modal for item details */
         .item-detail-modal, #ref-detail-modal {
-            position: fixed; inset: 0; background-color: rgba(0,0,0,0.7); z-index: 100;
+            position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 100;
             display: flex; align-items: center; justify-content: center;
             opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
         }
@@ -203,12 +217,17 @@
         .action-button.site { background-color: #4285F4; } /* Google Blue */
         .action-button.booking { background-color: #003580; } /* Booking.com Blue */
         .action-button.ref { background-color: #6366f1; } /* Indigo-500 */
+        .action-button.details { background-color: #64748b; } /* Slate-500 */
+
+        /* NEW: Force black text for notes */
+        .force-black-text { color: #1e293b !important; }
+        .force-black-text-secondary { color: #334155 !important; }
     </style>
 </head>
 <body class="bg-slate-100">
     <!-- Loader -->
     <div id="initial-loader">
-        <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+        <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://placehold.co/1920x1080/cccccc/ffffff?text=Loading...');"></div>
         <div class="fixed inset-0 z-0 bg-black/50"></div>
         <div class="text-white text-center relative z-10">
             <i class="fas fa-calendar-day fa-4x plane-spinner mb-4"></i>
@@ -217,7 +236,7 @@
     </div>
 
     <!-- Background -->
-    <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+    <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://placehold.co/1920x1080/cccccc/ffffff?text=Background');"></div>
     <div id="page-bg-overlay" class="fixed inset-0 z-0 bg-black/50"></div>
 
     <!-- Sidebar -->
@@ -289,25 +308,17 @@
                         <div><span class="font-bold">ציר זמן</span><p class="text-sm text-slate-500">קו אנכי עם כרטיסיות בצד. לחיצה פותחת חלון עם כל המידע.</p></div>
                     </label>
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="line-style-accordion-summary">
-                        <div><span class="font-bold">ציר זמן אקורדיון חלקי</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לתקציר.</p></div>
-                    </label>
-                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="line-style-accordion-full">
                         <div><span class="font-bold">ציר זמן אקורדיון מלא</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לכל הפרטים.</p></div>
                     </label>
                     <!-- NEW LAYOUTS -->
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="grid">
-                        <div><span class="font-bold">רשת</span><p class="text-sm text-slate-500">מציג את פריטי היום בתור רשת של כרטיסיות.</p></div>
+                        <input type="radio" name="timeline-layout" value="table">
+                        <div><span class="font-bold">טבלה</span><p class="text-sm text-slate-500">מציג את פריטי היום בטבלה מסודרת וקומפקטית.</p></div>
                     </label>
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="condensed-line">
-                        <div><span class="font-bold">ציר זמן דחוס</span><p class="text-sm text-slate-500">גרסה קומפקטית של ציר הזמן, מתאים לימים עמוסים.</p></div>
-                    </label>
-                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
-                        <input type="radio" name="timeline-layout" value="alternating-cards">
-                        <div><span class="font-bold">כרטיסיות לסירוגין</span><p class="text-sm text-slate-500">סגנון ויזואלי עם כרטיסיות מוזחות לסירוגין.</p></div>
+                        <input type="radio" name="timeline-layout" value="smart-accordion">
+                        <div><span class="font-bold">אקורדיון חכם</span><p class="text-sm text-slate-500">פותח אוטומטית את הפריט הנוכחי לפי השעה ומדגיש אותו.</p></div>
                     </label>
                  </div>
                  <div class="pt-4 border-t">
@@ -352,7 +363,7 @@
     <div id="overlay" class="fixed inset-0 bg-black/40 cursor-pointer z-50 hidden"></div>
 
     <!-- Content -->
-    <div id="main-content" class="relative z-10 opacity-0 transition-opacity duration-500">
+    <div id="main-content" class="relative z-10 opacity-0">
         <header class="bg-white/70 backdrop-blur-md sticky top-0 z-30 shadow-sm">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
@@ -486,6 +497,7 @@
         let currentThemeKey = 'light';
         let currentCustomTheme = {};
         const accordionMaps = {};
+        let smartAccordionInterval = null;
 
         // ---------- UI Elements ----------
         const initialLoader = document.getElementById('initial-loader');
@@ -590,9 +602,14 @@
             }, 300); 
         }
         function setCurrentLayout(layout) { 
+            if (smartAccordionInterval) {
+                clearInterval(smartAccordionInterval);
+                smartAccordionInterval = null;
+            }
+
             currentLayout = layout; 
             timelineBox.className = `timeline`; // Reset classes
-            if (layout !== 'grid') {
+            if (layout !== 'table') {
                 timelineBox.classList.add('space-y-4');
             }
             timelineBox.classList.add(`layout-${layout}`);
@@ -601,6 +618,11 @@
             if(radio) radio.checked = true; 
             
             renderTimelineFromItems(currentScheduleItems); 
+
+            if (layout === 'smart-accordion') {
+                updateSmartAccordionState();
+                smartAccordionInterval = setInterval(updateSmartAccordionState, 60000); // Check every minute
+            }
         }
 
         // ---------- Rendering Functions ----------
@@ -715,84 +737,106 @@
             editBtn.classList.remove('hidden');
             editBtn.classList.add('inline-flex');
 
-            items.forEach((it, index) => {
-                const itemWrapper = document.createElement('div');
-                itemWrapper.className = 'timeline-item-wrapper';
-                let itemHtml;
-                const isLineStyle = currentLayout.startsWith('line-style') || currentLayout === 'condensed-line' || currentLayout === 'alternating-cards';
+            if (currentLayout === 'table') {
+                const tableHtml = `
+                    <div class="themed-card rounded-lg shadow">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>שעה</th>
+                                    <th>פעילות</th>
+                                    <th>פעולות</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map((it, index) => `
+                                    <tr>
+                                        <td>${timeText(it)}</td>
+                                        <td>
+                                            <p class="font-bold">${it.title || 'פריט ללא שם'}</p>
+                                            ${it.summary ? `<p class="text-sm">${it.summary}</p>` : ''}
+                                        </td>
+                                        <td>
+                                            <div class="flex items-center justify-end gap-2">
+                                                ${it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps" title="ניווט ב-Google Maps"><i class="fa-solid fa-map-location-dot"></i></a>` : ''}
+                                                ${it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site" title="קישור לאתר"><i class="fa-solid fa-link"></i></a>` : ''}
+                                                <button class="action-button details open-modal-btn" data-index="${index}" title="פרטים מלאים"><i class="fa-solid fa-info-circle"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                timelineBox.innerHTML = tableHtml;
+            } else {
+                items.forEach((it, index) => {
+                    const itemWrapper = document.createElement('div');
+                    itemWrapper.className = 'timeline-item-wrapper';
+                    itemWrapper.id = `timeline-item-${index}`;
+                    let itemHtml;
+                    const isLineStyle = currentLayout.startsWith('line-style') || currentLayout === 'smart-accordion';
 
-                if (currentLayout === 'grid') {
-                     const navLink = it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
-                    const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
-                    itemHtml = `
-                        <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn h-full flex flex-col">
-                            <div class="flex-grow">
-                                <div class="text-sm font-bold" style="color: var(--card-secondary-text-color);">${timeText(it)}</div>
-                                <h4 class="text-lg font-bold mt-1">${it.title || 'פריט ללא שם'}</h4>
-                                ${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}
-                            </div>
-                            <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color: var(--card-border-color);">
-                                ${navLink} ${siteLink}
-                            </div>
-                        </div>`;
-                } else if (isLineStyle) {
-                    const isAccordion = currentLayout.includes('accordion');
-                    if (isAccordion) {
-                        const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-3"><span class="text-xl">${itemEmoji(it)}</span><h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
-                        const detailsContent = currentLayout.includes('summary')
-                            ? `${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}<button class="text-blue-600 font-bold mt-2 text-sm open-modal-btn">פרטים מלאים...</button>`
+                    if (isLineStyle) {
+                        const isAccordion = currentLayout.includes('accordion') || currentLayout === 'smart-accordion';
+                        if (isAccordion) {
+                            const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-3"><span class="text-xl">${itemEmoji(it)}</span><h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
+                            const detailsContent = getFullItemDetailsHTML(it, index);
+                            itemHtml = `
+                                <div class="timeline-time-outside">${timeText(it)}</div>
+                                <details id="details-${index}" class="group accordion-item themed-card rounded-lg shadow-sm" style="padding-right: 0;">
+                                    <summary>${summaryContent}</summary>
+                                    <div class="p-4 pt-0 pr-12"><div class="border-t pt-3" style="border-color: var(--card-border-color);">${detailsContent}</div></div>
+                                </details>`;
+                        } else { // line-style default
+                            itemHtml = `
+                                <div class="timeline-time-outside">${timeText(it)}</div>
+                                <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn" data-index="${index}">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-xl">${itemEmoji(it)}</span>
+                                        <h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4>
+                                    </div>
+                                </div>`;
+                        }
+                    } else if (currentLayout.startsWith('accordion')) {
+                        const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-4"><span class="text-2xl">${itemEmoji(it)}</span><div><h4 class="font-bold text-lg">${it.title || 'פריט ללא שם'}</h4><p class="text-sm font-mono" style="color: var(--card-secondary-text-color);">${timeText(it)}</p></div></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
+                        const detailsContent = currentLayout === 'accordion-summary' 
+                            ? `${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}<button class="text-blue-600 font-bold mt-2 text-sm open-modal-btn" data-index="${index}">פרטים מלאים...</button>`
                             : getFullItemDetailsHTML(it, index);
                         itemHtml = `
-                            <div class="timeline-time-outside">${timeText(it)}</div>
                             <details id="details-${index}" class="group accordion-item themed-card rounded-lg shadow-sm" style="padding-right: 0;">
                                 <summary>${summaryContent}</summary>
                                 <div class="p-4 pt-0 pr-12"><div class="border-t pt-3" style="border-color: var(--card-border-color);">${detailsContent}</div></div>
                             </details>`;
-                    } else { // line-style, condensed-line, alternating-cards default
+                    } else { // default layout
+                        const navLink = it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
+                        const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
                         itemHtml = `
-                            <div class="timeline-time-outside">${timeText(it)}</div>
-                            <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-xl">${itemEmoji(it)}</span>
-                                    <h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4>
+                            <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn" data-index="${index}">
+                                <div class="text-sm font-bold" style="color: var(--card-secondary-text-color);">${timeText(it)}</div>
+                                <h4 class="text-lg font-bold mt-1">${it.title || 'פריט ללא שם'}</h4>
+                                ${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}
+                                <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color: var(--card-border-color);">
+                                    ${navLink} ${siteLink}
                                 </div>
                             </div>`;
                     }
-                } else if (currentLayout.startsWith('accordion')) {
-                    const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-4"><span class="text-2xl">${itemEmoji(it)}</span><div><h4 class="font-bold text-lg">${it.title || 'פריט ללא שם'}</h4><p class="text-sm font-mono" style="color: var(--card-secondary-text-color);">${timeText(it)}</p></div></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
-                    const detailsContent = currentLayout === 'accordion-summary' 
-                        ? `${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}<button class="text-blue-600 font-bold mt-2 text-sm open-modal-btn">פרטים מלאים...</button>`
-                        : getFullItemDetailsHTML(it, index);
-                    itemHtml = `
-                        <details id="details-${index}" class="group accordion-item themed-card rounded-lg shadow-sm" style="padding-right: 0;">
-                            <summary>${summaryContent}</summary>
-                            <div class="p-4 pt-0 pr-12"><div class="border-t pt-3" style="border-color: var(--card-border-color);">${detailsContent}</div></div>
-                        </details>`;
-                } else { // default layout
-                    const navLink = it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
-                    const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
-                    itemHtml = `
-                        <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn">
-                            <div class="text-sm font-bold" style="color: var(--card-secondary-text-color);">${timeText(it)}</div>
-                            <h4 class="text-lg font-bold mt-1">${it.title || 'פריט ללא שם'}</h4>
-                            ${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}
-                            <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color: var(--card-border-color);">
-                                ${navLink} ${siteLink}
-                            </div>
-                        </div>`;
-                }
-                
-                itemWrapper.innerHTML = itemHtml;
-                timelineBox.appendChild(itemWrapper);
-                
-                itemWrapper.querySelectorAll('.open-modal-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => { e.stopPropagation(); showItemDetailModal(it); });
+                    
+                    itemWrapper.innerHTML = itemHtml;
+                    timelineBox.appendChild(itemWrapper);
                 });
-                itemWrapper.querySelectorAll('.open-ref-modal-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => { 
-                        e.stopPropagation(); 
-                        showRefDetailModal(btn.dataset.refType, btn.dataset.refId); 
-                    });
+            }
+            
+            // Attach all event listeners after HTML is in the DOM
+            timelineBox.querySelectorAll('.open-modal-btn').forEach(btn => {
+                const index = btn.dataset.index;
+                btn.addEventListener('click', (e) => { e.stopPropagation(); showItemDetailModal(items[index]); });
+            });
+            timelineBox.querySelectorAll('.open-ref-modal-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => { 
+                    e.stopPropagation(); 
+                    showRefDetailModal(btn.dataset.refType, btn.dataset.refId); 
                 });
             });
             
@@ -831,12 +875,64 @@
             renderRouteMap(items);
         }
 
+        function updateSmartAccordionState() {
+            if (currentLayout !== 'smart-accordion' || currentScheduleItems.length === 0) return;
+            
+            const now = new Date();
+            let activeIndex = -1;
+            let latestPassedTime = null;
+
+            currentScheduleItems.forEach((item, index) => {
+                if (item.startTime) {
+                    try {
+                        const itemStartTime = new Date(`${dateISO}T${item.startTime}:00`);
+                        if (!isNaN(itemStartTime) && itemStartTime <= now) {
+                            if (!latestPassedTime || itemStartTime > latestPassedTime) {
+                                latestPassedTime = itemStartTime;
+                                activeIndex = index;
+                            }
+                        }
+                    } catch(e) { console.error("Could not parse time", item.startTime); }
+                }
+            });
+
+            // Remove previous active states
+            document.querySelectorAll('.smart-accordion-active').forEach(el => el.classList.remove('smart-accordion-active'));
+
+            if (activeIndex !== -1) {
+                const activeDetails = document.getElementById(`details-${activeIndex}`);
+                if (activeDetails) {
+                    // Check if it's not already open by user interaction
+                    if (!activeDetails.hasAttribute('data-user-opened')) {
+                        // Close all others that are not user-opened
+                        document.querySelectorAll('details.accordion-item').forEach(d => {
+                            if (d.id !== `details-${activeIndex}` && !d.hasAttribute('data-user-opened')) {
+                                d.open = false;
+                            }
+                        });
+                        activeDetails.open = true;
+                    }
+                    activeDetails.classList.add('smart-accordion-active');
+                    // Only scroll if it's the first time we are setting it
+                    if (!document.querySelector('.scrolled-to-active')) {
+                        activeDetails.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        activeDetails.classList.add('scrolled-to-active');
+                    }
+                }
+            }
+        }
+
         function closeDetailModal() {
             if (modalMapInstance) { modalMapInstance.remove(); modalMapInstance = null; }
             itemDetailModal.classList.remove('visible');
+            mainContent.style.filter = 'none';
+            mainContent.style.pointerEvents = 'auto';
         }
 
         function showItemDetailModal(it) {
+            mainContent.style.filter = 'blur(4px)';
+            mainContent.style.pointerEvents = 'none';
+
             const hasAddr = !!(it.address?.lat && it.address?.lng);
             const hasTravel = !!(it.travel?.from?.coords && it.travel?.to?.coords);
 
@@ -888,7 +984,7 @@
             }
             notesList.innerHTML = notes.map(n=>{
                 const cls = noteColorMap[n.color] || noteColorMap.yellow;
-                return `<div class="border rounded-xl p-3 ${cls}"><div class="font-bold text-black">${n.kind}: ${n.title || '—'}</div>${n.details ? `<div class="mt-1 text-sm whitespace-pre-wrap text-black/80">${n.details}</div>` : ''}</div>`;
+                return `<div class="border rounded-xl p-3 ${cls}"><div class="font-bold force-black-text">${n.kind}: ${n.title || '—'}</div>${n.details ? `<div class="mt-1 text-sm whitespace-pre-wrap force-black-text-secondary">${n.details}</div>` : ''}</div>`;
             }).join('');
         }
         
@@ -944,7 +1040,7 @@
             settingsBtn.addEventListener('click', toggleSettings);
             closeSettingsBtn.addEventListener('click', toggleSettings);
             overlay.addEventListener('click', () => { sidebar.classList.add('translate-x-full'); settingsModal.classList.add('translate-x-full'); overlay.classList.add('hidden'); });
-            tripHomeBtn.href = 'index.html'; // UPDATED LINK
+            tripHomeBtn.href = 'index.html';
             itemDetailModal.addEventListener('click', (e) => { if (e.target === itemDetailModal) closeDetailModal(); });
             refDetailModal.addEventListener('click', (e) => { if (e.target === refDetailModal) closeRefDetailModal(); });
 
@@ -1035,6 +1131,14 @@
                 }
                 toggleSettings();
             });
+            
+            // For smart accordion, keep track if user opens a details element manually
+            timelineBox.addEventListener('click', (e) => {
+                const details = e.target.closest('details.accordion-item');
+                if (details && details.open) {
+                    details.setAttribute('data-user-opened', 'true');
+                }
+            });
         }
 
         // ---------- Init & Data Fetching ----------
@@ -1064,7 +1168,7 @@
             
             const finalLayout = dateStyle.layout || destStyle.layout || tripStyle.layout || 'default';
             const finalThemeSetting = dateStyle.theme || destStyle.theme || tripStyle.theme || { key: 'light' };
-            const finalBg = dateStyle.background || destStyle.background || tripStyle.background || { type: 'image', value: destForDate?.bgUrl || destForDate?.imageUrl || 'https://i.imgur.com/MjekTyd.jpeg', brightness: 50 };
+            const finalBg = dateStyle.background || destStyle.background || tripStyle.background || { type: 'image', value: destForDate?.bgUrl || destForDate?.imageUrl || 'https://placehold.co/1920x1080/cccccc/ffffff?text=Default+BG', brightness: 50 };
             
             setCurrentLayout(finalLayout);
             if (finalThemeSetting.key === 'custom') {
@@ -1101,7 +1205,8 @@
                 if (tripData.ownerId && tripData.ownerId !== currentUser.uid) { alert('אין לך הרשאה לצפות בטיול זה.'); location.href = 'index.html'; return; }
 
                 destForDate = findDestinationForDate(tripData, dateStr);
-                loaderBg.style.backgroundImage = `url('${destForDate?.bgUrl || destForDate?.imageUrl || 'https://i.imgur.com/MjekTyd.jpeg'}')`;
+                const defaultBgUrl = 'https://placehold.co/1920x1080/cccccc/ffffff?text=Default+BG';
+                loaderBg.style.backgroundImage = `url('${destForDate?.bgUrl || destForDate?.imageUrl || defaultBgUrl}')`;
                 
                 buildMenuFromTrip();
                 loadAndApplyStyles();
@@ -1153,9 +1258,14 @@
         function closeRefDetailModal() {
             if (refModalMapInstance) { refModalMapInstance.remove(); refModalMapInstance = null; }
             refDetailModal.classList.remove('visible');
+            mainContent.style.filter = 'none';
+            mainContent.style.pointerEvents = 'auto';
         }
 
         async function showRefDetailModal(refType, refId) {
+            mainContent.style.filter = 'blur(4px)';
+            mainContent.style.pointerEvents = 'none';
+            
             refDetailModalContent.innerHTML = `<div class="flex justify-center items-center h-48"><i class="fas fa-spinner fa-spin fa-2x"></i></div>`;
             refDetailModal.classList.add('visible');
 
@@ -1216,37 +1326,37 @@
 
         function renderLogisticsDetailsHTML(item) {
              let detailsHtml = '';
-             switch(item.type) {
-                case 'hotel':
-                    detailsHtml = `
-                        <p><strong>יעד:</strong> ${item.destination}</p>
-                        <p><strong>תאריכים:</strong> ${item.dates}</p>
-                        <p><strong>מחיר:</strong> $${item.price?.toLocaleString() || 'N/A'}</p>
-                        <p><strong>הוזמן דרך:</strong> ${item.booked_via}</p>
-                        ${item.address ? `<p><strong>כתובת:</strong> ${item.address}</p>` : ''}
-                    `;
-                    break;
-                case 'flight':
-                    detailsHtml = `
-                        <p><strong>חברת תעופה:</strong> ${item.airline}</p>
-                        <p><strong>מספר טיסה:</strong> ${item.flight_number}</p>
-                        <p><strong>תאריך:</strong> ${item.dates}</p>
-                        <p><strong>מ:</strong> ${item.from?.destination} (${item.from?.airport_name}) <strong>אל:</strong> ${item.to?.destination} (${item.to?.airport_name})</p>
-                        <p><strong>המראה:</strong> ${item.departure_time}, <strong>נחיתה:</strong> ${item.arrival_time}</p>
-                    `;
-                    break;
-                // Add cases for car_rental, ferry, train
-                default:
-                    detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
+             switch(item.subType) { // Changed from 'type' to 'subType' to match data structure
+                 case 'hotel':
+                     detailsHtml = `
+                         <p><strong>יעד:</strong> ${item.destination}</p>
+                         <p><strong>תאריכים:</strong> ${item.dates}</p>
+                         <p><strong>מחיר:</strong> ${item.price ? `$${item.price.toLocaleString()}`: 'לא צוין'}</p>
+                         <p><strong>הוזמן דרך:</strong> ${item.booked_via}</p>
+                         ${item.address ? `<p><strong>כתובת:</strong> ${item.address}</p>` : ''}
+                     `;
+                     break;
+                 case 'flight':
+                     detailsHtml = `
+                         <p><strong>חברת תעופה:</strong> ${item.airline}</p>
+                         <p><strong>מספר טיסה:</strong> ${item.flight_number}</p>
+                         <p><strong>תאריך:</strong> ${item.dates}</p>
+                         <p><strong>מ:</strong> ${item.from?.destination} (${item.from?.airport_name}) <strong>אל:</strong> ${item.to?.destination} (${item.to?.airport_name})</p>
+                         <p><strong>המראה:</strong> ${item.departure_time}, <strong>נחיתה:</strong> ${item.arrival_time}</p>
+                     `;
+                     break;
+                 // Add cases for car_rental, ferry, train
+                 default:
+                     detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
              }
 
              return `
-                <button id="close-ref-modal-btn" class="absolute top-3 left-3 w-8 h-8 bg-slate-100/50 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
-                <div class="p-0 space-y-4">
-                    <h3 class="text-2xl font-bold border-b pb-3">${item.name || item.type}</h3>
-                    <div class="text-sm space-y-2">${detailsHtml}</div>
-                    ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                </div>
+                 <button id="close-ref-modal-btn" class="absolute top-3 left-3 w-8 h-8 bg-slate-100/50 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
+                 <div class="p-0 space-y-4">
+                     <h3 class="text-2xl font-bold border-b pb-3">${item.name || item.subType}</h3>
+                     <div class="text-sm space-y-2">${detailsHtml}</div>
+                     ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 </div>
              `;
         }
 
