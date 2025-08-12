@@ -183,7 +183,7 @@
       } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
       const firebaseConfig = {
-        apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+        apiKey: "AIzaSyAhuk5EfqaT9eZר3CxMYWP7qzjoGLhLq3o",
         authDomain: "tiool-loz.firebaseapp.com",
         projectId: "tiool-loz",
         storageBucket: "tiool-loz.appspot.com",
@@ -239,50 +239,25 @@
       let tripsUnsubscribe = null;
       let isInitialLoad = true;
 
-      // --- Guards נגד לולאת הפניות + כשל ניווט ---
-      const url = new URL(window.location.href);
-      const noRedirectQuery = url.searchParams.has('no_redirect');
-
-      // אם הגענו שוב מאותו ניסיון הפניה (trip.html החזיר אותנו), ננטרל הפניה סשן-זמנית
-      if (sessionStorage.getItem('autoRedirectAttempt') === '1' && document.referrer.includes('trip.html')) {
-        sessionStorage.setItem('suppressAutoRedirect', '1');
-        sessionStorage.removeItem('autoRedirectAttempt');
-        // ננקה את הדגל אחרי זמן קצר כדי לא לחסום לנצח
-        setTimeout(() => sessionStorage.removeItem('suppressAutoRedirect'), 10000);
-      }
-
-      function shouldAutoRedirect() {
-        if (noRedirectQuery) return false;
-        if (sessionStorage.getItem('suppressAutoRedirect') === '1') return false;
-        return true;
-      }
-
       function hideLoader() {
         if (isInitialLoad) {
             DOM.loadingOverlay.classList.add('opacity-0');
-            setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 500);
+            setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 350);
             isInitialLoad = false;
         }
       }
 
-      // ניסיון הפניה בטוח עם נפילה חזרה
-      function attemptRedirectToTrip(tripId) {
-        // נסיר את ה-Loader כדי שלא ניתקע אם הניווט נכשל
-        hideLoader();
-        const target = `trip.html?id=${encodeURIComponent(tripId)}&src=index`;
+      // --- בדיקה: האם הגעתי לדף הזה מ-trip.html? ---
+      function cameFromTrip() {
         try {
-          sessionStorage.setItem('autoRedirectAttempt', '1');
-          // replace כדי לא ליצור "חזור" שחוזר ללולאה
-          window.location.replace(target);
-        } catch (_) {}
-        // אם אחרי 2 שניות עדיין בעמוד הזה, נבטל ניסיון ונשאיר את הדף פעיל
-        setTimeout(() => {
-          if (document.visibilityState === 'visible') {
-            sessionStorage.removeItem('autoRedirectAttempt');
-            sessionStorage.setItem('suppressAutoRedirect', '1');
-            alert('לא הצלחתי לעבור אוטומטית לדף הטיול. אפשר לפתוח ידנית דרך "הטיולים שלי".');
-          }
-        }, 2000);
+          const ref = document.referrer || '';
+          if (!ref) return false;
+          // נבנה URL מבוסס origin נוכחי כדי לתמוך גם בנתיבים יחסיים
+          const u = new URL(ref, window.location.origin);
+          return u.pathname.endsWith('/trip.html') || u.pathname.endsWith('trip.html');
+        } catch {
+          return false;
+        }
       }
 
       // --- Auth + טעינת נתוני משתמש ---
@@ -304,12 +279,18 @@
                 DOM.userNameBtn.textContent = `שלום, ${userData.name || 'משתמש'}`;
                 applyUserSettings(userData.settings);
 
-                const defId = userData.settings?.defaultTripId;
-                if (defId && shouldAutoRedirect()) {
-                    attemptRedirectToTrip(defId);
-                } else {
-                    hideLoader();
+                const defId = userData.settings?.defaultTripId || null;
+
+                // כלל ההפניה המעודכן:
+                // אם יש טיול ברירת מחדל → תמיד מפנים אליו מיידית,
+                // אלא אם הגעתי לכאן מ-trip.html (חזרה/לינק מתוך הטיול).
+                if (defId && !cameFromTrip()) {
+                    hideLoader(); // לא נשאיר Loader בזמן הניווט
+                    window.location.replace(`trip.html?id=${encodeURIComponent(defId)}`);
+                    return; // לא נמשיך ל-UI של האינדקס
                 }
+
+                hideLoader();
             }, (error) => {
                 console.error("Error fetching user data:", error);
                 applyUserSettings(null);
@@ -421,7 +402,7 @@
       });
 
       // ---------------------------
-      // מודאל יצירת טיול (3 שלבים) – כמו קודם
+      // מודאל יצירת טיול (3 שלבים)
       // ---------------------------
       let currentStep = 0;
       let destinationUIs = []; // {id, element, map, marker, coords}
