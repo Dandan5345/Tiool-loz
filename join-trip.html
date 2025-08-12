@@ -98,54 +98,56 @@
         }
 
         async function processJoinRequest(user) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tokenId = urlParams.get('token');
-
-            if (!tokenId) {
-                showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
-                return;
-            }
-
-            const tokenRef = doc(db, "shareTokens", tokenId);
-            const tokenSnap = await getDoc(tokenRef);
-
-            // 1. Validate token existence and usage
-            if (!tokenSnap.exists() || tokenSnap.data().used) {
-                showState('error', 'הזמנה לא תקינה', 'הקישור אינו חוקי או שכבר נעשה בו שימוש.');
-                return;
-            }
-
-            const tokenData = tokenSnap.data();
-
-            // 2. Validate token expiration (2 hours)
-            const twoHoursInMillis = 2 * 60 * 60 * 1000;
-            const tokenAge = Date.now() - tokenData.createdAt.toMillis();
-            if (tokenAge > twoHoursInMillis) {
-                showState('error', 'ההזמנה פגה תוקף', 'קישורי שיתוף תקפים לשעתיים בלבד.');
-                // Optionally, mark the token as used anyway to prevent clutter
-                await updateDoc(tokenRef, { used: true, reason: 'expired' });
-                return;
-            }
-            
-            // 3. Prevent owner from joining their own trip via link
-            if (tokenData.createdBy === user.uid) {
-                showState('error', 'פעולה לא נדרשת', 'זהו הטיול שלך, אין צורך להצטרף אליו שוב.');
-                return;
-            }
-
-            // 4. Get trip data and permission
-            const { tripId, permission } = tokenData;
-            const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
-
-            if (!tripSnap.exists()) {
-                showState('error', 'טיול לא נמצא', 'הטיול המקורי שאליו הוזמנת נמחק.');
-                return;
-            }
-
-            // 5. Add user to trip and mark token as used
+            // --- FIX START: Added try...catch block for robust error handling ---
             try {
-                // Update trip with new member
+                const urlParams = new URLSearchParams(window.location.search);
+                const tokenId = urlParams.get('token');
+
+                if (!tokenId) {
+                    showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
+                    return;
+                }
+
+                const tokenRef = doc(db, "shareTokens", tokenId);
+                const tokenSnap = await getDoc(tokenRef);
+
+                // 1. Validate token existence and usage
+                if (!tokenSnap.exists() || tokenSnap.data().used) {
+                    showState('error', 'הזמנה לא תקינה', 'הקישור אינו חוקי או שכבר נעשה בו שימוש.');
+                    return;
+                }
+
+                const tokenData = tokenSnap.data();
+
+                // 2. Validate token expiration (2 hours)
+                const twoHoursInMillis = 2 * 60 * 60 * 1000;
+                const tokenAge = Date.now() - tokenData.createdAt.toMillis();
+                if (tokenAge > twoHoursInMillis) {
+                    showState('error', 'ההזמנה פגה תוקף', 'קישורי שיתוף תקפים לשעתיים בלבד.');
+                    await updateDoc(tokenRef, { used: true, reason: 'expired' });
+                    return;
+                }
+                
+                // 3. Prevent owner from joining their own trip via link
+                if (tokenData.createdBy === user.uid) {
+                    showState('error', 'פעולה לא נדרשת', 'זהו הטיול שלך, אין צורך להצטרף אליו שוב.');
+                    // Redirect owner back to their trip
+                    window.location.replace(`trip.html?id=${tokenData.tripId}`);
+                    return;
+                }
+
+                // 4. Get trip data and permission
+                const { tripId, permission } = tokenData;
+                const tripRef = doc(db, "trips", tripId);
+                const tripSnap = await getDoc(tripRef);
+
+                if (!tripSnap.exists()) {
+                    showState('error', 'טיול לא נמצא', 'הטיול המקורי שאליו הוזמנת נמחק.');
+                    return;
+                }
+
+                // 5. Add user to trip and mark token as used
+                // This is the step that was failing due to security rules
                 const memberUpdateKey = `members.${user.uid}`;
                 await updateDoc(tripRef, {
                     [memberUpdateKey]: permission // 'viewer' or 'editor'
@@ -162,9 +164,10 @@
                 window.location.replace(`trip.html?id=${tripId}`);
 
             } catch (error) {
-                console.error("Error joining trip:", error);
-                showState('error', 'שגיאה בהצטרפות', 'אירעה שגיאה בעת הוספתך לטיול. נסה שוב מאוחר יותר.');
+                console.error("Error processing join request:", error);
+                showState('error', 'שגיאה בתהליך ההצטרפות', 'אירעה שגיאה. בדוק את חיבור האינטרנט ונסה שוב. אם הבעיה ממשיכה, ייתכן שיש בעיה בהרשאות.');
             }
+            // --- FIX END ---
         }
 
         // --- Main Logic ---
@@ -185,3 +188,4 @@
     </script>
 </body>
 </html>
+
