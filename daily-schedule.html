@@ -60,10 +60,10 @@
 
         /* Timeline Styles */
         .timeline { position: relative; }
-        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before { 
+        .timeline.layout-line-style::before, .timeline.layout-line-style-accordion-full::before, .timeline.layout-line-style-accordion-summary::before, .timeline.layout-condensed-line::before, .timeline.layout-alternating-cards::before { 
             content: ""; 
             position: absolute; 
-            right: 2.5rem; /* Adjusted for larger clickable area */
+            right: 2.5rem;
             top: 0; 
             bottom: 0; 
             width: 2px; 
@@ -72,7 +72,7 @@
         .timeline-item-wrapper {
             position: relative;
         }
-        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper {
+        .timeline.layout-line-style .timeline-item-wrapper, .timeline.layout-line-style-accordion-full .timeline-item-wrapper, .timeline.layout-line-style-accordion-summary .timeline-item-wrapper, .timeline.layout-condensed-line .timeline-item-wrapper, .timeline.layout-alternating-cards .timeline-item-wrapper {
             padding-right: 6rem; /* Make space for the time */
         }
         .timeline-time-outside {
@@ -91,6 +91,24 @@
             text-align: center;
         }
         
+        /* NEW: Grid Layout */
+        .timeline.layout-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        /* NEW: Condensed Line Layout */
+        .timeline.layout-condensed-line .timeline-item-wrapper { padding-right: 5.5rem; }
+        .timeline.layout-condensed-line .timeline-time-outside { width: 4.5rem; font-size: 0.7rem; top: 0.8rem; padding: 0.2rem 0.4rem; }
+        .timeline.layout-condensed-line .themed-card { padding: 0.75rem; }
+        .timeline.layout-condensed-line .themed-card h4 { font-size: 1rem; }
+        .timeline.layout-condensed-line .themed-card p { font-size: 0.8rem; }
+
+        /* NEW: Alternating Cards Layout */
+        .timeline.layout-alternating-cards .timeline-item-wrapper { transition: margin 0.3s ease-out; }
+        .timeline.layout-alternating-cards .timeline-item-wrapper:nth-child(even) { margin-left: 2rem; }
+
         /* Fix for scroll jitter */
         .bg-fixed-image, header {
             transform: translateZ(0);
@@ -252,7 +270,7 @@
 
             <!-- Layout Panel -->
             <div id="settings-panel-layout" class="settings-panel space-y-4 hidden">
-                 <p class="font-bold text-slate-700">סגנון תצוגת הלו"з:</p>
+                 <p class="font-bold text-slate-700">סגנון תצוגת הלו"ז:</p>
                  <div class="space-y-2">
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="default">
@@ -277,6 +295,19 @@
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="line-style-accordion-full">
                         <div><span class="font-bold">ציר זמן אקורדיון מלא</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לכל הפרטים.</p></div>
+                    </label>
+                    <!-- NEW LAYOUTS -->
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <input type="radio" name="timeline-layout" value="grid">
+                        <div><span class="font-bold">רשת</span><p class="text-sm text-slate-500">מציג את פריטי היום בתור רשת של כרטיסיות.</p></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <input type="radio" name="timeline-layout" value="condensed-line">
+                        <div><span class="font-bold">ציר זמן דחוס</span><p class="text-sm text-slate-500">גרסה קומפקטית של ציר הזמן, מתאים לימים עמוסים.</p></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <input type="radio" name="timeline-layout" value="alternating-cards">
+                        <div><span class="font-bold">כרטיסיות לסירוגין</span><p class="text-sm text-slate-500">סגנון ויזואלי עם כרטיסיות מוזחות לסירוגין.</p></div>
                     </label>
                  </div>
                  <div class="pt-4 border-t">
@@ -558,7 +589,19 @@
                 Object.values(accordionMaps).forEach(m => m.invalidateSize()); 
             }, 300); 
         }
-        function setCurrentLayout(layout) { currentLayout = layout; timelineBox.className = `timeline space-y-4 layout-${layout}`; document.querySelector(`input[name="timeline-layout"][value="${layout}"]`).checked = true; renderTimelineFromItems(currentScheduleItems); }
+        function setCurrentLayout(layout) { 
+            currentLayout = layout; 
+            timelineBox.className = `timeline`; // Reset classes
+            if (layout !== 'grid') {
+                timelineBox.classList.add('space-y-4');
+            }
+            timelineBox.classList.add(`layout-${layout}`);
+            
+            const radio = document.querySelector(`input[name="timeline-layout"][value="${layout}"]`);
+            if(radio) radio.checked = true; 
+            
+            renderTimelineFromItems(currentScheduleItems); 
+        }
 
         // ---------- Rendering Functions ----------
         function buildMenuFromTrip() {
@@ -676,9 +719,23 @@
                 const itemWrapper = document.createElement('div');
                 itemWrapper.className = 'timeline-item-wrapper';
                 let itemHtml;
-                const isLineStyle = currentLayout.startsWith('line-style');
+                const isLineStyle = currentLayout.startsWith('line-style') || currentLayout === 'condensed-line' || currentLayout === 'alternating-cards';
 
-                if (isLineStyle) {
+                if (currentLayout === 'grid') {
+                     const navLink = it.address?.label ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
+                    const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
+                    itemHtml = `
+                        <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn h-full flex flex-col">
+                            <div class="flex-grow">
+                                <div class="text-sm font-bold" style="color: var(--card-secondary-text-color);">${timeText(it)}</div>
+                                <h4 class="text-lg font-bold mt-1">${it.title || 'פריט ללא שם'}</h4>
+                                ${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}
+                            </div>
+                            <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color: var(--card-border-color);">
+                                ${navLink} ${siteLink}
+                            </div>
+                        </div>`;
+                } else if (isLineStyle) {
                     const isAccordion = currentLayout.includes('accordion');
                     if (isAccordion) {
                         const summaryContent = `<div class="flex items-center justify-between p-4"><div class="flex items-center gap-3"><span class="text-xl">${itemEmoji(it)}</span><h4 class="font-bold text-lg break-words">${it.title || 'פריט ללא שם'}</h4></div><i class="fas fa-chevron-down chevron-icon"></i></div>`;
@@ -691,7 +748,7 @@
                                 <summary>${summaryContent}</summary>
                                 <div class="p-4 pt-0 pr-12"><div class="border-t pt-3" style="border-color: var(--card-border-color);">${detailsContent}</div></div>
                             </details>`;
-                    } else { // line-style default
+                    } else { // line-style, condensed-line, alternating-cards default
                         itemHtml = `
                             <div class="timeline-time-outside">${timeText(it)}</div>
                             <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn">
@@ -887,7 +944,7 @@
             settingsBtn.addEventListener('click', toggleSettings);
             closeSettingsBtn.addEventListener('click', toggleSettings);
             overlay.addEventListener('click', () => { sidebar.classList.add('translate-x-full'); settingsModal.classList.add('translate-x-full'); overlay.classList.add('hidden'); });
-            tripHomeBtn.href = `trip.html?tripId=${tripId}`;
+            tripHomeBtn.href = 'index.html'; // UPDATED LINK
             itemDetailModal.addEventListener('click', (e) => { if (e.target === itemDetailModal) closeDetailModal(); });
             refDetailModal.addEventListener('click', (e) => { if (e.target === refDetailModal) closeRefDetailModal(); });
 
