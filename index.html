@@ -239,10 +239,23 @@
       let tripsUnsubscribe = null;
       let isInitialLoad = true;
 
-      // יצירת טיול - מצבים פנימיים
-      let currentStep = 0;
-      let destinationUIs = []; // {id, element, map, marker, coords}
-      let reviewMap = null;
+      // --- Guards נגד לולאת הפניות + כשל ניווט ---
+      const url = new URL(window.location.href);
+      const noRedirectQuery = url.searchParams.has('no_redirect');
+
+      // אם הגענו שוב מאותו ניסיון הפניה (trip.html החזיר אותנו), ננטרל הפניה סשן-זמנית
+      if (sessionStorage.getItem('autoRedirectAttempt') === '1' && document.referrer.includes('trip.html')) {
+        sessionStorage.setItem('suppressAutoRedirect', '1');
+        sessionStorage.removeItem('autoRedirectAttempt');
+        // ננקה את הדגל אחרי זמן קצר כדי לא לחסום לנצח
+        setTimeout(() => sessionStorage.removeItem('suppressAutoRedirect'), 10000);
+      }
+
+      function shouldAutoRedirect() {
+        if (noRedirectQuery) return false;
+        if (sessionStorage.getItem('suppressAutoRedirect') === '1') return false;
+        return true;
+      }
 
       function hideLoader() {
         if (isInitialLoad) {
@@ -250,6 +263,26 @@
             setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 500);
             isInitialLoad = false;
         }
+      }
+
+      // ניסיון הפניה בטוח עם נפילה חזרה
+      function attemptRedirectToTrip(tripId) {
+        // נסיר את ה-Loader כדי שלא ניתקע אם הניווט נכשל
+        hideLoader();
+        const target = `trip.html?id=${encodeURIComponent(tripId)}&src=index`;
+        try {
+          sessionStorage.setItem('autoRedirectAttempt', '1');
+          // replace כדי לא ליצור "חזור" שחוזר ללולאה
+          window.location.replace(target);
+        } catch (_) {}
+        // אם אחרי 2 שניות עדיין בעמוד הזה, נבטל ניסיון ונשאיר את הדף פעיל
+        setTimeout(() => {
+          if (document.visibilityState === 'visible') {
+            sessionStorage.removeItem('autoRedirectAttempt');
+            sessionStorage.setItem('suppressAutoRedirect', '1');
+            alert('לא הצלחתי לעבור אוטומטית לדף הטיול. אפשר לפתוח ידנית דרך "הטיולים שלי".');
+          }
+        }, 2000);
       }
 
       // --- Auth + טעינת נתוני משתמש ---
@@ -271,9 +304,9 @@
                 DOM.userNameBtn.textContent = `שלום, ${userData.name || 'משתמש'}`;
                 applyUserSettings(userData.settings);
 
-                // אם יש טיול ברירת מחדל – מפנה (ניתן להגיע לעמוד ללא הפניה ע"י ?no_redirect)
-                if (userData.settings?.defaultTripId && !window.location.search.includes('no_redirect')) {
-                    window.location.href = `trip.html?id=${userData.settings.defaultTripId}`;
+                const defId = userData.settings?.defaultTripId;
+                if (defId && shouldAutoRedirect()) {
+                    attemptRedirectToTrip(defId);
                 } else {
                     hideLoader();
                 }
@@ -348,7 +381,7 @@
         }
       }
 
-      // --- Trip dropdown toggle (עובד גם במובייל) ---
+      // --- Trip dropdown toggle (מובייל/דסקטופ) ---
       DOM.myTripsBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
         DOM.tripsDropdown.classList.toggle('hidden');
@@ -388,33 +421,26 @@
       });
 
       // ---------------------------
-      // מודאל יצירת טיול (3 שלבים)
+      // מודאל יצירת טיול (3 שלבים) – כמו קודם
       // ---------------------------
+      let currentStep = 0;
+      let destinationUIs = []; // {id, element, map, marker, coords}
+      let reviewMap = null;
+
       function openCreateModal() {
-        if (!currentUser) {
-            window.location.href = 'login.html';
-            return;
-        }
+        if (!currentUser) { window.location.href = 'login.html'; return; }
         resetCreateModal();
         DOM.createTripModal.classList.remove('hidden');
-        // Litepicker לשלב 1
         new Litepicker({ element: DOM.tripDatesInput, singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
       }
       function closeCreateModal() { DOM.createTripModal.classList.add('hidden'); }
 
       function setStep(newStep) {
         if (newStep < 0 || newStep >= DOM.stepElems.length) return;
-
-        // ולידציה בעת מעבר קדימה
         if (newStep > currentStep) {
-          if (currentStep === 0 && (!DOM.tripNameInput.value || !DOM.tripDatesInput.value)) {
-            alert('יש למלא שם ותאריכי טיול.'); return;
-          }
-          if (currentStep === 1 && destinationUIs.length === 0) {
-            alert('יש להוסיף לפחות יעד אחד.'); return;
-          }
+          if (currentStep === 0 && (!DOM.tripNameInput.value || !DOM.tripDatesInput.value)) { alert('יש למלא שם ותאריכי טיול.'); return; }
+          if (currentStep === 1 && destinationUIs.length === 0) { alert('יש להוסיף לפחות יעד אחד.'); return; }
         }
-
         DOM.stepElems[currentStep].classList.add('step-hidden');
         currentStep = newStep;
         DOM.stepElems[currentStep].classList.remove('step-hidden');
@@ -425,9 +451,7 @@
         DOM.nextBtn.classList.toggle('hidden', currentStep === 2);
         DOM.saveTripBtn.classList.toggle('hidden', currentStep !== 2);
 
-        if (currentStep === 2) {
-          generateReviewMap();
-        }
+        if (currentStep === 2) generateReviewMap();
       }
 
       function resetCreateModal() {
@@ -438,7 +462,6 @@
         destinationUIs.forEach(ui => { try { ui.map.remove(); } catch(_){} });
         destinationUIs = [];
         if (reviewMap) { reviewMap.remove(); reviewMap = null; }
-        // חשיפת/הסתרת שלבים
         DOM.stepElems.forEach((el, idx) => el.classList.toggle('step-hidden', idx !== 0));
         DOM.backBtn.classList.add('hidden');
         DOM.saveTripBtn.classList.add('hidden');
@@ -481,26 +504,20 @@
         const ui = { id, element: destinationDiv, map, marker: null, coords: null };
         destinationUIs.push(ui);
 
-        // Litepicker לטווח תאריכים ביעד
         new Litepicker({ element: destinationDiv.querySelector('.dest-dates'), singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
-
-        // לפעמים מפות נטענות כשהאלמנט היה מחוץ למסך → invalidateSize
         setTimeout(() => { map.invalidateSize(); }, 250);
       }
 
       async function findOnMap(e) {
-        const btn = e.target.closest('.find-map-btn');
-        if (!btn) return;
+        const btn = e.target.closest('.find-map-btn'); if (!btn) return;
         const parent = btn.closest('.relative');
         const queryStr = parent.querySelector('.dest-name-en').value?.trim();
         if (!queryStr) return;
 
-        const ui = destinationUIs.find(d => d.id === parent.id);
-        if (!ui) return;
+        const ui = destinationUIs.find(d => d.id === parent.id); if (!ui) return;
 
         const original = btn.textContent;
-        btn.textContent = 'מחפש...';
-        btn.disabled = true;
+        btn.textContent = 'מחפש...'; btn.disabled = true;
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}`);
           const data = await res.json();
@@ -517,20 +534,15 @@
           console.error(err);
           alert('שגיאה באיתור היעד. נסה/י שוב.');
         } finally {
-          btn.textContent = original;
-          btn.disabled = false;
+          btn.textContent = original; btn.disabled = false;
         }
       }
 
       function removeDestination(e) {
-        const btn = e.target.closest('.remove-dest-btn');
-        if (!btn) return;
+        const btn = e.target.closest('.remove-dest-btn'); if (!btn) return;
         const parent = btn.closest('.relative');
         const idx = destinationUIs.findIndex(d => d.id === parent.id);
-        if (idx > -1) {
-          try { destinationUIs[idx].map.remove(); } catch(_){}
-          destinationUIs.splice(idx, 1);
-        }
+        if (idx > -1) { try { destinationUIs[idx].map.remove(); } catch(_){} destinationUIs.splice(idx, 1); }
         parent.remove();
       }
 
@@ -567,10 +579,7 @@
       }
 
       async function saveTrip() {
-        if (!currentUser) {
-          alert('יש להתחבר לפני שמירה.');
-          return;
-        }
+        if (!currentUser) { alert('יש להתחבר לפני שמירה.'); return; }
         const [tripStart, tripEnd] = (DOM.tripDatesInput.value || '').split(' - ');
         const destinations = destinationUIs.map(ui => ({
           nameHe: ui.element.querySelector('.dest-name-he').value || '',
@@ -578,13 +587,9 @@
           dates: ui.element.querySelector('.dest-dates').value || '',
           coords: ui.coords || null
         }));
-
-        // אזהרה רכה אם יש יעד בלי קואורדינטות
         if (destinations.some(d => !d.coords)) {
-          const ok = confirm('חלק מהיעדים ללא מיקום במפה. להמשיך בכל זאת?');
-          if (!ok) return;
+          const ok = confirm('חלק מהיעדים ללא מיקום במפה. להמשיך בכל זאת?'); if (!ok) return;
         }
-
         const finalTripData = {
           name: DOM.tripNameInput.value,
           startDate: tripStart || '',
@@ -593,10 +598,8 @@
           createdAt: serverTimestamp(),
           destinations
         };
-
         try {
-          DOM.saveTripBtn.textContent = 'שומר...';
-          DOM.saveTripBtn.disabled = true;
+          DOM.saveTripBtn.textContent = 'שומר...'; DOM.saveTripBtn.disabled = true;
           const docRef = await addDoc(collection(db, "trips"), finalTripData);
           alert('הטיול נשמר בהצלחה!');
           window.location.href = `trip.html?id=${docRef.id}`;
@@ -604,8 +607,7 @@
           console.error("Error adding document: ", error);
           alert('שגיאה בשמירת הטיול.');
         } finally {
-          DOM.saveTripBtn.textContent = 'שמור טיול';
-          DOM.saveTripBtn.disabled = false;
+          DOM.saveTripBtn.textContent = 'שמור טיול'; DOM.saveTripBtn.disabled = false;
         }
       }
 
