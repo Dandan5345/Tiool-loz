@@ -42,6 +42,19 @@
 
         /* Loading Overlay */
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
+
+        /* Permissions Styling */
+        :disabled {
+            opacity: 0.6;
+            cursor: not-allowed !important;
+            background-color: #e5e7eb !important;
+            color: #6b7280 !important;
+            border-color: #d1d5db !important;
+        }
+        :disabled:hover {
+             transform: none;
+             box-shadow: none;
+        }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -73,12 +86,16 @@
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
                     <div class="flex items-center gap-4">
-                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
+                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600 nav-button" title="חזרה לדף הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
                         <h1 id="page-title" class="text-xl font-bold text-slate-800">ניהול לוגיסטיקה</h1>
+                    </div>
+                    <div id="permission-badge" class="hidden items-center gap-2 bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">
+                       <i class="fas fa-eye"></i>
+                       <span>מצב צפייה בלבד</span>
                     </div>
                     <div class="flex items-center gap-4">
                         <div id="auth-container" class="flex items-center"></div>
-                        <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
+                        <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none nav-button"><i class="fas fa-bars fa-lg"></i></button>
                     </div>
                 </div>
             </div>
@@ -142,11 +159,11 @@
         <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
             <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                 <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת פריט חדש</h3>
-                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500 nav-button"><i class="fas fa-times fa-lg"></i></button>
             </div>
             <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-6"></form>
             <div class="p-4 bg-slate-100 border-t flex justify-between items-center rounded-b-2xl">
-                <button type="button" id="modal-back-btn" class="py-2 px-5 rounded-lg hover:bg-slate-200 transition hidden font-semibold">אחורה</button>
+                <button type="button" id="modal-back-btn" class="py-2 px-5 rounded-lg hover:bg-slate-200 transition hidden font-semibold nav-button">אחורה</button>
                 <div id="modal-error-message" class="text-red-500 text-sm font-bold h-5 flex-grow text-center"></div>
                 <button type="button" id="modal-next-btn" class="py-2 px-5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">הבא</button>
                 <button type="submit" form="item-form" id="modal-finish-btn" class="py-2 px-5 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition hidden">שמור פריט</button>
@@ -160,7 +177,7 @@
             <div class="text-red-500 mb-4"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
             <h3 id="delete-modal-title" class="text-xl font-bold text-slate-800 mb-4">האם למחוק?</h3>
             <div class="flex justify-center gap-4 mt-6">
-                <button id="delete-modal-cancel" class="py-2 px-6 bg-slate-200 font-semibold rounded-lg hover:bg-slate-300">ביטול</button>
+                <button id="delete-modal-cancel" class="py-2 px-6 bg-slate-200 font-semibold rounded-lg hover:bg-slate-300 nav-button">ביטול</button>
                 <button id="delete-modal-confirm" class="py-2 px-6 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">מחק</button>
             </div>
         </div>
@@ -176,10 +193,10 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc, Timestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // --- Firebase Configuration (Same as trip page) ---
+        // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -196,6 +213,8 @@
 
         // --- Global State & Constants ---
         let tripId = null;
+        let shareToken = null;
+        let permissionLevel = 'owner'; // 'owner', 'edit', 'view'
         let tripData = null;
         let currentUser = null;
         let allItems = [];
@@ -235,60 +254,145 @@
             detailsModal: document.getElementById('details-modal'),
             logisticsSummaryBody: document.getElementById('logistics-summary-tbody'),
             grandTotalContainer: document.getElementById('grand-total-container'),
+            permissionBadge: document.getElementById('permission-badge'),
         };
 
-        // --- Page Initialization ---
+        // --- Page Initialization & Auth ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('tripId');
+            tripId = urlParams.get('tripId') || urlParams.get('id'); // Support both params
+            shareToken = urlParams.get('shareToken');
+
             if (!tripId) {
                 alert("שגיאה: לא נמצא מזהה טיול.");
                 window.location.href = 'index.html';
                 return;
             }
-            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     currentUser = user;
-                    loadPageData();
-                    setupAuthUI(user);
+                    if (shareToken && !tripData) {
+                        await processShareToken();
+                    } else if (!shareToken) {
+                        permissionLevel = 'owner';
+                        loadPageContent();
+                        setupAuthUI(user);
+                    }
                 } else {
-                    window.location.href = 'login.html';
+                    if (shareToken) {
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (error) {
+                            console.error("Anonymous sign-in failed:", error);
+                            alert("שגיאה באימות. נסה לרענן את הדף.");
+                        }
+                    } else {
+                        window.location.href = 'login.html';
+                    }
                 }
             });
         }
 
-        async function loadPageData() {
-            if (logisticsUnsubscribe) logisticsUnsubscribe(); // Detach previous listener if exists
+        async function processShareToken() {
+            const shareRef = doc(db, "trips", tripId, "shares", shareToken);
+            try {
+                const shareSnap = await getDoc(shareRef);
+                if (!shareSnap.exists()) throw new Error("קישור שיתוף לא תקין.");
+                
+                const shareData = shareSnap.data();
+                const now = Timestamp.now();
+
+                // Allow if used by the same anonymous user, or if not used at all
+                if (shareData.used && shareData.usedBy !== currentUser.uid) throw new Error("קישור זה כבר נוצל על ידי משתמש אחר.");
+                if (now > shareData.expiresAt) throw new Error("פג תוקפו של קישור זה.");
+                
+                if (!shareData.used) {
+                     await updateDoc(shareRef, { used: true, usedBy: currentUser.uid });
+                }
+
+                permissionLevel = shareData.permission;
+                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-500">אורח</span>`;
+                loadPageContent();
+
+            } catch (error) {
+                alert(error.message);
+                window.location.href = "index.html";
+            }
+        }
+
+        async function loadPageContent() {
+            if (tripData) return; // Prevent re-loading
+            if (logisticsUnsubscribe) logisticsUnsubscribe();
 
             const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
+            try {
+                const tripSnap = await getDoc(tripRef);
+                if (!tripSnap.exists()) throw new Error("הטיול לא נמצא.");
 
-            if (tripSnap.exists() && tripSnap.data().ownerId === currentUser.uid) {
-                tripData = tripSnap.data();
-                document.title = `לוגיסטיקה - ${tripData.name}`;
-                DOM.pageTitle.textContent = `לוגיסטיקה - ${tripData.name}`;
-                buildSidebarMenu();
-                
-                // Now, listen for logistics data in the subcollection
-                const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
-                const q = query(logisticsCollectionRef);
-                
-                logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
-                    allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    renderApp();
-                    DOM.loadingOverlay.style.display = 'none';
-                }, (error) => {
-                    console.error("Snapshot error:", error);
-                    alert("שגיאה בטעינת נתוני הלוגיסטיקה.");
-                    DOM.loadingOverlay.style.display = 'none';
-                });
+                const data = tripSnap.data();
+                const isOwner = permissionLevel === 'owner' && data.ownerId === currentUser.uid;
+                const isGuest = permissionLevel === 'view' || permissionLevel === 'edit';
 
-            } else {
-                alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
+                if (isOwner || isGuest) {
+                    tripData = data;
+                    document.title = `לוגיסטיקה - ${tripData.name}`;
+                    DOM.pageTitle.textContent = `לוגיסטיקה - ${tripData.name}`;
+                    buildSidebarMenu();
+                    
+                    const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+                    const q = query(logisticsCollectionRef);
+                    
+                    logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
+                        allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        renderApp();
+                        applyPagePermissions();
+                        DOM.loadingOverlay.style.display = 'none';
+                    }, (error) => {
+                        console.error("Snapshot error:", error);
+                        alert("שגיאה בטעינת נתוני הלוגיסטיקה.");
+                        DOM.loadingOverlay.style.display = 'none';
+                    });
+
+                } else {
+                    throw new Error("אין לך הרשאה לצפות בטיול זה.");
+                }
+            } catch (error) {
+                console.error("Error loading page data:", error);
+                alert(error.message);
                 window.location.href = 'index.html';
             }
+        }
+
+        function applyPagePermissions() {
+            const backUrl = buildPageUrl(`trip.html?id=${tripId}`);
+            DOM.backToTripBtn.href = backUrl;
+
+            if (permissionLevel === 'view') {
+                DOM.permissionBadge.classList.remove('hidden');
+                DOM.permissionBadge.classList.add('flex');
+                
+                // Disable all interactive elements except navigation
+                document.querySelectorAll('button, input, textarea, select').forEach(el => {
+                    if (!el.classList.contains('nav-button')) {
+                        el.disabled = true;
+                    }
+                });
+            } else if (permissionLevel === 'edit') {
+                DOM.permissionBadge.innerHTML = `<i class="fas fa-pencil-alt"></i><span>מצב עריכה</span>`;
+                DOM.permissionBadge.classList.replace('bg-blue-100', 'bg-emerald-100');
+                DOM.permissionBadge.classList.replace('text-blue-800', 'text-emerald-800');
+                DOM.permissionBadge.classList.remove('hidden');
+                DOM.permissionBadge.classList.add('flex');
+            }
+        }
+
+        function buildPageUrl(relativeLink) {
+            const url = new URL(relativeLink, window.location.href);
+            if (shareToken) {
+                url.searchParams.set('shareToken', shareToken);
+            }
+            return url.href;
         }
 
         // --- UI Population ---
@@ -305,7 +409,7 @@
             const userDocRef = doc(db, "users", user.uid);
             getDoc(userDocRef).then(docSnap => {
                 const name = docSnap.exists() ? docSnap.data().name : 'משתמש';
-                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${name} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
+                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${name} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500 nav-button"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
                 document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth).then(() => window.location.href = 'index.html'));
             });
         }
@@ -317,7 +421,7 @@
             tripData.destinations.forEach(dest => {
                 const destinationDiv = document.createElement('div');
                 const button = document.createElement('button');
-                button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
+                button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors nav-button';
                 button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down chevron-icon"></i>`;
                 
                 const submenu = document.createElement('div');
@@ -326,8 +430,8 @@
                 const dates = generateDatesFromRange(dest.dates);
                 dates.forEach(dateStr => {
                     const dayLink = document.createElement('a');
-                    dayLink.href = `daily-schedule.html?tripId=${tripId}&date=${dateStr}`;
-                    dayLink.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md transition-colors';
+                    dayLink.href = buildPageUrl(`daily-schedule.html?tripId=${tripId}&date=${dateStr}`);
+                    dayLink.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md transition-colors nav-button';
                     dayLink.textContent = `לו"ז ליום ${dateStr}`;
                     submenu.appendChild(dayLink);
                 });
@@ -394,8 +498,8 @@
                     ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 </div>
                 <div class="mt-4 pt-4 border-t grid grid-cols-2 gap-2">
-                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">לאתר <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">נווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition nav-button ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">לאתר <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition nav-button ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">נווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                 </div>`;
             return card;
         }
@@ -959,7 +1063,7 @@
             wrapper.className = 'seat-input-wrapper flex items-center gap-2';
             wrapper.innerHTML = `
                 <input type="text" class="p-2 border rounded-md w-24" placeholder="לדוגמה: A40" value="${value}">
-                <button type="button" class="remove-seat-btn text-red-500 hover:text-red-700 text-xl font-bold">&times;</button>
+                <button type="button" class="remove-seat-btn text-red-500 hover:text-red-700 text-xl font-bold nav-button">&times;</button>
             `;
             wrapper.querySelector('.remove-seat-btn').addEventListener('click', () => wrapper.remove());
             container.appendChild(wrapper);
