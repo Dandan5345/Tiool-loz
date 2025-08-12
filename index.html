@@ -5,27 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מתכנן הטיולים שלך</title>
     
-    <!-- Libraries -->
+    <!-- Tailwind + Icons + Font -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;700&display=swap" rel="stylesheet">
 
+    <!-- Leaflet (למפות) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Litepicker (טווחי תאריכים) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+
     <style>
-        body {
-            font-family: 'Assistant', sans-serif;
-        }
-        #loading-overlay {
-            transition: opacity 0.5s ease-in-out;
-        }
-        .main-nav-button {
-            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
-        }
-        .main-nav-button:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
+        body { font-family: 'Assistant', sans-serif; }
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        .main-nav-button { transition: transform 0.2s ease-out, box-shadow 0.2s ease-out; }
+        .main-nav-button:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* מודאל יצירת טיול */
+        .modal-content { transition: opacity 0.3s, transform 0.3s; }
+        .step-hidden { opacity: 0; transform: translateX(20px); display: none !important; }
+        .leaflet-container { z-index: 10; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -71,17 +75,19 @@
                 <p id="login-prompt-message" class="text-xl text-slate-200 mt-4">על מנת להתחיל, יש <a href="login.html" class="font-bold underline hover:text-blue-300">להתחבר או להירשם</a></p>
                 
                 <div id="main-actions" class="hidden mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                    <!-- יצירת טיול חדש: פותח מודאל -->
                     <button id="create-trip-btn" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 flex flex-col items-center justify-center p-6 rounded-xl text-white text-center">
                         <i class="fas fa-plus-circle text-3xl mb-2"></i>
                         <span class="font-bold text-lg">יצירת טיול חדש</span>
                     </button>
 
-                    <div class="relative group w-full">
+                    <!-- הטיולים שלי (dropdown) -->
+                    <div class="relative w-full">
                         <button id="my-trips-btn" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 flex flex-col items-center justify-center p-6 rounded-xl text-white text-center w-full">
                             <i class="fas fa-suitcase-rolling text-3xl mb-2"></i>
                             <span class="font-bold text-lg">הטיולים שלי</span>
                         </button>
-                        <div id="trips-dropdown" class="absolute right-0 mt-2 w-full bg-white rounded-md shadow-lg py-1 z-20 hidden group-hover:block max-h-60 overflow-y-auto no-scrollbar">
+                        <div id="trips-dropdown" class="absolute right-0 mt-2 w-full bg-white rounded-md shadow-lg py-1 z-20 hidden max-h-60 overflow-y-auto no-scrollbar">
                             <p class="px-4 py-2 text-sm text-gray-500 text-right">אין טיולים להצגה.</p>
                         </div>
                     </div>
@@ -122,11 +128,59 @@
         </div>
     </div>
 
+    <!-- Create Trip Modal (ממוזג לתוך index) -->
+    <div id="create-trip-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h2 id="modal-title" class="text-xl font-bold">יצירת טיול חדש - שלב 1 מתוך 3</h2>
+                <button id="close-modal-btn" class="p-2 text-gray-500 hover:text-red-600">&times;</button>
+            </header>
+            
+            <main class="p-6 overflow-y-auto flex-grow">
+                <!-- Step 1: Basic Info -->
+                <div id="step-1" class="modal-content">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="trip-name" class="block mb-1 font-semibold text-right">שם הטיול</label>
+                            <input type="text" id="trip-name" placeholder="לדוגמה: הטיול הגדול לאירופה" class="w-full p-2 border rounded-md">
+                        </div>
+                        <div>
+                            <label for="trip-dates" class="block mb-1 font-semibold text-right">תאריכי הטיול (התחלה וסיום)</label>
+                            <input type="text" id="trip-dates" class="w-full p-2 border rounded-md text-center">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Destinations -->
+                <div id="step-2" class="modal-content step-hidden">
+                    <div id="destinations-container" class="space-y-6"></div>
+                    <button id="add-destination-btn" class="mt-6 w-full bg-gray-200 hover:bg-gray-300 font-semibold py-2 rounded-lg flex items-center justify-center gap-2">
+                        <i class="fas fa-plus-circle"></i> הוסף יעד
+                    </button>
+                </div>
+
+                <!-- Step 3: Review Map -->
+                <div id="step-3" class="modal-content step-hidden">
+                    <p class="mb-4 text-center">זוהי מפת המסלול שלך. ודא שהכל נכון לפני השמירה.</p>
+                    <div id="review-map" class="w-full h-80 bg-gray-200 rounded-lg"></div>
+                    <div id="review-legend" class="mt-4 text-right"></div>
+                </div>
+            </main>
+
+            <footer class="p-4 border-t flex justify-between">
+                <button id="back-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hidden">חזור</button>
+                <button id="next-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">הבא</button>
+                <button id="save-trip-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg hidden">שמור טיול</button>
+            </footer>
+        </div>
+    </div>
 
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
       import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-      import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+      import { 
+        getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp 
+      } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
@@ -142,6 +196,7 @@
       const db = getFirestore(app);
       
       const DOM = {
+          // כלליים
           loadingOverlay: document.getElementById('loading-overlay'),
           loginBtn: document.getElementById('login-btn'),
           userInfo: document.getElementById('user-info'),
@@ -149,6 +204,7 @@
           mainActions: document.getElementById('main-actions'),
           settingsBtn: document.getElementById('settings-btn'),
           createTripBtn: document.getElementById('create-trip-btn'),
+          myTripsBtn: document.getElementById('my-trips-btn'),
           tripsDropdown: document.getElementById('trips-dropdown'),
           loginPromptMessage: document.getElementById('login-prompt-message'),
           settingsModal: document.getElementById('settings-modal'),
@@ -161,6 +217,21 @@
           logoutModal: document.getElementById('logout-modal'),
           confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
           cancelLogoutBtn: document.getElementById('cancel-logout-btn'),
+
+          // מודאל יצירת טיול
+          createTripModal: document.getElementById('create-trip-modal'),
+          closeModalBtn: document.getElementById('close-modal-btn'),
+          modalTitle: document.getElementById('modal-title'),
+          stepElems: [document.getElementById('step-1'), document.getElementById('step-2'), document.getElementById('step-3')],
+          backBtn: document.getElementById('back-btn'),
+          nextBtn: document.getElementById('next-btn'),
+          saveTripBtn: document.getElementById('save-trip-btn'),
+          tripNameInput: document.getElementById('trip-name'),
+          tripDatesInput: document.getElementById('trip-dates'),
+          destinationsContainer: document.getElementById('destinations-container'),
+          addDestinationBtn: document.getElementById('add-destination-btn'),
+          reviewMapContainer: document.getElementById('review-map'),
+          reviewLegend: document.getElementById('review-legend'),
       };
 
       let currentUser = null;
@@ -168,16 +239,20 @@
       let tripsUnsubscribe = null;
       let isInitialLoad = true;
 
+      // יצירת טיול - מצבים פנימיים
+      let currentStep = 0;
+      let destinationUIs = []; // {id, element, map, marker, coords}
+      let reviewMap = null;
+
       function hideLoader() {
         if (isInitialLoad) {
             DOM.loadingOverlay.classList.add('opacity-0');
-            setTimeout(() => {
-                DOM.loadingOverlay.style.display = 'none';
-            }, 500);
+            setTimeout(() => { DOM.loadingOverlay.style.display = 'none'; }, 500);
             isInitialLoad = false;
         }
       }
 
+      // --- Auth + טעינת נתוני משתמש ---
       onAuthStateChanged(auth, (user) => {
         if (userUnsubscribe) userUnsubscribe();
         if (tripsUnsubscribe) tripsUnsubscribe();
@@ -191,12 +266,12 @@
             DOM.settingsBtn.classList.remove('hidden');
 
             const userDocRef = doc(db, "users", user.uid);
-            
             userUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
                 const userData = docSnap.exists() ? docSnap.data() : {};
                 DOM.userNameBtn.textContent = `שלום, ${userData.name || 'משתמש'}`;
                 applyUserSettings(userData.settings);
 
+                // אם יש טיול ברירת מחדל – מפנה (ניתן להגיע לעמוד ללא הפניה ע"י ?no_redirect)
                 if (userData.settings?.defaultTripId && !window.location.search.includes('no_redirect')) {
                     window.location.href = `trip.html?id=${userData.settings.defaultTripId}`;
                 } else {
@@ -273,13 +348,21 @@
         }
       }
 
-      // --- Event Listeners ---
+      // --- Trip dropdown toggle (עובד גם במובייל) ---
+      DOM.myTripsBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        DOM.tripsDropdown.classList.toggle('hidden');
+      });
+      document.addEventListener('click', (e) => {
+        if (!DOM.tripsDropdown.contains(e.target) && !DOM.myTripsBtn.contains(e.target)) {
+            DOM.tripsDropdown.classList.add('hidden');
+        }
+      });
+
+      // --- Event Listeners כלליים ---
       DOM.loginBtn.addEventListener('click', () => { window.location.href = 'login.html'; });
-      DOM.createTripBtn.addEventListener('click', () => { window.location.href = 'create-trip.html'; });
       DOM.settingsBtn.addEventListener('click', () => { DOM.settingsModal.classList.remove('hidden'); });
       DOM.closeSettingsBtn.addEventListener('click', () => { DOM.settingsModal.classList.add('hidden'); });
-      
-      // Logout Modal Listeners
       DOM.userNameBtn.addEventListener('click', () => { DOM.logoutModal.classList.remove('hidden'); });
       DOM.cancelLogoutBtn.addEventListener('click', () => { DOM.logoutModal.classList.add('hidden'); });
       DOM.confirmLogoutBtn.addEventListener('click', () => {
@@ -304,6 +387,239 @@
         }
       });
 
+      // ---------------------------
+      // מודאל יצירת טיול (3 שלבים)
+      // ---------------------------
+      function openCreateModal() {
+        if (!currentUser) {
+            window.location.href = 'login.html';
+            return;
+        }
+        resetCreateModal();
+        DOM.createTripModal.classList.remove('hidden');
+        // Litepicker לשלב 1
+        new Litepicker({ element: DOM.tripDatesInput, singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
+      }
+      function closeCreateModal() { DOM.createTripModal.classList.add('hidden'); }
+
+      function setStep(newStep) {
+        if (newStep < 0 || newStep >= DOM.stepElems.length) return;
+
+        // ולידציה בעת מעבר קדימה
+        if (newStep > currentStep) {
+          if (currentStep === 0 && (!DOM.tripNameInput.value || !DOM.tripDatesInput.value)) {
+            alert('יש למלא שם ותאריכי טיול.'); return;
+          }
+          if (currentStep === 1 && destinationUIs.length === 0) {
+            alert('יש להוסיף לפחות יעד אחד.'); return;
+          }
+        }
+
+        DOM.stepElems[currentStep].classList.add('step-hidden');
+        currentStep = newStep;
+        DOM.stepElems[currentStep].classList.remove('step-hidden');
+
+        DOM.modalTitle.textContent = `יצירת טיול חדש - שלב ${currentStep + 1} מתוך 3`;
+        DOM.backBtn.classList.toggle('hidden', currentStep === 0);
+        DOM.nextBtn.textContent = (currentStep === 1) ? 'צור מפת מסלול' : 'הבא';
+        DOM.nextBtn.classList.toggle('hidden', currentStep === 2);
+        DOM.saveTripBtn.classList.toggle('hidden', currentStep !== 2);
+
+        if (currentStep === 2) {
+          generateReviewMap();
+        }
+      }
+
+      function resetCreateModal() {
+        currentStep = 0;
+        DOM.tripNameInput.value = '';
+        DOM.tripDatesInput.value = '';
+        DOM.destinationsContainer.innerHTML = '';
+        destinationUIs.forEach(ui => { try { ui.map.remove(); } catch(_){} });
+        destinationUIs = [];
+        if (reviewMap) { reviewMap.remove(); reviewMap = null; }
+        // חשיפת/הסתרת שלבים
+        DOM.stepElems.forEach((el, idx) => el.classList.toggle('step-hidden', idx !== 0));
+        DOM.backBtn.classList.add('hidden');
+        DOM.saveTripBtn.classList.add('hidden');
+        DOM.nextBtn.classList.remove('hidden');
+        DOM.modalTitle.textContent = 'יצירת טיול חדש - שלב 1 מתוך 3';
+      }
+
+      function addDestination() {
+        const id = `dest-${Date.now()}`;
+        const destinationDiv = document.createElement('div');
+        destinationDiv.id = id;
+        destinationDiv.className = 'p-4 border rounded-lg space-y-3 relative';
+        destinationDiv.innerHTML = `
+          <button class="remove-dest-btn absolute top-2 left-2 text-red-500 hover:text-red-700" title="הסר יעד">&times;</button>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                  <label class="block mb-1 text-sm font-semibold text-right">שם היעד (עברית)</label>
+                  <input type="text" class="dest-name-he w-full p-2 border rounded-md">
+              </div>
+              <div>
+                  <label class="block mb-1 text-sm font-semibold text-right">תאריכים ביעד</label>
+                  <input type="text" class="dest-dates w-full p-2 border rounded-md text-center">
+              </div>
+          </div>
+          <div>
+              <label class="block mb-1 text-sm font-semibold text-right">שם היעד (אנגלית, לחיפוש)</label>
+              <div class="flex gap-2">
+                  <input type="text" class="dest-name-en w-full p-2 border rounded-md" placeholder="Paris, France / Rome, Italy / New York">
+                  <button class="find-map-btn bg-blue-500 text-white px-3 rounded-md hover:bg-blue-600">מצא</button>
+              </div>
+          </div>
+          <div class="dest-map w-full h-48 bg-gray-200 rounded-md mt-2"></div>
+        `;
+        DOM.destinationsContainer.appendChild(destinationDiv);
+
+        const mapContainer = destinationDiv.querySelector('.dest-map');
+        const map = L.map(mapContainer).setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const ui = { id, element: destinationDiv, map, marker: null, coords: null };
+        destinationUIs.push(ui);
+
+        // Litepicker לטווח תאריכים ביעד
+        new Litepicker({ element: destinationDiv.querySelector('.dest-dates'), singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
+
+        // לפעמים מפות נטענות כשהאלמנט היה מחוץ למסך → invalidateSize
+        setTimeout(() => { map.invalidateSize(); }, 250);
+      }
+
+      async function findOnMap(e) {
+        const btn = e.target.closest('.find-map-btn');
+        if (!btn) return;
+        const parent = btn.closest('.relative');
+        const queryStr = parent.querySelector('.dest-name-en').value?.trim();
+        if (!queryStr) return;
+
+        const ui = destinationUIs.find(d => d.id === parent.id);
+        if (!ui) return;
+
+        const original = btn.textContent;
+        btn.textContent = 'מחפש...';
+        btn.disabled = true;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}`);
+          const data = await res.json();
+          if (data && data.length > 0) {
+              const { lat, lon } = data[0];
+              ui.coords = { lat: parseFloat(lat), lng: parseFloat(lon) };
+              if (ui.marker) ui.marker.setLatLng([lat, lon]);
+              else ui.marker = L.marker([lat, lon]).addTo(ui.map);
+              ui.map.setView([lat, lon], 10);
+          } else {
+              alert('היעד לא נמצא.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('שגיאה באיתור היעד. נסה/י שוב.');
+        } finally {
+          btn.textContent = original;
+          btn.disabled = false;
+        }
+      }
+
+      function removeDestination(e) {
+        const btn = e.target.closest('.remove-dest-btn');
+        if (!btn) return;
+        const parent = btn.closest('.relative');
+        const idx = destinationUIs.findIndex(d => d.id === parent.id);
+        if (idx > -1) {
+          try { destinationUIs[idx].map.remove(); } catch(_){}
+          destinationUIs.splice(idx, 1);
+        }
+        parent.remove();
+      }
+
+      function generateReviewMap() {
+        if (reviewMap) reviewMap.remove();
+        reviewMap = L.map(DOM.reviewMapContainer).setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(reviewMap);
+
+        const points = [];
+        DOM.reviewLegend.innerHTML = '<h4 class="font-bold mb-2">מקרא:</h4>';
+
+        destinationUIs.forEach((ui, index) => {
+          const nameHe = ui.element.querySelector('.dest-name-he').value || 'ללא שם';
+          const dates = ui.element.querySelector('.dest-dates').value || '';
+          if (ui.coords) {
+            points.push([ui.coords.lat, ui.coords.lng]);
+            L.marker([ui.coords.lat, ui.coords.lng])
+              .addTo(reviewMap)
+              .bindPopup(`<b>${index + 1}. ${nameHe}</b><br>${dates}`);
+            const p = document.createElement('p');
+            p.textContent = `${index + 1}. ${nameHe} (${dates})`;
+            DOM.reviewLegend.appendChild(p);
+          }
+        });
+
+        if (points.length > 1) {
+          L.polyline(points, { color: 'blue', dashArray: '5, 10' }).addTo(reviewMap);
+          reviewMap.fitBounds(points, { padding: [50, 50] });
+        } else if (points.length === 1) {
+          reviewMap.setView(points[0], 8);
+        }
+
+        setTimeout(() => reviewMap.invalidateSize(), 200);
+      }
+
+      async function saveTrip() {
+        if (!currentUser) {
+          alert('יש להתחבר לפני שמירה.');
+          return;
+        }
+        const [tripStart, tripEnd] = (DOM.tripDatesInput.value || '').split(' - ');
+        const destinations = destinationUIs.map(ui => ({
+          nameHe: ui.element.querySelector('.dest-name-he').value || '',
+          nameEn: ui.element.querySelector('.dest-name-en').value || '',
+          dates: ui.element.querySelector('.dest-dates').value || '',
+          coords: ui.coords || null
+        }));
+
+        // אזהרה רכה אם יש יעד בלי קואורדינטות
+        if (destinations.some(d => !d.coords)) {
+          const ok = confirm('חלק מהיעדים ללא מיקום במפה. להמשיך בכל זאת?');
+          if (!ok) return;
+        }
+
+        const finalTripData = {
+          name: DOM.tripNameInput.value,
+          startDate: tripStart || '',
+          endDate: tripEnd || '',
+          ownerId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          destinations
+        };
+
+        try {
+          DOM.saveTripBtn.textContent = 'שומר...';
+          DOM.saveTripBtn.disabled = true;
+          const docRef = await addDoc(collection(db, "trips"), finalTripData);
+          alert('הטיול נשמר בהצלחה!');
+          window.location.href = `trip.html?id=${docRef.id}`;
+        } catch (error) {
+          console.error("Error adding document: ", error);
+          alert('שגיאה בשמירת הטיול.');
+        } finally {
+          DOM.saveTripBtn.textContent = 'שמור טיול';
+          DOM.saveTripBtn.disabled = false;
+        }
+      }
+
+      // חיבור אירועים למודאל יצירת טיול
+      DOM.createTripBtn.addEventListener('click', openCreateModal);
+      DOM.closeModalBtn.addEventListener('click', closeCreateModal);
+      DOM.nextBtn.addEventListener('click', () => setStep(currentStep + 1));
+      DOM.backBtn.addEventListener('click', () => setStep(currentStep - 1));
+      DOM.addDestinationBtn.addEventListener('click', addDestination);
+      DOM.destinationsContainer.addEventListener('click', (e) => {
+        if (e.target.closest('.find-map-btn')) findOnMap(e);
+        if (e.target.closest('.remove-dest-btn')) removeDestination(e);
+      });
+      DOM.saveTripBtn.addEventListener('click', saveTrip);
     </script>
 </body>
 </html>
