@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Litepicker (לטווחי תאריכים במודל העריכה) -->
+    <!-- Litepicker -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
 
@@ -65,7 +65,7 @@
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
         #page-bg { transition: background-image 1s ease, transform .6s ease; }
 
-        /* מצבים לפי הרשאות */
+        /* נעילת UI לצפייה בלבד */
         .view-only [data-editable="true"]{ pointer-events:none; opacity:.6; filter:grayscale(.1); }
         .hidden-when-viewer{ display:none; }
     </style>
@@ -142,7 +142,7 @@
             </div>
         </div>
 
-        <!-- NEW: Share Modal -->
+        <!-- Share Modal -->
         <div id="share-modal" class="hidden fixed inset-0 bg-black/70 z-[110] p-4 flex items-center justify-center">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
                 <header class="p-4 border-b flex items-center justify-between">
@@ -151,7 +151,7 @@
                 </header>
                 <main class="p-4 space-y-4">
                     <p class="text-sm text-slate-600">
-                        צור קישור חד־פעמי לתוקף של שעתיים. ברגע שמישהו יכנס עם הקישור — הוא ייצמד לטיול הזה אוטומטית.
+                        צור קישור חד־פעמי בתוקף של שעתיים. הנכנס הראשון ייצמד לטיול אוטומטית בהרשאת צפייה/עריכה בהתאם.
                     </p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <button id="create-view-link" class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-lg">
@@ -178,7 +178,7 @@
             </div>
         </div>
 
-        <!-- NEW: Edit Destinations Modal -->
+        <!-- Edit Destinations Modal -->
         <div id="edit-destinations-modal" class="hidden fixed inset-0 bg-black/70 z-[110] p-4 flex items-center justify-center">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col" data-editable="true">
                 <header class="p-4 border-b flex justify-between items-center">
@@ -207,7 +207,7 @@
             </div>
         </div>
 
-        <!-- Sidebar (Full Navigation Menu) -->
+        <!-- Sidebar -->
         <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
             <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
                 <h2 class="text-2xl font-bold text-slate-800">תפריט המסע</h2>
@@ -225,22 +225,19 @@
                         <div class="flex items-center gap-2 sm:gap-4">
                             <div id="auth-container"></div>
 
-                            <!-- ניווט למלון -->
                             <button id="navigate-hotel-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="נווט למלון">
                                 <i class="fas fa-hotel fa-lg"></i>
                             </button>
 
-                            <!-- כפתור שיתוף חדש (מופיע לבעלים בלבד) -->
+                            <!-- Share (owner only) -->
                             <button id="share-btn" class="p-2 text-slate-600 hover:text-blue-600 hidden" aria-label="שיתוף">
                                 <i class="fas fa-share-nodes fa-lg"></i>
                             </button>
 
-                            <!-- הגדרות -->
                             <button id="settings-btn" class="p-2 text-slate-600 hover:text-blue-600" aria-label="הגדרות">
                                 <i class="fas fa-cog fa-lg"></i>
                             </button>
 
-                            <!-- המבורגר -->
                             <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none">
                                 <i class="fas fa-bars fa-lg"></i>
                             </button>
@@ -255,9 +252,7 @@
                     <section class="text-center">
                         <h2 id="trip-title" class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg">טוען את שם הטיול...</h2>
                         <p class="mt-4 text-lg text-slate-200 max-w-3xl mx-auto">זהו מרכז הבקרה של הטיול! מכאן אפשר לנווט לכל המידע החשוב.</p>
-                        <div id="main-nav-buttons" class="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-                            <!-- Buttons will be generated here -->
-                        </div>
+                        <div id="main-nav-buttons" class="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto"></div>
                     </section>
 
                     <section>
@@ -313,7 +308,7 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // --- DOM Elements ---
+        // --- DOM ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
             pageBg: document.getElementById('page-bg'),
@@ -349,7 +344,7 @@
             tripDatesEdit: document.getElementById('trip-dates-edit'),
             destinationsList: document.getElementById('destinations-list'),
             addDestBtn: document.getElementById('add-dest-btn'),
-            // Share UI
+            // Share
             shareBtn: document.getElementById('share-btn'),
             shareModal: document.getElementById('share-modal'),
             shareClose: document.getElementById('share-close'),
@@ -390,13 +385,13 @@
                 if (user) {
                     currentUser = user;
 
-                    // אם יש פרמטר שיתוף — ננסה לצרוך ולקבל הרשאות
+                    // פרמטר שיתוף? צריכה וניקוי מה-URL
                     const shareId = urlParams.get('share');
                     if (shareId) {
-                        try { await consumeShareLink(shareId); 
-                              // להסרת הפרמטר מה־URL
-                              urlParams.delete('share');
-                              history.replaceState({}, '', `${location.pathname}?${urlParams.toString()}`);
+                        try {
+                            await consumeShareLink(shareId);
+                            urlParams.delete('share');
+                            history.replaceState({}, '', `${location.pathname}?${urlParams.toString()}`);
                         } catch (e) {
                             console.error(e);
                             alert(e?.message || 'קישור שיתוף אינו זמין.');
@@ -414,7 +409,6 @@
         }
 
         async function determineAccessAndLoad(){
-            // נקרא מסמך הטיול
             const tripRef = doc(db, "trips", tripId);
             const tripSnap = await getDoc(tripRef);
 
@@ -430,7 +424,6 @@
             if (isOwner) {
                 role = 'owner';
             } else {
-                // בדוק חברות ב־members
                 const memRef = doc(db, "trips", tripId, "members", currentUser.uid);
                 const memSnap = await getDoc(memRef);
                 if (memSnap.exists()) {
@@ -452,7 +445,6 @@
         }
 
         function applyPermissionUI(){
-            // הגדרות/עריכה זמינים רק לעורכים/בעלים
             if (!canEdit()){
                 DOM.mainContent.classList.add('view-only');
             }
@@ -483,7 +475,7 @@
             }
         }
 
-        function guardEdit(action){
+        function guardEdit(){
             if (!canEdit()){
                 alert('אין לך הרשאה לערוך טיול זה (צפייה בלבד).');
                 return false;
@@ -534,7 +526,6 @@
             renderCostsSummary(items);
         }
 
-        // --- Hotel cards ---
         function renderHotelSummary(hotels) {
             const container = DOM.hotelSummaryContainer;
             if (hotels.length === 0) {
@@ -567,7 +558,6 @@
             }).join('');
         }
 
-        // --- Transport cards ---
         function renderTransportSummary(transports) {
             const container = DOM.transportSummaryContainer;
             if (transports.length === 0) {
@@ -968,7 +958,7 @@
         }
 
         async function consumeShareLink(shareId){
-            // צורכים קישור: בטרנזקציה — בודקים תוקף/בשימוש, מסמנים usedBy, ומוסיפים חברות והרשאה
+            // טרנזקציה: בדיקת קישור, סימון שימוש, הוספת חברות, וסימון ב-users/{uid}/sharedTrips/{tripId}
             await runTransaction(db, async (tx) => {
                 const shareRef = doc(db, "trips", tripId, "shareLinks", shareId);
                 const shareSnap = await tx.get(shareRef);
@@ -982,20 +972,21 @@
                     throw new Error('קישור השיתוף כבר נוצל.');
                 }
 
-                // סמן שימוש (או הותר אם אותו משתמש חוזר)
+                // סמן שימוש (או השאר אם זה אותו משתמש)
                 if (s.usedBy !== currentUser.uid) {
                     tx.update(shareRef, { usedBy: currentUser.uid, usedAt: serverTimestamp() });
                 }
 
-                // חבר את המשתמש לטיול
+                // חבר את המשתמש לטיול עם _shareId (נדרש לכללים)
                 const memRef = doc(db, "trips", tripId, "members", currentUser.uid);
                 tx.set(memRef, {
                     role: s.permission === 'edit' ? 'editor' : 'viewer',
                     source: 'link',
-                    since: serverTimestamp()
+                    since: serverTimestamp(),
+                    _shareId: shareId
                 }, { merge: true });
 
-                // שמור גם בפרופיל המשתמש לצורך תצוגה באינדקס (קטגוריית "שיתפו אותי")
+                // הצג ב"שוּתפו לי" אצל המשתמש (לנוחות ה-UI באינדקס)
                 const userSharedRef = doc(db, "users", currentUser.uid, "sharedTrips", tripId);
                 tx.set(userSharedRef, {
                     role: s.permission === 'edit' ? 'editor' : 'viewer',
@@ -1017,16 +1008,13 @@
         DOM.cancelLogoutBtn.addEventListener('click', () => DOM.logoutModal.classList.add('hidden'));
         DOM.confirmLogoutBtn.addEventListener('click', () => signOut(auth).then(() => window.location.href = 'index.html'));
 
-        // Settings listeners
+        // Settings
         DOM.settingsBtn.addEventListener('click', openSettingsModal);
         DOM.closeSettingsBtn.addEventListener('click', closeSettingsModal);
         DOM.saveSettingsBtn.addEventListener('click', saveSettings);
 
-        // Edit Destinations
-        DOM.openEditDestBtn.addEventListener('click', () => {
-            closeSettingsModal();
-            openEditDestinationsModal();
-        });
+        // Edit-destinations
+        DOM.openEditDestBtn.addEventListener('click', () => { closeSettingsModal(); openEditDestinationsModal(); });
         DOM.editDestClose.addEventListener('click', closeEditDestinationsModal);
         DOM.editDestCancel.addEventListener('click', closeEditDestinationsModal);
         DOM.addDestBtn.addEventListener('click', () => addDestRow());
@@ -1045,7 +1033,7 @@
             } catch { /* no-op */ }
         });
 
-        // --- Start the page ---
+        // --- Start ---
         initPage();
     </script>
 </body>
