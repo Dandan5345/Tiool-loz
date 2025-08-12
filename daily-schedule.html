@@ -1132,28 +1132,69 @@
         }
         
         function renderRouteMap(items) {
-            const locations = items.map(it => it.address).filter(addr => addr && addr.lat && addr.lng);
-            if (locations.length < 2) { mapContainerSection.classList.add('hidden'); return; }
+            // 1. Create a new, comprehensive list of all points to display on the map.
+            const allPoints = [];
+            const pointLabels = new Set(); // Use a Set to easily track unique labels to avoid duplicates.
+
+            items.forEach(item => {
+                // Add single address points
+                if (item.address && item.address.lat && item.address.lng) {
+                    const label = `${item.address.lat},${item.address.lng}`;
+                    if (!pointLabels.has(label)) {
+                        allPoints.push({
+                            ...item.address,
+                            title: item.title // Associate the item's title with the address
+                        });
+                        pointLabels.add(label);
+                    }
+                }
+                // Add destination points from travel items
+                if (item.travel && item.travel.to && item.travel.to.lat && item.travel.to.lng) {
+                    const label = `${item.travel.to.lat},${item.travel.to.lng}`;
+                     if (!pointLabels.has(label)) {
+                        allPoints.push({
+                            ...item.travel.to,
+                            title: item.title // Associate the item's title with the travel destination
+                        });
+                        pointLabels.add(label);
+                    }
+                }
+            });
+
+            // 2. Check if there are enough points to draw a map.
+            if (allPoints.length < 2) {
+                mapContainerSection.classList.add('hidden');
+                return;
+            }
+
+            // 3. Render the map
             mapContainerSection.classList.remove('hidden');
             if (mapInstance) { mapInstance.remove(); }
             mapInstance = L.map('route-map');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mapInstance);
+            
             const markers = [];
             const routeColors = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#d946ef'];
             mapLegend.innerHTML = '<p class="font-bold">מקרא מסלול:</p>';
-            locations.forEach((loc, i) => {
-                markers.push(L.marker([loc.lat, loc.lng]).addTo(mapInstance).bindPopup(`<b>${i+1}. ${items.find(it => it.address === loc).title}</b><br>${loc.label}`));
+
+            allPoints.forEach((point, i) => {
+                markers.push(L.marker([point.lat, point.lng]).addTo(mapInstance).bindPopup(`<b>${i + 1}. ${point.title}</b><br>${point.label}`));
+                
                 if (i > 0) {
-                    const prevLoc = locations[i-1];
+                    const prevPoint = allPoints[i - 1];
                     const color = routeColors[(i - 1) % routeColors.length];
-                    L.polyline([[prevLoc.lat, prevLoc.lng], [loc.lat, loc.lng]], { color: color }).addTo(mapInstance);
+                    L.polyline([[prevPoint.lat, prevPoint.lng], [point.lat, point.lng]], { color: color }).addTo(mapInstance);
+                    
                     const legendItem = document.createElement('div');
                     legendItem.className = 'flex items-center gap-2';
-                    legendItem.innerHTML = `<span class="w-4 h-1 inline-block" style="background-color: ${color};"></span><span>מ: ${prevLoc.label} <i class="fa-solid fa-arrow-left fa-xs"></i> ל: ${loc.label}</span>`;
+                    legendItem.innerHTML = `<span class="w-4 h-1 inline-block" style="background-color: ${color};"></span><span>מ: ${prevPoint.label} <i class="fa-solid fa-arrow-left fa-xs"></i> ל: ${point.label}</span>`;
                     mapLegend.appendChild(legendItem);
                 }
             });
-            if (markers.length > 0) { mapInstance.fitBounds(new L.featureGroup(markers).getBounds().pad(0.2)); }
+
+            if (markers.length > 0) {
+                mapInstance.fitBounds(new L.featureGroup(markers).getBounds().pad(0.2));
+            }
         }
 
         // ---------- Event Listeners & Settings ----------
