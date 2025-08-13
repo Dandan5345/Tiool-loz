@@ -144,7 +144,7 @@
             </button>
              <button id="add-expense-btn" class="md:col-span-1 glass rounded-2xl p-6 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
                 <i class="fas fa-dollar-sign text-3xl text-green-400"></i>
-                <div class="font-bold text-xl mt-3">הוסף הוצאה</div>
+                <div class="font-bold text-xl mt-3">הוצאות</div>
             </button>
         </div>
 
@@ -268,6 +268,12 @@
             <div id="destinations-container" class="flex-grow overflow-y-auto no-scrollbar p-1">
                 <!-- Destination forms will be injected here -->
             </div>
+            <div id="destination-footer" class="pt-4 border-t border-white/20">
+                 <div id="destination-actions" class="flex justify-center gap-3">
+                    <button id="add-destination-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">הוסף יעד</button>
+                    <button id="finish-destinations-btn" class="glass hover:bg-white/10 text-white font-bold py-2 px-4 rounded-lg">שמור יעדים והמשך</button>
+                </div>
+            </div>
         </div>
         <!-- Step 5: Review -->
         <div id="step-5" class="modal-content w-full h-full flex flex-col step-hidden">
@@ -278,9 +284,8 @@
       </main>
       <footer class="p-4 border-t border-white/20 flex justify-between">
         <button id="back-btn" class="glass hover:bg-white/10 text-white font-bold py-2 px-4 rounded-lg hidden">חזור</button>
-        <div id="footer-actions" class="flex-grow flex justify-end gap-3">
-             <!-- Buttons will be dynamically inserted here -->
-        </div>
+        <button id="next-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">הבא</button>
+        <button id="save-trip-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg hidden">שמור שינויים</button>
       </footer>
     </div>
   </div>
@@ -333,12 +338,15 @@
       modalTitle: document.getElementById('modal-title'),
       stepElems: Array.from({length: 5}, (_, i) => document.getElementById(`step-${i+1}`)),
       backBtn: document.getElementById('back-btn'),
-      footerActions: document.getElementById('footer-actions'),
+      nextBtn: document.getElementById('next-btn'),
+      saveTripBtn: document.getElementById('save-trip-btn'),
       tripNameInput: document.getElementById('trip-name'),
       tripDatesInput: document.getElementById('trip-dates'),
       tripImageUrlInput: document.getElementById('trip-image-url'),
       tripImagePreview: document.getElementById('trip-image-preview'),
       destinationsContainer: document.getElementById('destinations-container'),
+      addDestinationBtn: document.getElementById('add-destination-btn'),
+      finishDestinationsBtn: document.getElementById('finish-destinations-btn'),
       reviewMapContainer: document.getElementById('review-map'),
       reviewLegend: document.getElementById('review-legend'),
       stepDots: Array.from({length: 5}, (_, i) => document.getElementById(`step-dot-${i+1}`)),
@@ -559,31 +567,6 @@
     let reviewMap = null;
     let datePicker;
 
-    function updateFooterButtons() {
-        DOM.footerActions.innerHTML = ''; // Clear previous buttons
-        if (currentStep === 3) { // Destinations step
-            DOM.footerActions.innerHTML = `
-                <button id="add-destination-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">הוסף יעד נוסף</button>
-                <button id="finish-destinations-btn" class="glass hover:bg-white/10 text-white font-bold py-2 px-4 rounded-lg">צור מפת מסלול</button>
-            `;
-            document.getElementById('add-destination-btn').addEventListener('click', addDestinationForm);
-            document.getElementById('finish-destinations-btn').addEventListener('click', () => {
-                saveDestinationsFromForms();
-                if (tempDestinations.length === 0) {
-                    alert('יש להוסיף לפחות יעד אחד.');
-                    return;
-                }
-                setStep(currentStep + 1);
-            });
-        } else if (currentStep === DOM.stepElems.length - 1) { // Last step
-            DOM.footerActions.innerHTML = `<button id="save-trip-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">שמור שינויים</button>`;
-            document.getElementById('save-trip-btn').addEventListener('click', saveTrip);
-        } else { // Other steps
-            DOM.footerActions.innerHTML = `<button id="next-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">הבא</button>`;
-            document.getElementById('next-btn').addEventListener('click', () => setStep(currentStep + 1));
-        }
-    }
-    
     function updateStepperUI() {
       const totalSteps = DOM.stepElems.length;
       DOM.stepDots.forEach((dot, idx) => {
@@ -603,14 +586,23 @@
         if (currentStep === 1 && !DOM.tripDatesInput.value.trim()) {
           alert('יש לבחור תאריכים לטיול.'); return;
         }
+        if (currentStep === 3) {
+            saveDestinationsFromForms();
+            if (tempDestinations.length === 0) {
+                alert('יש להוסיף לפחות יעד אחד.'); return;
+            }
+        }
       }
       
       DOM.stepElems.forEach(el => el.classList.add('step-hidden'));
       currentStep = newStep;
       DOM.stepElems[currentStep].classList.remove('step-hidden');
       
+      const isDestinationStep = currentStep === 3;
       DOM.backBtn.classList.toggle('hidden', currentStep === 0);
-      updateFooterButtons();
+      DOM.nextBtn.classList.toggle('hidden', isDestinationStep || currentStep === DOM.stepElems.length - 1);
+      DOM.saveTripBtn.classList.toggle('hidden', currentStep !== DOM.stepElems.length - 1);
+      
       updateStepperUI();
 
       if (currentStep === 4) generateReviewMap();
@@ -629,6 +621,7 @@
         if (reviewMap) { reviewMap.remove(); reviewMap = null; }
         DOM.stepElems.forEach((el, idx) => el.classList.toggle('step-hidden', idx !== 0));
         DOM.modalTitle.textContent = 'יצירת טיול חדש';
+        DOM.saveTripBtn.textContent = 'שמור טיול';
         if (datePicker) datePicker.destroy();
     }
 
@@ -654,6 +647,7 @@
         const tripData = tripSnap.data();
 
         DOM.modalTitle.textContent = 'עריכת טיול';
+        DOM.saveTripBtn.textContent = 'שמור שינויים';
         DOM.tripNameInput.value = tripData.name || '';
         DOM.tripDatesInput.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
         DOM.tripImageUrlInput.value = tripData.coverImage || '';
@@ -689,27 +683,27 @@
         wrap.id = id;
         wrap.className = 'destination-form p-3 glass rounded-xl space-y-2 relative border border-white/15 mb-4';
         wrap.innerHTML = `
-            <button type="button" class="remove-dest-btn absolute top-2 left-2 text-red-400 hover:text-red-300 w-8 h-8 grid place-items-center" title="הסר יעד">
-            <i class="fa-solid fa-trash"></i>
+            <button type="button" class="remove-dest-btn absolute top-2 left-2 text-red-400 hover:text-red-300 w-8 h-8 grid place-content-center" title="הסר יעד">
+              <i class="fa-solid fa-trash"></i>
             </button>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-                <label class="block mb-1 text-sm font-semibold text-right">שם היעד</label>
-                <input type="text" class="dest-name-he w-full p-2 rounded-lg bg-white/10" value="${data.nameHe || ''}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <label class="block mb-1 text-xs font-semibold">שם היעד</label>
+                <input type="text" class="dest-name-he w-full p-2 rounded-lg bg-white/10 text-sm" value="${data.nameHe || ''}">
+              </div>
+              <div>
+                <label class="block mb-1 text-xs font-semibold">תאריכים</label>
+                <input type="text" class="dest-dates w-full p-2 rounded-lg bg-white/10 text-center text-sm" value="${data.dates || ''}">
+              </div>
             </div>
             <div>
-                <label class="block mb-1 text-sm font-semibold text-right">תאריכים</label>
-                <input type="text" class="dest-dates w-full p-2 rounded-lg bg-white/10 text-center" value="${data.dates || ''}">
+              <label class="block mb-1 text-xs font-semibold">חיפוש באנגלית</label>
+              <div class="flex gap-2">
+                <input type="text" class="dest-name-en w-full p-2 rounded-lg bg-white/10 text-sm" placeholder="Paris, France" value="${data.nameEn || ''}">
+                <button type="button" class="find-map-btn bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg text-sm">מצא</button>
+              </div>
             </div>
-            </div>
-            <div>
-            <label class="block mb-1 text-sm font-semibold text-right">חיפוש באנגלית</label>
-            <div class="flex gap-2">
-                <input type="text" class="dest-name-en w-full p-2 rounded-lg bg-white/10" placeholder="Paris, France" value="${data.nameEn || ''}">
-                <button type="button" class="find-map-btn bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg">מצא</button>
-            </div>
-            </div>
-            <div class="dest-map w-full h-40 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
+            <div class="dest-map w-full h-32 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
             <div class="dest-coords hidden">${JSON.stringify(data.coords || null)}</div>
         `;
         DOM.destinationsContainer.appendChild(wrap);
@@ -722,10 +716,8 @@
             L.marker([data.coords.lat, data.coords.lng]).addTo(map);
             map.setView([data.coords.lat, data.coords.lng], 10);
         }
-        setTimeout(() => {
-            map.invalidateSize();
-            wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
+        setTimeout(() => map.invalidateSize(), 100);
+        wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     
     function saveDestinationsFromForms() {
@@ -741,6 +733,8 @@
             });
         });
     }
+
+    DOM.finishDestinationsBtn.addEventListener('click', () => setStep(currentStep + 1));
 
     DOM.destinationsContainer.addEventListener('click', async (e) => {
         const findBtn = e.target.closest('.find-map-btn');
@@ -815,9 +809,8 @@
         coverImage: DOM.tripImageUrlInput.value.trim() || null,
         destinations: tempDestinations
       };
-      
-      const saveBtn = document.getElementById('save-trip-btn');
-      saveBtn.textContent = 'שומר...'; saveBtn.disabled = true;
+
+      DOM.saveTripBtn.textContent = 'שומר...'; DOM.saveTripBtn.disabled = true;
       try {
         if (currentEditTripId) {
             const tripRef = doc(db, "trips", currentEditTripId);
@@ -838,7 +831,7 @@
       } catch (err) {
         console.error('Error saving document:', err);
       } finally {
-        saveBtn.textContent = 'שמור שינויים'; saveBtn.disabled = false;
+        DOM.saveTripBtn.textContent = 'שמור שינויים'; DOM.saveTripBtn.disabled = false;
       }
     }
 
@@ -851,7 +844,10 @@
     });
     DOM.modalBackdrop.addEventListener('click', closeModal);
 
+    DOM.nextBtn.addEventListener('click', () => setStep(currentStep + 1));
     DOM.backBtn.addEventListener('click', () => setStep(currentStep - 1));
+    DOM.addDestinationBtn.addEventListener('click', () => addDestinationForm());
+    DOM.saveTripBtn.addEventListener('click', saveTrip);
 
   </script>
 </body>
