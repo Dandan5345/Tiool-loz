@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>לו״ז טיול בקלות</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -30,6 +30,8 @@
     .glass { background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border); }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
 
     #loading-overlay { transition: opacity .4s ease; }
 
@@ -42,7 +44,7 @@
     }
 
     .modal-content { transition: opacity .25s, transform .25s; }
-    .step-hidden { opacity: 0; transform: translateY(10px); position: absolute; pointer-events: none; }
+    .step-hidden { opacity: 0; transform: translateY(10px); position: absolute; pointer-events: none; inset: 0; }
     .leaflet-container { z-index: 10; border-radius: .75rem; }
 
     .toggle { --w:44px; --h:24px; width:var(--w); height:var(--h); background:#e5e7eb; border-radius:999px; position:relative; transition:background .2s }
@@ -53,6 +55,14 @@
     .step-dot { width:24px; height:24px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; transition: all .3s ease; font-size: 12px; }
     .step-dot.active { background:#2563eb; color:white; }
     .step-dot.inactive { background: var(--glass); color: #94a3b8; }
+
+    .sticky-actions {
+      position: sticky; bottom: 0; z-index: 20;
+      background: linear-gradient(180deg, rgba(11,16,32,0) 0%, rgba(11,16,32,0.6) 20%, rgba(11,16,32,0.9) 100%);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-top: 1px solid var(--glass-border);
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-slate-200 selection:bg-blue-600/40">
@@ -106,35 +116,34 @@
       </div>
 
       <div id="main-content" class="hidden">
-        <!-- ↓↓ הוקטן כדי שהכפתור "הוסף הוצאה" יהיה קרוב יותר למעלה ↓↓ -->
+        <!-- הוקטן כדי שכפתור "הוסף הוצאה" יהיה קרוב יותר למעלה -->
         <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl mx-auto">
-            <button id="create-trip-btn" class="glass rounded-2xl p-5 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
-                <i class="fa-solid fa-plus text-3xl text-blue-400"></i>
-                <div class="font-bold text-xl mt-3">יצירת לו"ז חדש</div>
-                <div class="text-slate-300/80 text-sm mt-1">התחילו לתכנן את ההרפתקה הבאה.</div>
-            </button>
-            <button id="toggle-trips-btn" class="glass rounded-2xl p-5 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
-                <i class="fas fa-suitcase-rolling text-3xl text-purple-400"></i>
-                <div class="font-bold text-xl mt-3">הלו"זים שלי</div>
-                <div class="text-slate-300/80 text-sm mt-1">צפייה ועריכה של כל הטיולים שלך.</div>
-            </button>
+          <button id="create-trip-btn" class="glass rounded-2xl p-5 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
+            <i class="fa-solid fa-plus text-3xl text-blue-400"></i>
+            <div class="font-bold text-xl mt-3">יצירת לו"ז חדש</div>
+            <div class="text-slate-300/80 text-sm mt-1">התחילו לתכנן את ההרפתקה הבאה.</div>
+          </button>
+          <button id="toggle-trips-btn" class="glass rounded-2xl p-5 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
+            <i class="fas fa-suitcase-rolling text-3xl text-purple-400"></i>
+            <div class="font-bold text-xl mt-3">הלו"זים שלי</div>
+            <div class="text-slate-300/80 text-sm mt-1">צפייה ועריכה של כל הטיולים שלך.</div>
+          </button>
         </div>
         <div class="mt-4 text-center">
-            <button id="add-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition">
-                <i class="fas fa-dollar-sign mr-2"></i>
-                הוסף הוצאה
-            </button>
+          <button id="add-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition">
+            <i class="fas fa-dollar-sign mr-2"></i>
+            הוסף הוצאה
+          </button>
         </div>
-        <!-- ↑↑ סוף הקטנה של הכפתורים ↑↑ -->
 
         <div id="trips-container" class="hidden mt-10">
-            <h2 class="text-3xl font-bold text-center mb-8">הטיולים שלי</h2>
-            <div id="trips-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
-            <div id="no-trips-message" class="hidden text-center glass rounded-xl p-8 max-w-lg mx-auto">
-                <i class="fas fa-map-signs text-4xl text-slate-400 mb-4"></i>
-                <h3 class="text-xl font-semibold">עדיין אין לך טיולים</h3>
-                <p class="text-slate-300 mt-2">לחץ/י על "יצירת לו"ז חדש" כדי להתחיל לתכנן.</p>
-            </div>
+          <h2 class="text-3xl font-bold text-center mb-8">הטיולים שלי</h2>
+          <div id="trips-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+          <div id="no-trips-message" class="hidden text-center glass rounded-xl p-8 max-w-lg mx-auto">
+            <i class="fas fa-map-signs text-4xl text-slate-400 mb-4"></i>
+            <h3 class="text-xl font-semibold">עדיין אין לך טיולים</h3>
+            <p class="text-slate-300 mt-2">לחץ/י על "יצירת לו"ז חדש" כדי להתחיל לתכנן.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -187,11 +196,10 @@
   <div id="add-expense-modal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
     <div class="glass rounded-2xl w-full max-w-lg p-6 text-center">
       <header class="flex justify-between items-center mb-4">
-        <h2 class="text-2ל font-bold">הוספת הוצאה</h2>
+        <h2 class="text-2xl font-bold">הוספת הוצאה</h2>
         <button data-close-modal class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
       </header>
       <p class="text-slate-200/90">כאן יופיע הטופס להוספת הוצאות.</p>
-      <!-- Expense form will go here in the future -->
     </div>
   </div>
 
@@ -209,9 +217,11 @@
         <h2 id="modal-title" class="text-lg sm:text-xl font-bold">יצירת טיול חדש</h2>
         <button data-close-modal class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
       </header>
+
       <div class="w-full h-1 bg-white/10"><div id="step-progress" class="h-1 bg-blue-500 transition-all duration-300"></div></div>
 
-      <main class="p-6 flex-grow relative overflow-hidden">
+      <!-- אזור התוכן של המודל הוא כעת מכולת גלילה עיקרית -->
+      <main class="p-6 pt-4 flex-1 min-h-0 relative scroll-y no-scrollbar">
         <!-- Step 1: Name -->
         <div id="step-1" class="modal-content w-full">
           <h3 class="text-xl font-semibold text-center mb-4">מה שם הטיול?</h3>
@@ -237,24 +247,22 @@
           </div>
         </div>
 
-        <!-- Step 4: Destinations (חדש: תצוגה-למסך + טופס-יעד נפרד) -->
+        <!-- Step 4: Destinations (תצוגת רשימה + טופס יעד דף-נקי) -->
         <div id="step-4" class="modal-content w-full h-full step-hidden">
-          <!-- רשימת יעדים קומפקטית -->
-          <div id="dest-list-view" class="w-full h-full overflow-y-auto no-scrollbar">
+          <!-- רשימת יעדים -->
+          <div id="dest-list-view">
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-xl font-semibold">היעדים בטיול</h3>
               <button id="add-destination-btn" class="glass font-semibold px-3 py-2 rounded-lg hover:bg-white/10">
                 <i class="fas fa-plus-circle ml-1"></i> הוסף יעד
               </button>
             </div>
-            <div id="destinations-list" class="space-y-2">
-              <!-- פריטים יוזרקו כאן -->
-            </div>
+            <div id="destinations-list" class="space-y-2"></div>
             <div id="no-dests" class="text-slate-300 text-sm mt-4">טרם הוספת יעדים. לחץ/י “הוסף יעד”.</div>
           </div>
 
           <!-- טופס יעד אחד בכל פעם -->
-          <div id="dest-form-view" class="hidden w-full h-full overflow-y-auto no-scrollbar">
+          <div id="dest-form-view" class="hidden">
             <h3 class="text-xl font-semibold mb-3" id="dest-form-title">הוספת יעד</h3>
             <div class="p-4 glass rounded-xl space-y-3 border border-white/15">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -275,9 +283,13 @@
                 </div>
               </div>
               <div id="dest-form-map" class="w-full h-48 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
-              <div class="flex justify-end gap-3 pt-2">
-                <button id="cancel-destination-btn" class="glass px-4 py-2 rounded-lg hover:bg-white/10">ביטול</button>
-                <button id="save-destination-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold">שמור יעד</button>
+
+              <!-- סרגל כפתורים דביק בתחתית הטופס כדי שתמיד יהיו נגישים -->
+              <div class="sticky-actions safe-bottom mt-4 pt-3">
+                <div class="flex justify-end gap-3">
+                  <button id="cancel-destination-btn" class="glass px-4 py-2 rounded-lg hover:bg-white/10">ביטול</button>
+                  <button id="save-destination-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold">שמור יעד</button>
+                </div>
               </div>
             </div>
           </div>
@@ -357,7 +369,8 @@
       tripImagePreview: document.getElementById('trip-image-preview'),
       stepDots: Array.from({length: 5}, (_, i) => document.getElementById(`step-dot-${i+1}`)),
       stepProgress: document.getElementById('step-progress'),
-      // Destinations (תצוגה חדשה)
+
+      // יעדים – מצב “רשימה/טופס”
       destListView: document.getElementById('dest-list-view'),
       destinationsList: document.getElementById('destinations-list'),
       addDestinationBtn: document.getElementById('add-destination-btn'),
@@ -589,7 +602,6 @@
       if (newStep > currentStep) {
         if (currentStep === 0 && !DOM.tripNameInput.value.trim()) { alert('יש למלא שם לטיול.'); return; }
         if (currentStep === 1 && !DOM.tripDatesInput.value.trim()) { alert('יש לבחור תאריכים לטיול.'); return; }
-        // מעבר משלב 4 (אינדקס 3) לשלב 5 – חייבים לפחות יעד אחד
         if (currentStep === 3 && destinations.length === 0) { alert('יש להוסיף לפחות יעד אחד.'); return; }
       }
 
@@ -614,17 +626,19 @@
       DOM.tripImageUrlInput.value = '';
       DOM.tripImagePreview.style.backgroundImage = 'none';
       DOM.tripImagePreview.innerHTML = '<i class="fas fa-image text-4xl"></i>';
+
       // יעדים
       destinations = [];
       editingIndex = null;
       renderDestList();
-      showDestList(); // מצב רשימה כברירת מחדל
+      showDestList();
+
       if (formMap) { formMap.remove(); formMap = null; formMarker = null; }
       if (reviewMap) { reviewMap.remove(); reviewMap = null; }
       if (destDatePicker) { destDatePicker.destroy(); destDatePicker = null; }
       DOM.stepElems.forEach((el, idx) => el.classList.toggle('step-hidden', idx !== 0));
       DOM.modalTitle.textContent = 'יצירת טיול חדש';
-      DOM.saveTripBtn.textContent = 'שמור טיול';
+      DOM.saveTripBtn.textContent = 'שמור שינויים';
       if (datePicker) datePicker.destroy();
     }
 
@@ -685,11 +699,13 @@
     }
 
     function showDestList() {
-      // השבתה של טופס
       DOM.destFormView.classList.add('hidden');
       DOM.destListView.classList.remove('hidden');
       if (formMap) { formMap.remove(); formMap = null; formMarker = null; }
       if (destDatePicker) { destDatePicker.destroy(); destDatePicker = null; }
+      // גלול לראש של צעד 4 כל פעם שחוזרים לרשימה
+      const step4 = document.getElementById('step-4');
+      step4.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function openDestForm(index = null) {
@@ -703,11 +719,11 @@
       DOM.destNameEnInput.value = data.nameEn || '';
       DOM.destDatesInput.value = data.dates || '';
 
-      // init date picker for form
+      // date picker עבור טופס יעד
       if (destDatePicker) destDatePicker.destroy();
       destDatePicker = new Litepicker({ element: DOM.destDatesInput, singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
 
-      // init map once visible
+      // מפת הטופס – לייצר רק לאחר שהטופס נראה
       setTimeout(() => {
         if (formMap) { formMap.remove(); formMap = null; formMarker = null; }
         formMap = L.map(DOM.destFormMapContainer).setView([20, 0], 2);
@@ -717,6 +733,8 @@
           formMap.setView([data.coords.lat, data.coords.lng], 10);
         }
         setTimeout(() => formMap.invalidateSize(), 150);
+        // גלילה לראש הטופס כדי שהכפתורים לא “יברחו” מאחורי המקלדת
+        DOM.destFormView.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 0);
     }
 
