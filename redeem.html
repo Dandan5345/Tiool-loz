@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>הצטרפות לטיול</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    body{font-family:'Assistant',sans-serif}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-100 text-slate-800">
+  <div class="max-w-lg mx-auto pt-16 px-4">
+    <div class="bg-white rounded-2xl shadow p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white grid place-items-center">
+          <i class="fa-solid fa-link"></i>
+        </div>
+        <h1 class="text-xl font-bold">מצטרפים לטיול…</h1>
+      </div>
+      <p id="status" class="text-slate-600">בודק את הקישור…</p>
+      <div id="actions" class="mt-6 hidden">
+        <a id="go-trip" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg">עבור לטיול</a>
+      </div>
+      <div id="error" class="mt-4 text-red-600 font-semibold hidden"></div>
+    </div>
+    <p class="mt-6 text-center text-sm text-slate-500">אם אין לך משתמש, נכוון אותך להתחברות/הרשמה ואז נחזור לפה אוטומטית.</p>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { 
+      getFirestore, doc, runTransaction, serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    // --- Firebase ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+      authDomain: "tiool-loz.firebaseapp.com",
+      projectId: "tiool-loz",
+      storageBucket: "tiool-loz.appspot.com",
+      messagingSenderId: "226069823505",
+      appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const qs = new URLSearchParams(location.search);
+    const token = qs.get('token');
+
+    const statusEl = document.getElementById('status');
+    const errEl = document.getElementById('error');
+    const actions = document.getElementById('actions');
+    const goBtn = document.getElementById('go-trip');
+
+    if (!token) {
+      statusEl.textContent = '';
+      errEl.textContent = 'קישור שגוי: חסר token.';
+      errEl.classList.remove('hidden');
+      throw new Error('Missing token');
+    }
+
+    function redirectToLogin(){
+      // שומרים לאן לחזור אחרי Login
+      const back = encodeURIComponent(location.href);
+      location.href = `login.html?redirect=${back}`;
+    }
+
+    async function redeem(user){
+      statusEl.textContent = 'מצרף אותך לטיול…';
+      try{
+        let tripId = null;
+
+        await runTransaction(db, async (tx) => {
+          const linkRef = doc(db, 'shareLinks', token);
+          const linkSnap = await tx.get(linkRef);
+          if (!linkSnap.exists()) throw new Error('NOT_FOUND');
+
+          const link = linkSnap.data();
+          if (link.usedBy) throw new Error('ALREADY_USED');
+
+          // 1) קיבוע הטוקן
+          tx.update(linkRef, { usedBy: user.uid, redeemedAt: serverTimestamp() });
+
+          // 2) הוספת חברות לטיול
+          const memberRef = doc(db, 'trips', link.tripId, 'members', user.uid);
+          tx.set(memberRef, {
+            uid: user.uid,
+            role: link.role,          // 'viewer' | 'editor'
+            viaToken: token,
+            addedAt: serverTimestamp()
+          }, { merge: true });
+
+          // 3) הוספה לרשימת "ששותפו איתי"
+          const sharedRef = doc(db, 'users', user.uid, 'sharedTrips', link.tripId);
+          tx.set(sharedRef, {
+            tripId: link.tripId,
+            role: link.role,
+            ownerId: link.ownerId,
+            addedAt: serverTimestamp()
+          }, { merge: true });
+
+          tripId = link.tripId;
+        });
+
+        statusEl.textContent = 'הצטרפת בהצלחה! מעביר אותך לדף הטיול…';
+        actions.classList.remove('hidden');
+        goBtn.href = `trip.html?id=${encodeURIComponent(tripId)}`;
+        // מעבר אוטומטי קטן
+        setTimeout(()=> location.href = goBtn.href, 800);
+
+      }catch(e){
+        console.error(e);
+        statusEl.textContent = '';
+        let msg = 'לא ניתן לפדות את הקישור.';
+        if (e.message === 'NOT_FOUND') msg = 'הקישור לא קיים או שנמחק.';
+        else if (e.message === 'ALREADY_USED') msg = 'הקישור כבר מומש על ידי משתמש אחר.';
+        else if (e.code === 'permission-denied') msg = 'פג תוקף הקישור או שאין הרשאה (ייתכן שפג הזמן של שעתיים).';
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        statusEl.textContent = 'מכוון להתחברות…';
+        redirectToLogin();
+      } else {
+        redeem(user);
+      }
+    });
+  </script>
+</body>
+</html>
