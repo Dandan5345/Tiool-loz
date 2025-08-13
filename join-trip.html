@@ -3,60 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>הצטרפות לטיול</title>
-
-    <!-- Tailwind + Icons + Font -->
+    <title>מצטרף לטיול...</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            font-family: 'Assistant', sans-serif;
-        }
-        #bg-gradient {
-            background:
-                radial-gradient(1200px 800px at 85% -10%, rgba(59,130,246,0.35), transparent 60%),
-                radial-gradient(1000px 700px at 0% 100%, rgba(168,85,247,0.35), transparent 60%),
-                linear-gradient(180deg, #0f172a 0%, #111827 65%, #0b1020 100%);
+        body { 
+            font-family: 'Assistant', sans-serif; 
+            background-color: #f8fafc;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white">
-    <!-- Background -->
-    <div id="bg-gradient" class="fixed inset-0 -z-10"></div>
+<body class="bg-slate-100 text-slate-800">
 
-    <div class="flex items-center justify-center min-h-screen p-4">
-        <div id="status-container" class="w-full max-w-md text-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-8 shadow-2xl">
-            <!-- Initial State -->
-            <div id="loading-state">
-                <i class="fas fa-spinner fa-spin text-5xl text-blue-400"></i>
-                <h1 class="text-2xl font-bold mt-4">מאמת את ההזמנה...</h1>
-                <p class="text-slate-300 mt-2">רק רגע, אנחנו בודקים את הקישור שלך.</p>
-            </div>
-
-            <!-- Error State -->
-            <div id="error-state" class="hidden">
-                <i class="fas fa-exclamation-triangle text-5xl text-red-400"></i>
-                <h1 id="error-title" class="text-2xl font-bold mt-4">אירעה שגיאה</h1>
-                <p id="error-message" class="text-slate-300 mt-2">ההזמנה אינה חוקית או שכבר נעשה בה שימוש.</p>
-                <a href="index.html" class="inline-block mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">חזור לדף הבית</a>
-            </div>
-
-            <!-- Login Required State -->
-            <div id="login-state" class="hidden">
-                <i class="fas fa-sign-in-alt text-5xl text-yellow-400"></i>
-                <h1 class="text-2xl font-bold mt-4">נדרשת התחברות</h1>
-                <p class="text-slate-300 mt-2">כדי להצטרף לטיול, עליך להתחבר או להירשם למערכת.</p>
-                <a href="login.html" id="login-redirect-btn" class="inline-block mt-6 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg">התחברות / הרשמה</a>
-            </div>
+    <div class="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+        <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+            <i id="status-icon" class="fas fa-spinner fa-spin text-5xl text-blue-600 mb-6"></i>
+            <h1 id="status-title" class="text-3xl font-bold mb-2">מאמת את ההזמנה שלך...</h1>
+            <p id="status-message" class="text-slate-600">אנא המתן רגע, אנחנו מצרפים אותך לטיול.</p>
+            <a href="index.html" id="home-link" class="hidden mt-8 inline-block bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition">חזור לדף הבית</a>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -72,116 +47,96 @@
         const db = getFirestore(app);
 
         // --- DOM Elements ---
-        const DOM = {
-            loadingState: document.getElementById('loading-state'),
-            errorState: document.getElementById('error-state'),
-            loginState: document.getElementById('login-state'),
-            errorTitle: document.getElementById('error-title'),
-            errorMessage: document.getElementById('error-message'),
-            loginRedirectBtn: document.getElementById('login-redirect-btn'),
-        };
+        const statusIcon = document.getElementById('status-icon');
+        const statusTitle = document.getElementById('status-title');
+        const statusMessage = document.getElementById('status-message');
+        const homeLink = document.getElementById('home-link');
 
-        function showState(state, title = '', message = '') {
-            DOM.loadingState.classList.add('hidden');
-            DOM.errorState.classList.add('hidden');
-            DOM.loginState.classList.add('hidden');
-
-            if (state === 'error') {
-                DOM.errorTitle.textContent = title;
-                DOM.errorMessage.textContent = message;
-                DOM.errorState.classList.remove('hidden');
-            } else if (state === 'login') {
-                DOM.loginState.classList.remove('hidden');
-            } else {
-                DOM.loadingState.classList.remove('hidden');
+        // --- UI Update Function ---
+        function updateStatus(icon, title, message, showHomeButton = false) {
+            statusIcon.className = `${icon} text-5xl mb-6`;
+            statusTitle.textContent = title;
+            statusMessage.textContent = message;
+            if (showHomeButton) {
+                homeLink.classList.remove('hidden');
             }
         }
 
-        async function processJoinRequest(user) {
+        // --- Main Logic ---
+        async function claimInvite(token, user) {
             try {
-                const urlParams = new URLSearchParams(window.location.search);
-                const tokenId = urlParams.get('token');
+                const tripId = await runTransaction(db, async (transaction) => {
+                    const inviteRef = doc(db, "invites", token);
+                    const inviteDoc = await transaction.get(inviteRef);
 
-                if (!tokenId) {
-                    return showState('error', 'קישור לא תקין', 'לא נמצא קוד הזמנה בקישור.');
-                }
-
-                // Use a transaction to ensure atomicity: read trip, update trip, and update token together.
-                await runTransaction(db, async (transaction) => {
-                    const tokenRef = doc(db, "shareTokens", tokenId);
-                    const tokenSnap = await transaction.get(tokenRef);
-
-                    if (!tokenSnap.exists() || tokenSnap.data().used) {
-                        throw new Error('הקישור אינו חוקי או שכבר נעשה בו שימוש.');
+                    // 1. Validate the invitation
+                    if (!inviteDoc.exists()) {
+                        throw new Error("הזמנה לא קיימת. ייתכן שהקישור שגוי.");
                     }
 
-                    const tokenData = tokenSnap.data();
-                    const twoHoursInMillis = 2 * 60 * 60 * 1000;
-                    const tokenAge = Date.now() - tokenData.createdAt.toMillis();
+                    const inviteData = inviteDoc.data();
 
-                    if (tokenAge > twoHoursInMillis) {
-                        transaction.update(tokenRef, { used: true, reason: 'expired' });
-                        throw new Error('ההזמנה פגה תוקף.');
+                    if (inviteData.claimedBy) {
+                        throw new Error("הזמנה זו כבר נוצלה.");
                     }
                     
-                    if (tokenData.createdBy === user.uid) {
-                        // This isn't an error, just redirect the owner.
-                        // We do it outside the transaction.
-                        return { redirect: `trip.html?id=${tokenData.tripId}` };
+                    if (inviteData.expiresAt.toMillis() < Date.now()) {
+                        throw new Error("פג תוקפה של הזמנה זו.");
                     }
 
-                    const tripRef = doc(db, "trips", tokenData.tripId);
-                    const tripSnap = await transaction.get(tripRef);
-
-                    if (!tripSnap.exists()) {
-                        throw new Error('הטיול המקורי שאליו הוזמנת נמחק.');
+                    if (inviteData.createdBy === user.uid) {
+                        throw new Error("לא ניתן לקבל הזמנה שיצרת בעצמך.");
                     }
+                    
+                    const { tripId, role } = inviteData;
+                    const tripRef = doc(db, "trips", tripId);
+                    const userRef = doc(db, "users", user.uid);
 
-                    // --- FIX START: Construct the new members map explicitly ---
-                    const currentMembers = tripSnap.data().members || {};
-                    const newMembers = {
-                        ...currentMembers,
-                        [user.uid]: tokenData.permission // Add the new user
-                    };
-                    // --- FIX END ---
-
-                    // Perform the writes
-                    transaction.update(tripRef, { members: newMembers });
-                    transaction.update(tokenRef, {
-                        used: true,
-                        usedBy: user.uid,
-                        usedAt: serverTimestamp()
-                    });
-
-                    // Return the redirect URL on success
-                    return { redirect: `trip.html?id=${tokenData.tripId}` };
-                }).then(result => {
-                    if (result && result.redirect) {
-                        window.location.replace(result.redirect);
-                    }
-                }).catch(err => {
-                    // Catch errors from inside the transaction
-                    showState('error', 'שגיאה בתהליך ההצטרפות', err.message);
+                    // 2. Perform the atomic updates
+                    // Using dot notation to update a specific field in a map
+                    transaction.update(tripRef, { [`permissions.${user.uid}`]: role });
+                    transaction.update(userRef, { sharedTripIds: arrayUnion(tripId) });
+                    transaction.update(inviteRef, { claimedBy: user.uid });
+                    
+                    return tripId; // Return tripId on success
                 });
 
+                // Success!
+                updateStatus('fas fa-check-circle text-green-500', 'הצטרפת בהצלחה!', 'הטיול נוסף לחשבונך. מיד תועבר לדף הטיול...');
+                setTimeout(() => {
+                    window.location.href = `trip.html?id=${tripId}`;
+                }, 2500);
+
             } catch (error) {
-                // Catch setup errors before the transaction
-                console.error("Error processing join request:", error);
-                showState('error', 'שגיאה כללית', 'אירעה שגיאה לא צפויה.');
+                console.error("Failed to claim invite:", error);
+                const errorMessage = error.message || "אירעה שגיאה לא צפויה. נסה שוב מאוחר יותר.";
+                updateStatus('fas fa-times-circle text-red-500', 'שגיאה', errorMessage, true);
             }
         }
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                processJoinRequest(user);
-            } else {
-                const loginUrl = new URL(DOM.loginRedirectBtn.href, window.location.origin);
-                loginUrl.searchParams.set('redirectUrl', window.location.href);
-                DOM.loginRedirectBtn.href = loginUrl.toString();
-                showState('login');
+        // --- Page Load ---
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            if (!token) {
+                updateStatus('fas fa-exclamation-triangle text-yellow-500', 'קישור שגוי', 'לא נמצא מזהה הזמנה בקישור.', true);
+                return;
             }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    // User is logged in, proceed to claim the invite
+                    claimInvite(token, user);
+                } else {
+                    // User is not logged in, redirect to login page
+                    alert("כדי להצטרף לטיול, עליך להתחבר תחילה.");
+                    // Save current URL to redirect back after login
+                    const redirectUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `login.html?redirectUrl=${redirectUrl}`;
+                }
+            });
         });
     </script>
 </body>
 </html>
-
