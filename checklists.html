@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>רשימות וצ'ק־ליסטים</title>
 
-  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Icons + Font -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet" />
 
@@ -45,14 +43,12 @@
   </style>
 </head>
 <body>
-  <!-- Background -->
   <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image:url('https://i.imgur.com/IrS6mDW.jpeg')"></div>
   <div class="fixed inset-0 z-0 bg-black/50"></div>
 
   <div class="relative z-10">
     <div id="loader"><i class="fas fa-plane-departure fa-spin fa-3x text-blue-500"></i></div>
 
-    <!-- Sidebar -->
     <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
       <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
         <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
@@ -61,7 +57,6 @@
       <nav id="main-menu" class="p-4 space-y-2"></nav>
     </aside>
 
-    <!-- Page -->
     <div id="main-content" class="min-h-screen">
       <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -94,7 +89,6 @@
 
     <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden"></div>
 
-    <!-- Create/Edit Checklist Modal -->
     <div id="checklist-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
@@ -149,7 +143,6 @@
       </div>
     </div>
 
-    <!-- Delete Modal -->
     <div id="delete-modal" class="fixed inset-0 bg-black/60 z-[70] hidden items-center justify-center">
       <div class="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full">
         <div class="text-red-500 mb-4"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
@@ -305,10 +298,9 @@
 
     // --- Auth & initial load ---
     onAuthStateChanged(auth, async (user)=>{
-      if (!user) { location.href = 'login.html'; return; }
+      if (!user) { location.href = `login.html?redirect=${encodeURIComponent(window.location.href)}`; return; }
       currentUser = user;
 
-      // Greeting
       try{
         const udoc = await getDoc(doc(db,'users', user.uid));
         const name = udoc.exists() ? (udoc.data().name || 'משתמש') : 'משתמש';
@@ -318,21 +310,35 @@
         document.getElementById('sign-out-btn').addEventListener('click', ()=>signOut(auth));
       }catch{}
 
-      await loadTrip();
-      initRealtimeChecklists();
-      loader.style.opacity = '0';
-      setTimeout(()=> loader.style.display = 'none', 500);
+      await loadTripAndCheckPermissions();
     });
 
-    async function loadTrip(){
+    async function loadTripAndCheckPermissions(){
       const tdoc = await getDoc(doc(db,'trips', tripId));
-      if (!tdoc.exists()) { alert('הטיול לא נמצא'); location.href='index.html'; return; }
-      const data = tdoc.data();
-      if (data.ownerId !== currentUser.uid) { alert('אין הרשאה לטיול זה'); location.href='index.html'; return; }
-      tripData = data;
-      // קישור חזרה לעמוד הטיול
-      document.getElementById('home-link').href = `trip.html?id=${tripId}`;
-      buildSidebarMenu();
+      
+      // --- 🚩 THIS IS THE UPDATED PERMISSION CHECK 🚩 ---
+      if (tdoc.exists()) {
+        const data = tdoc.data();
+        const canAccess = data.editors && data.editors.includes(currentUser.uid);
+        
+        if (canAccess) {
+            // User has permission, continue loading the page
+            tripData = data;
+            document.getElementById('home-link').href = `trip.html?id=${tripId}`;
+            buildSidebarMenu();
+            initRealtimeChecklists();
+            loader.style.opacity = '0';
+            setTimeout(()=> loader.style.display = 'none', 500);
+        } else {
+            // User does not have permission
+            alert('אין לך הרשאה לצפות בטיול זה.');
+            location.href = 'index.html';
+        }
+      } else {
+        // Trip does not exist
+        alert('הטיול לא נמצא.');
+        location.href='index.html';
+      }
     }
 
     // --- Firestore paths ---
@@ -351,7 +357,6 @@
 
     // --- Grouping + rendering ---
     const getEmoji = (category, value)=>{
-      // מינימלי – אפשר להרחיב
       const map = {
         types: {'לפני הטיול':'✈️','לפני יעד':'🗺️','לפני מעבר':'🚚','אחר':'📋'},
         topics:{'בגדים':'👕','מסמכים':'📄','קניות':'🛒','ציוד':'🎒','הזמנות':'🎟️','אישורים':'✔️'}
