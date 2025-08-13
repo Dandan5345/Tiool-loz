@@ -22,16 +22,9 @@
         .modal {
             transition: opacity 0.3s ease, visibility 0.3s ease;
         }
-        .modal.hidden {
-            opacity: 0;
-            visibility: hidden;
-        }
-        .modal-content {
-            transition: transform 0.3s ease;
-        }
-        .modal.hidden .modal-content {
-            transform: scale(0.95);
-        }
+        .modal.hidden { opacity: 0; visibility: hidden; }
+        .modal-content { transition: transform 0.3s ease; }
+        .modal.hidden .modal-content { transform: scale(0.95); }
         .trip-card {
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
@@ -89,7 +82,7 @@
                             <p class="text-slate-500">עדיין לא יצרת טיולים. <a href="index.html" class="text-blue-600 font-bold">צור טיול חדש</a></p>
                         </div>
                     </div>
-                     <!-- Shared With Me -->
+                    <!-- Shared With Me -->
                     <div>
                         <h2 class="text-2xl font-extrabold text-slate-800 mb-4">טיולים ששותפו איתי</h2>
                         <div id="shared-trips-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
@@ -136,7 +129,10 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import {
+            getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot,
+            updateDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp, getDocs, deleteField
+        } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -185,6 +181,22 @@
             return s;
         };
 
+        const chunk = (arr, size = 10) => {
+            const out = [];
+            for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+            return out;
+        };
+
+        async function getDocsByIds(colPath, ids) {
+            const results = [];
+            for (const part of chunk(ids, 10)) {
+                const q = query(collection(db, colPath), where("__name__", "in", part));
+                const snap = await getDocs(q);
+                snap.forEach(d => results.push({ id: d.id, ...d.data() }));
+            }
+            return results;
+        }
+
         // --- Initialization ---
         onAuthStateChanged(auth, user => {
             unsubscribers.forEach(unsub => unsub());
@@ -216,7 +228,7 @@
             });
             unsubscribers.push(unsubMyTrips);
 
-            // Shared Trips
+            // Shared Trips (ids -> chunked IN)
             const sharedTripsQuery = collection(db, "users", uid, "sharedTrips");
             const unsubSharedTrips = onSnapshot(sharedTripsQuery, async (snapshot) => {
                 const sharedRefs = snapshot.docs.map(doc => doc.data());
@@ -225,9 +237,7 @@
                     return;
                 }
                 const tripIds = sharedRefs.map(ref => ref.tripId);
-                const tripsQuery = query(collection(db, "trips"), where("__name__", "in", tripIds));
-                const tripsSnap = await getDocs(tripsQuery);
-                const tripsData = tripsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const tripsData = await getDocsByIds("trips", tripIds);
                 renderSharedTrips(tripsData);
             });
             unsubscribers.push(unsubSharedTrips);
@@ -249,7 +259,7 @@
 
         function renderSharedTrips(trips) {
             DOM.sharedTripsContainer.innerHTML = '';
-             if (trips.length === 0) {
+            if (trips.length === 0) {
                 DOM.sharedTripsPlaceholder.classList.remove('hidden');
             } else {
                 DOM.sharedTripsPlaceholder.classList.add('hidden');
@@ -264,7 +274,7 @@
             const card = document.createElement('div');
             card.className = 'trip-card bg-white rounded-xl shadow-md p-5 cursor-pointer flex flex-col justify-between';
             card.dataset.tripId = trip.id;
-            
+
             const permission = trip.permissions?.[currentUser.uid] || (isOwner ? 'owner' : 'view');
 
             card.innerHTML = `
@@ -295,7 +305,7 @@
             DOM.shareModal.dataset.tripId = trip.id;
             DOM.shareModalTripName.textContent = trip.name;
             DOM.generatedCodeContainer.classList.add('hidden');
-            
+
             await renderSharedWithList(trip);
             openModal(DOM.shareModal);
         }
@@ -309,11 +319,14 @@
                 DOM.sharedWithList.innerHTML = '<p class="text-slate-500">הטיול לא משותף עם אף אחד.</p>';
                 return;
             }
-            
-            const usersQuery = query(collection(db, "users"), where("__name__", "in", userIds));
-            const usersSnap = await getDocs(usersQuery);
-            const usersData = {};
-            usersSnap.forEach(doc => usersData[doc.id] = doc.data());
+
+            // קריאת משתמשים בקבוצות של 10
+            let usersData = {};
+            for (const pack of chunk(userIds, 10)) {
+                const q = query(collection(db, "users"), where("__name__", "in", pack));
+                const snap = await getDocs(q);
+                snap.forEach(d => usersData[d.id] = d.data());
+            }
 
             const listHtml = userIds.map(uid => {
                 const user = usersData[uid];
@@ -321,10 +334,10 @@
                 const permission = permissions[uid];
                 return `
                     <div class="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                        <p class="font-bold text-slate-700">${user.name || 'משתמש לא ידוע'} (${user.email})</p>
+                        <p class="font-bold text-slate-700">${user.name || 'משתמש לא ידוע'} (${user.email || ''})</p>
                         <div class="flex items-center gap-4">
                             <span class="text-xs font-bold ${permission === 'edit' ? 'text-amber-600' : 'text-sky-600'}">${permission === 'edit' ? 'עורך' : 'צופה'}</span>
-                            <button data-uid="${uid}" class="remove-user-btn text-red-500 hover:text-red-700"><i class="fas fa-times"></i></button>
+                            <button data-uid="${uid}" class="remove-user-btn text-red-500 hover:text-red-700" title="הסר גישה"><i class="fas fa-times"></i></button>
                         </div>
                     </div>
                 `;
@@ -354,11 +367,12 @@
                 setTimeout(() => { DOM.copyCodeBtn.innerHTML = '<i class="fas fa-copy"></i> העתק'; }, 2000);
             });
         });
-        
+
+        // הסרת משתמש ששיתפת (בעלים בלבד לפי החוקים)
         DOM.sharedWithList.addEventListener('click', async (e) => {
             const removeBtn = e.target.closest('.remove-user-btn');
             if (!removeBtn) return;
-            
+
             const uidToRemove = removeBtn.dataset.uid;
             const tripId = DOM.shareModal.dataset.tripId;
 
@@ -367,24 +381,17 @@
                 const tripRef = doc(db, "trips", tripId);
                 const sharedTripRef = doc(db, "users", uidToRemove, "sharedTrips", tripId);
 
-                // This uses dot notation for nested map fields which requires a string literal.
-                const permissionField = `permissions.${uidToRemove}`;
-                batch.update(tripRef, { [permissionField]: deleteDoc() }); // This is incorrect. Field should be deleted. Let's use correct syntax.
-                
-                // Correct way to remove a key from a map
-                const tripDoc = await getDoc(tripRef);
-                const currentPermissions = tripDoc.data().permissions || {};
-                delete currentPermissions[uidToRemove];
-
-                batch.update(tripRef, { permissions: currentPermissions });
+                // הסרת המפתח מהמפה באמצעות deleteField (נכון!)
+                batch.update(tripRef, { [`permissions.${uidToRemove}`]: deleteField() });
+                // מחיקת רשומת השיתוף אצל המשתמש
                 batch.delete(sharedTripRef);
-                
+
                 await batch.commit();
-                // onSnapshot will refresh the list.
+                // onSnapshot ירענן את הרשימה
             }
         });
 
-        // --- Redeeming Logic ---
+        // --- Redeeming Logic (הצטרפות באמצעות קוד) ---
         async function redeemCodeAndAttach(code) {
             if (!currentUser) throw new Error("יש להתחבר לפני מימוש קוד.");
             const uid = currentUser.uid;
@@ -400,28 +407,29 @@
 
             const { tripId, role, expiresAt } = snap.data();
             if (expiresAt.toMillis() <= Date.now()) {
-                await deleteDoc(codeRef); // Clean up expired code
+                await deleteDoc(codeRef); // ניקוי קוד שפג
                 throw new Error("הקוד פג תוקף.");
             }
-            
+
             const tripRef = doc(db, "trips", tripId);
             const tripSnap = await getDoc(tripRef);
-            if(tripSnap.data().ownerId === uid) {
-                 throw new Error("לא ניתן להצטרף לטיול של עצמך.");
+            if (!tripSnap.exists()) throw new Error("הטיול לא קיים.");
+            if (tripSnap.data().ownerId === uid) {
+                throw new Error("לא ניתן להצטרף לטיול של עצמך.");
             }
 
-            // Update trip permissions using the _inviteCode for security rule validation
-            const permissionField = `permissions.${uid}`;
+            // שלב 1: עדכון הרשאה לעצמי + הזרקת _inviteCode לזמן הוולידציה בחוקי האבטחה
             await updateDoc(tripRef, {
-                [permissionField]: role,
-                _inviteCode: code // Pass code for rules to validate
+                [`permissions.${uid}`]: role,
+                _inviteCode: code
             });
-            
-            // Add to user's shared list and clean up
+
+            // שלב 2: ביצוע באצ' – יצירת sharedTrips, מחיקת _inviteCode, ומחיקת מסמך הקוד (שריפה)
             const batch = writeBatch(db);
             const userSharedRef = doc(db, "users", uid, "sharedTrips", tripId);
             batch.set(userSharedRef, { tripId, role, addedAt: serverTimestamp() });
-            batch.delete(codeRef); // "Burn" the code
+            batch.update(tripRef, { _inviteCode: deleteField() });
+            batch.delete(codeRef);
             await batch.commit();
 
             return { tripId, role };
