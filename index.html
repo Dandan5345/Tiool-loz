@@ -27,7 +27,6 @@
       font-family: 'Assistant', sans-serif;
       background-color: #0b1020;
     }
-    /* Class to prevent body scroll when a modal is open */
     body.modal-open {
         overflow: hidden;
     }
@@ -81,6 +80,19 @@
     .step-dot { width:24px; height:24px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; transition: all .3s ease; font-size: 12px; }
     .step-dot.active { background:#2563eb; color:white; }
     .step-dot.inactive { background: var(--glass); color: #94a3b8; }
+
+    /* UPDATED: Style for date picker trigger */
+    .date-picker-trigger {
+        cursor: pointer;
+    }
+    /* Hide actual input, it's just for the picker library */
+    .date-picker-input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-slate-200 selection:bg-blue-600/40">
@@ -92,7 +104,6 @@
 
   <div id="bg-gradient" class="fixed inset-0 -z-10"></div>
   
-  <!-- Universal Modal Backdrop -->
   <div id="modal-backdrop" class="hidden fixed inset-0 bg-black/60 z-40 transition-opacity duration-300"></div>
 
   <header class="sticky top-0 z-30">
@@ -139,7 +150,6 @@
 
       <div id="main-content" class="hidden">
         <div class="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <!-- UPDATED: Buttons are smaller now -->
             <button id="create-trip-btn" class="glass rounded-2xl p-6 text-center hover:bg-white/10 transition-colors duration-200 flex flex-col items-center justify-center">
                 <i class="fa-solid fa-plus text-3xl text-blue-400"></i>
                 <div class="font-bold text-xl mt-3">יצירת לו"ז חדש</div>
@@ -161,7 +171,6 @@
         <div id="trips-container" class="hidden mt-12">
             <h2 class="text-3xl font-bold text-center mb-8">הטיולים שלי</h2>
             <div id="trips-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                <!-- Trip cards will be injected here -->
             </div>
             <div id="no-trips-message" class="hidden text-center glass rounded-xl p-8 max-w-lg mx-auto">
                 <i class="fas fa-map-signs text-4xl text-slate-400 mb-4"></i>
@@ -175,7 +184,7 @@
 
   <!-- Modals -->
   <div id="settings-modal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="glass w-full max-w-2xl rounded-2xl shadow-2xl text-white">
+    <div class="glass w-full max-w-md rounded-2xl shadow-2xl text-white">
       <header class="px-6 py-4 border-b border-white/20 flex items-center justify-between">
         <h2 class="text-xl font-bold">הגדרות</h2>
         <button data-close-modal class="p-2 rounded-lg hover:bg-white/10">
@@ -193,7 +202,7 @@
           <div class="text-right">
             <div class="font-semibold">בטל הפניה אוטומטית</div>
             <div class="text-sm text-slate-300 mt-1">
-              כאשר פעיל, דף הבית לא יפנה אוטומטית לטיול ברירת המחדל.
+              מונע הפניה אוטומטית לטיול ברירת המחדל.
             </div>
           </div>
           <button id="disable-auto-redirect-toggle" type="button" class="toggle" aria-pressed="false" title="הפעל/השבת"></button>
@@ -230,12 +239,12 @@
         <button data-close-modal class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
       </header>
       <p class="text-slate-200/90">כאן יופיע הטופס להוספת הוצאות.</p>
-      <!-- Expense form will go here in the future -->
     </div>
   </div>
 
+  <!-- UPDATED: Adjusted modal width for better mobile view -->
   <div id="create-trip-modal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="glass rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
+    <div class="glass rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
       <header class="p-4 border-b border-white/20 flex justify-between items-center">
         <div class="flex items-center gap-2">
           <span id="step-dot-1" class="step-dot">1</span>
@@ -250,19 +259,22 @@
       <div class="w-full h-1 bg-white/10">
         <div id="step-progress" class="h-1 bg-blue-500 transition-all duration-300"></div>
       </div>
-      <!-- UPDATED: Added modal-main-content class for overflow fix -->
-      <main class="p-6 flex-grow relative modal-main-content">
+      <main class="p-4 sm:p-6 flex-grow relative modal-main-content">
         <!-- Step 1: Name -->
         <div id="step-1" class="modal-content w-full">
-            <h3 class="text-xl font-semibold text-center mb-4">מה שם הטיול?</h3>
+            <h3 class="text-xl font-semibold text-center mb-6">מה שם הטיול?</h3>
             <input type="text" id="trip-name" placeholder="לדוגמה: הטיול הגדול לאירופה"
                    class="w-full max-w-md mx-auto p-3 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder:text-slate-300 text-center">
         </div>
         <!-- Step 2: Dates -->
         <div id="step-2" class="modal-content w-full step-hidden">
-            <h3 class="text-xl font-semibold text-center mb-4">מתי הטיול מתקיים?</h3>
-            <input type="text" id="trip-dates"
-                   class="w-full max-w-sm mx-auto p-3 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-white placeholder:text-slate-300">
+            <h3 class="text-xl font-semibold text-center mb-6">מתי הטיול מתקיים?</h3>
+            <!-- UPDATED: Date picker trigger -->
+            <label for="trip-dates" class="date-picker-trigger w-full max-w-md mx-auto p-3 rounded-lg bg-white/10 border border-white/20 flex items-center justify-between">
+                <span id="trip-dates-display" class="text-slate-300">בחירת תאריכים</span>
+                <i class="fa-solid fa-calendar-days text-slate-300"></i>
+            </label>
+            <input type="text" id="trip-dates" class="date-picker-input">
         </div>
         <!-- Step 3: Image -->
         <div id="step-3" class="modal-content w-full step-hidden">
@@ -270,7 +282,7 @@
             <p class="text-center text-sm text-slate-300 mb-4">הדביקו קישור לתמונה</p>
             <input type="url" id="trip-image-url" placeholder="https://example.com/cover.jpg"
                    class="w-full max-w-md mx-auto p-3 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder:text-slate-300 text-center text-left" dir="ltr">
-            <div id="trip-image-preview" class="w-full max-w-md mx-auto mt-4 h-40 bg-white/5 rounded-lg border border-white/15 flex items-center justify-center text-slate-400 bg-cover bg-center">
+            <div id="trip-image-preview" class="w-full max-w-md mx-auto mt-4 h-32 sm:h-40 bg-white/5 rounded-lg border border-white/15 flex items-center justify-center text-slate-400 bg-cover bg-center">
                 <i class="fas fa-image text-4xl"></i>
             </div>
         </div>
@@ -285,7 +297,7 @@
         <!-- Step 5: Review -->
         <div id="step-5" class="modal-content w-full h-full step-hidden flex flex-col">
           <p class="mb-4 text-center text-slate-200/90">בדוק/י את מפת המסלול והפרטים לפני שמירה.</p>
-          <div id="review-map" class="w-full h-80 bg-white/5 rounded-lg border border-white/15 flex-grow"></div>
+          <div id="review-map" class="w-full h-64 sm:h-80 bg-white/5 rounded-lg border border-white/15 flex-grow"></div>
           <div id="review-legend" class="mt-4 text-right text-slate-200/95 max-h-24 overflow-y-auto no-scrollbar"></div>
         </div>
       </main>
@@ -351,6 +363,7 @@
       saveTripBtn: document.getElementById('save-trip-btn'),
       tripNameInput: document.getElementById('trip-name'),
       tripDatesInput: document.getElementById('trip-dates'),
+      tripDatesDisplay: document.getElementById('trip-dates-display'), // UPDATED
       tripImageUrlInput: document.getElementById('trip-image-url'),
       tripImagePreview: document.getElementById('trip-image-preview'),
       destinationsContainer: document.getElementById('destinations-container'),
@@ -560,7 +573,6 @@
       closeModal();
     });
     
-    // --- Edit Trip ---
     DOM.tripsGrid.addEventListener('click', (e) => {
         const editBtn = e.target.closest('.edit-trip-btn');
         if (editBtn) {
@@ -585,17 +597,14 @@
       DOM.stepProgress.style.width = `${((currentStep + 1) / totalSteps) * 100}%`;
     }
 
-    // UPDATED: New function to control button visibility on step 4
     function updateStep4Controls() {
-        if (currentStep !== 3) return; // Only applies to step 4 (index 3)
+        if (currentStep !== 3) return;
         DOM.nextBtn.classList.toggle('hidden', destinationUIs.length === 0);
     }
 
-    // UPDATED: Reworked step change logic
     function setStep(newStep) {
       if (newStep < 0 || newStep >= DOM.stepElems.length) return;
       
-      // Validation before proceeding
       if (newStep > currentStep) {
         if (currentStep === 0 && !DOM.tripNameInput.value.trim()) {
           alert('יש למלא שם לטיול.'); return;
@@ -612,20 +621,17 @@
       currentStep = newStep;
       DOM.stepElems[currentStep].classList.remove('step-hidden');
       
-      // --- Button visibility logic ---
       const isLastStep = currentStep === DOM.stepElems.length - 1;
       DOM.backBtn.classList.toggle('hidden', currentStep === 0);
       DOM.saveTripBtn.classList.toggle('hidden', !isLastStep);
 
-      // Handle "Next" button visibility
       if (isLastStep) {
           DOM.nextBtn.classList.add('hidden');
-      } else if (currentStep === 3) { // Step 4: Destinations
-          updateStep4Controls(); // Show/hide based on destinations
+      } else if (currentStep === 3) {
+          updateStep4Controls();
       } else {
           DOM.nextBtn.classList.remove('hidden');
       }
-      // --- End of button logic ---
       
       updateStepperUI();
 
@@ -637,6 +643,8 @@
         currentStep = 0;
         DOM.tripNameInput.value = '';
         DOM.tripDatesInput.value = '';
+        DOM.tripDatesDisplay.textContent = 'בחירת תאריכים';
+        DOM.tripDatesDisplay.classList.add('text-slate-300');
         DOM.tripImageUrlInput.value = '';
         DOM.tripImagePreview.style.backgroundImage = 'none';
         DOM.tripImagePreview.innerHTML = '<i class="fas fa-image text-4xl"></i>';
@@ -654,7 +662,18 @@
       if (!currentUser) { location.href = 'login.html'; return; }
       resetCreateModal();
       openModal(DOM.createTripModal);
-      datePicker = new Litepicker({ element: DOM.tripDatesInput, singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
+      datePicker = new Litepicker({ 
+          element: DOM.tripDatesInput, 
+          singleMode: false, 
+          lang: 'he-IL', 
+          format: 'DD/MM/YYYY',
+          onSelect: (date1, date2) => {
+              const val = `${date1.format('DD/MM/YYYY')} - ${date2.format('DD/MM/YYYY')}`;
+              DOM.tripDatesInput.value = val;
+              DOM.tripDatesDisplay.textContent = val;
+              DOM.tripDatesDisplay.classList.remove('text-slate-300');
+          }
+      });
       setStep(0);
     }
 
@@ -673,17 +692,35 @@
         DOM.modalTitle.textContent = 'עריכת טיול';
         DOM.saveTripBtn.textContent = 'שמור שינויים';
         DOM.tripNameInput.value = tripData.name || '';
-        DOM.tripDatesInput.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
+        
+        const datesValue = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
+        DOM.tripDatesInput.value = datesValue;
+        if (datesValue) {
+            DOM.tripDatesDisplay.textContent = datesValue;
+            DOM.tripDatesDisplay.classList.remove('text-slate-300');
+        }
+        
         DOM.tripImageUrlInput.value = tripData.coverImage || '';
         DOM.tripImageUrlInput.dispatchEvent(new Event('input'));
         
-        destinationUIs = []; // Clear before adding
+        destinationUIs = [];
         if (tripData.destinations && tripData.destinations.length > 0) {
             tripData.destinations.forEach(dest => addDestination(dest));
         }
 
         openModal(DOM.createTripModal);
-        datePicker = new Litepicker({ element: DOM.tripDatesInput, singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
+        datePicker = new Litepicker({ 
+            element: DOM.tripDatesInput, 
+            singleMode: false, 
+            lang: 'he-IL', 
+            format: 'DD/MM/YYYY',
+            onSelect: (date1, date2) => {
+                const val = `${date1.format('DD/MM/YYYY')} - ${date2.format('DD/MM/YYYY')}`;
+                DOM.tripDatesInput.value = val;
+                DOM.tripDatesDisplay.textContent = val;
+                DOM.tripDatesDisplay.classList.remove('text-slate-300');
+            }
+        });
         setStep(0);
     }
 
@@ -702,29 +739,33 @@
       const id = `dest-${Date.now()}`;
       const wrap = document.createElement('div');
       wrap.id = id;
-      wrap.className = 'p-4 glass rounded-xl space-y-3 relative border border-white/15';
+      wrap.className = 'p-4 glass rounded-xl space-y-4 relative border border-white/15';
       wrap.innerHTML = `
         <button class="remove-dest-btn absolute top-3 left-3 text-red-400 hover:text-red-300" title="הסר יעד">
           <i class="fa-solid fa-trash"></i>
         </button>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-4">
           <div>
             <label class="block mb-1 text-sm font-semibold text-right">שם היעד (עברית)</label>
             <input type="text" class="dest-name-he w-full p-2 rounded-lg bg-white/10" value="${data.nameHe || ''}">
           </div>
           <div>
             <label class="block mb-1 text-sm font-semibold text-right">טווח תאריכים</label>
-            <input type="text" class="dest-dates w-full p-2 rounded-lg bg-white/10 text-center" value="${data.dates || ''}">
+            <label for="dest-dates-${id}" class="date-picker-trigger w-full p-2 rounded-lg bg-white/10 flex items-center justify-between">
+                <span class="dest-dates-display ${data.dates ? '' : 'text-slate-300'}">${data.dates || 'בחירת תאריכים'}</span>
+                <i class="fa-solid fa-calendar-days text-slate-300"></i>
+            </label>
+            <input type="text" id="dest-dates-${id}" class="date-picker-input dest-dates" value="${data.dates || ''}">
           </div>
         </div>
         <div>
           <label class="block mb-1 text-sm font-semibold text-right">שם היעד (אנגלית, לחיפוש)</label>
           <div class="flex gap-2">
             <input type="text" class="dest-name-en w-full p-2 rounded-lg bg-white/10" placeholder="Paris, France" value="${data.nameEn || ''}">
-            <button class="find-map-btn bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg">מצא</button>
+            <button class="find-map-btn bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg flex-shrink-0">מצא</button>
           </div>
         </div>
-        <div class="dest-map w-full h-48 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
+        <div class="dest-map w-full h-40 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
       `;
       DOM.destinationsContainer.appendChild(wrap);
 
@@ -739,10 +780,23 @@
       }
       destinationUIs.push(ui);
 
-      new Litepicker({ element: wrap.querySelector('.dest-dates'), singleMode: false, lang: 'he-IL', format: 'DD/MM/YYYY' });
+      const dateInput = wrap.querySelector('.dest-dates');
+      const dateDisplay = wrap.querySelector('.dest-dates-display');
+      new Litepicker({ 
+          element: dateInput, 
+          singleMode: false, 
+          lang: 'he-IL', 
+          format: 'DD/MM/YYYY',
+          onSelect: (date1, date2) => {
+              const val = `${date1.format('DD/MM/YYYY')} - ${date2.format('DD/MM/YYYY')}`;
+              dateInput.value = val;
+              dateDisplay.textContent = val;
+              dateDisplay.classList.remove('text-slate-300');
+          }
+      });
       setTimeout(() => map.invalidateSize(), 250);
 
-      updateStep4Controls(); // UPDATED: Call control function
+      updateStep4Controls();
     }
     
     async function findOnMap(e) {
@@ -770,7 +824,7 @@
       } catch (err) {
         console.error(err);
       } finally {
-        btn.innerHTML = original; btn.disabled = false;
+        btn.innerHTML = 'מצא'; btn.disabled = false;
       }
     }
 
@@ -783,7 +837,7 @@
         destinationUIs.splice(idx, 1); 
       }
       parent.remove();
-      updateStep4Controls(); // UPDATED: Call control function
+      updateStep4Controls();
     }
 
     function generateReviewMap() {
@@ -817,7 +871,7 @@
 
     async function saveTrip() {
       if (!currentUser) return;
-      const [tripStart, tripEnd] = (DOM.tripDatesInput.value || '').split(' - ');
+      
       const destinations = destinationUIs.map(ui => ({
         nameHe: ui.element.querySelector('.dest-name-he').value || '',
         nameEn: ui.element.querySelector('.dest-name-en').value || '',
@@ -825,6 +879,8 @@
         coords: ui.coords || null
       }));
       
+      const [tripStart, tripEnd] = (DOM.tripDatesInput.value || '').split(' - ');
+
       const finalTripData = {
         name: DOM.tripNameInput.value.trim(),
         startDate: tripStart || '',
@@ -860,7 +916,6 @@
 
     DOM.createTripBtn.addEventListener('click', openCreateModal);
     
-    // Universal modal close logic
     document.addEventListener('click', (e) => {
         if (e.target.matches('[data-close-modal]') || e.target.closest('[data-close-modal]')) {
             closeModal();
