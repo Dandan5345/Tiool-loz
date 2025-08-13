@@ -3,64 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>הצטרפות לטיול</title>
+    <title>ניהול הטיולים שלי</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
     <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
         body {
             font-family: 'Assistant', sans-serif;
-            background-color: #f1f5f9;
+            background-color: #f0f9ff; /* Light sky blue */
+            background-image: linear-gradient(to bottom, #f0f9ff, #e0f2fe);
         }
-        .status-card {
-            display: none; /* All cards are hidden by default */
+        .trip-card {
+            animation: fadeIn 0.5s ease-out forwards;
+            background-size: cover;
+            background-position: center;
+            background-image: url('data:image/svg+xml;utf8,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="p" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M50 0 L100 25 L50 50 L0 25 Z M0 50 L50 75 L0 100 L-50 75 Z M50 50 L100 75 L50 100 L0 75 Z" stroke="%23e0f2fe" stroke-width="1" fill="none"/></pattern></defs><rect width="100%" height="100%" fill="url(%23p)"/></svg>');
         }
-        .status-card.active {
-            display: flex; /* Only the active card is shown */
+        .tab-button.active {
+            background-color: #0284c7; /* Sky 600 */
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tab-button:not(.active) {
+            background-color: transparent;
+            color: #0369a1; /* Sky 700 */
         }
     </style>
 </head>
-<body class="bg-slate-100 flex items-center justify-center min-h-screen p-4">
+<body class="min-h-screen">
 
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 text-center">
-        
-        <div id="loading-card" class="status-card active flex-col items-center gap-4">
-            <i class="fas fa-spinner text-5xl text-blue-600 animate-spin"></i>
-            <h2 class="text-2xl font-bold text-slate-700">בודקים את ההזמנה שלך...</h2>
-            <p class="text-slate-500">רק רגע, אנחנו מאמתים את הקישור.</p>
-        </div>
-
-        <div id="login-required-card" class="status-card flex-col items-center gap-4">
-            <i class="fas fa-sign-in-alt text-5xl text-slate-500"></i>
-            <h2 class="text-2xl font-bold text-slate-700">נדרשת התחברות</h2>
-            <p class="text-slate-600 mb-4">כדי להצטרף לטיול, עליך להתחבר לחשבון שלך או ליצור חשבון חדש.</p>
-            <div class="w-full flex flex-col sm:flex-row gap-3">
-                <a id="login-btn" href="login.html" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg">התחברות</a>
-                <a id="signup-btn" href="signup.html" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg">הרשמה</a>
+    <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4 transition-opacity duration-300">
+        <i class="fas fa-compass text-6xl text-sky-600 animate-spin"></i>
+        <p class="text-2xl font-bold text-slate-700">מנווטים לשטח...</p>
+    </div>
+    
+    <div id="logout-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[101] p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center transform transition-all">
+            <h2 class="text-2xl font-bold mb-4 text-slate-800">התנתקות</h2>
+            <p class="text-slate-600 mb-8">האם אתה בטוח שברצונך להתנתק מהמערכת?</p>
+            <div class="flex justify-center gap-4">
+                <button id="cancel-logout-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-6 rounded-lg transition-colors">ביטול</button>
+                <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors">כן, התנתק</button>
             </div>
         </div>
+    </div>
 
-        <div id="success-card" class="status-card flex-col items-center gap-4">
-            <i class="fas fa-check-circle text-6xl text-green-500"></i>
-            <h2 class="text-2xl font-bold text-slate-700">הצטרפת בהצלחה!</h2>
-            <p id="success-message" class="text-slate-600">ברוך הבא לטיול. אתה מועבר כעת לרשימת הטיולים שלך...</p>
+    <div id="share-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md transform transition-all">
+            <div class="flex justify-between items-start mb-4">
+                <div class="pr-4">
+                    <h3 id="share-modal-title" class="text-xl font-bold text-slate-800">שתף את הטיול</h3>
+                    <p class="text-sm text-slate-500">כל מי שיקבל את הקישור יוכל להצטרף ולערוך.</p>
+                </div>
+                <button id="share-modal-close" class="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <button id="create-share-link-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg flex items-center justify-center gap-2">
+                    <i class="fas fa-link"></i>
+                    <span id="create-link-text">צור קישור שיתוף</span>
+                </button>
+                <div id="share-link-container" class="hidden">
+                    <label class="font-semibold text-sm text-slate-600">הקישור מוכן! העתק ושתף:</label>
+                    <div class="mt-1 flex gap-2">
+                        <input type="text" id="share-link-input" readonly class="w-full p-2 border border-slate-300 rounded-md bg-slate-50 text-sm focus:ring-2 focus:ring-sky-500" dir="ltr">
+                        <button id="copy-link-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-4 rounded-md transition">העתק</button>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-6 border-slate-200">
+
+            <div>
+                <h4 class="font-bold text-slate-700 mb-3">משתתפים בטיול:</h4>
+                <div id="shared-with-list" class="space-y-2 max-h-48 overflow-y-auto pr-2">
+                    </div>
+            </div>
         </div>
+    </div>
 
-        <div id="error-card" class="status-card flex-col items-center gap-4">
-            <i class="fas fa-exclamation-triangle text-6xl text-red-500"></i>
-            <h2 class="text-2xl font-bold text-slate-700">אופס, משהו השתבש</h2>
-            <p id="error-message" class="text-slate-600 mb-4">לא ניתן להצטרף לטיול. ייתכן שההזמנה אינה חוקית או שכבר נעשה בה שימוש.</p>
-            <a href="index.html" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">חזרה לדף הבית</a>
-        </div>
+    <div class="min-h-screen">
+        <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-sm border-b border-slate-200">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-20">
+                    <a href="new-trip.html" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-5 rounded-lg shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                        <i class="fas fa-plus"></i>
+                        <span>צור טיול חדש</span>
+                    </a>
+                    
+                    <div class="flex items-center gap-4 sm:gap-6">
+                        <a href="index.html" class="text-slate-600 font-semibold hover:text-sky-600 transition-colors hidden sm:flex items-center gap-2">
+                            <i class="fas fa-home"></i> דף הבית
+                        </a>
+                        <div id="auth-container">
+                           </div>
+                    </div>
+                </div>
+            </div>
+        </header>
 
+        <main class="pb-16">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="text-center mb-10">
+                    <h1 class="text-4xl md:text-5xl font-extrabold text-slate-800 mb-2">הטיולים שלך</h1>
+                    <p class="text-lg text-slate-600">מכאן תוכל לנהל את כל הטיולים שלך ואת אלה שחברים שיתפו איתך.</p>
+                </div>
+                
+                <div class="flex bg-sky-100/70 p-1.5 rounded-full mb-10 max-w-sm mx-auto shadow-inner">
+                    <button id="my-trips-tab" class="tab-button w-1/2 p-2.5 rounded-full font-bold transition-all duration-300 active">הטיולים שלי</button>
+                    <button id="shared-trips-tab" class="tab-button w-1/2 p-2.5 rounded-full font-bold transition-all duration-300">שותף איתי</button>
+                </div>
+                
+                <div id="trips-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    </div>
+                <div id="trips-placeholder" class="text-center text-slate-500 mt-12 hidden">
+                    <i class="fas fa-map-signs text-5xl text-slate-400 mb-4"></i>
+                    <p class="text-xl font-semibold">אופס, לא נמצאו טיולים</p>
+                    <p>נסה ליצור טיול חדש או לעבור לקטגוריה השניה.</p>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, getDocs, writeBatch, arrayUnion } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -77,98 +152,263 @@
 
         // --- DOM Elements ---
         const DOM = {
-            loadingCard: document.getElementById('loading-card'),
-            loginRequiredCard: document.getElementById('login-required-card'),
-            successCard: document.getElementById('success-card'),
-            errorCard: document.getElementById('error-card'),
-            successMessage: document.getElementById('success-message'),
-            errorMessage: document.getElementById('error-message'),
-            loginBtn: document.getElementById('login-btn'),
-            signupBtn: document.getElementById('signup-btn'),
+            loadingOverlay: document.getElementById('loading-overlay'),
+            authContainer: document.getElementById('auth-container'),
+            logoutModal: document.getElementById('logout-modal'),
+            confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
+            cancelLogoutBtn: document.getElementById('cancel-logout-btn'),
+            myTripsTab: document.getElementById('my-trips-tab'),
+            sharedTripsTab: document.getElementById('shared-trips-tab'),
+            tripsContainer: document.getElementById('trips-container'),
+            tripsPlaceholder: document.getElementById('trips-placeholder'),
+            // Share Modal
+            shareModal: document.getElementById('share-modal'),
+            shareModalClose: document.getElementById('share-modal-close'),
+            shareModalTitle: document.getElementById('share-modal-title'),
+            createShareLinkBtn: document.getElementById('create-share-link-btn'),
+            createLinkText: document.getElementById('create-link-text'),
+            shareLinkContainer: document.getElementById('share-link-container'),
+            shareLinkInput: document.getElementById('share-link-input'),
+            copyLinkBtn: document.getElementById('copy-link-btn'),
+            sharedWithList: document.getElementById('shared-with-list'),
         };
 
-        // --- Helper to switch between cards ---
-        function showCard(cardName) {
-            Object.values(DOM).forEach(el => {
-                if (el.classList && el.classList.contains('status-card')) {
-                    el.classList.remove('active');
-                }
-            });
-            DOM[cardName].classList.add('active');
-        }
-        
-        // --- Main Logic ---
-        async function handleInvite() {
+        let currentUser = null;
+        let allUserTrips = []; 
+        let currentView = 'my';
+
+        // --- Page Initialization ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                setupAuthUI(user);
+                await handleInviteToken();
+                listenToTrips();
+            } else {
+                window.location.href = `login.html?redirect=${encodeURIComponent(window.location.href)}`;
+            }
+        });
+
+        async function handleInviteToken() {
             const urlParams = new URLSearchParams(window.location.search);
             const token = urlParams.get('token');
+            if (!token) return;
 
-            if (!token) {
-                DOM.errorMessage.textContent = "הקישור חסר אסימון הזמנה (token). ודא שהעתקת את הקישור המלא.";
-                showCard('errorCard');
+            DOM.loadingOverlay.classList.remove('hidden');
+
+            const invitesRef = collection(db, "invites");
+            const q = query(invitesRef, where("token", "==", token));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                alert("קישור ההזמנה אינו חוקי או שכבר נעשה בו שימוש.");
+                window.history.replaceState({}, document.title, window.location.pathname);
+                DOM.loadingOverlay.style.opacity = '0';
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
                 return;
             }
 
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    // User is logged in, process the invitation
-                    processInvite(token, user);
-                } else {
-                    // User is not logged in, show login prompt
-                    const redirectUrl = encodeURIComponent(window.location.href);
-                    DOM.loginBtn.href = `login.html?redirect=${redirectUrl}`;
-                    DOM.signupBtn.href = `signup.html?redirect=${redirectUrl}`;
-                    showCard('loginRequiredCard');
-                }
+            const batch = writeBatch(db);
+            const inviteDoc = snapshot.docs[0];
+            const { tripId, permission } = inviteDoc.data();
+            
+            const tripRef = doc(db, "trips", tripId);
+            batch.update(tripRef, { editors: arrayUnion(currentUser.uid) });
+            batch.delete(inviteDoc.ref);
+
+            try {
+                await batch.commit();
+                alert("הצטרפת בהצלחה לטיול! הוא יופיע ברשימת 'שותף איתי'.");
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } catch (error) {
+                console.error("Error accepting invite:", error);
+                alert("אירעה שגיאה בעת ההצטרפות לטיול.");
+            }
+        }
+        
+        function listenToTrips() {
+            if (!currentUser) return;
+            const q = query(collection(db, "trips"), where("editors", "array-contains", currentUser.uid));
+
+            onSnapshot(q, (snapshot) => {
+                allUserTrips = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderTrips();
+                DOM.loadingOverlay.style.opacity = '0';
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
+            }, error => {
+                console.error("Error fetching trips:", error);
+                alert("שגיאה בטעינת הטיולים.");
+                DOM.loadingOverlay.style.opacity = '0';
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
+            });
+        }
+        
+        function renderTrips() {
+            const tripsToRender = allUserTrips.filter(trip => 
+                currentView === 'my' ? trip.ownerId === currentUser.uid : trip.ownerId !== currentUser.uid
+            );
+
+            DOM.tripsContainer.innerHTML = '';
+            DOM.tripsPlaceholder.classList.toggle('hidden', tripsToRender.length > 0);
+
+            tripsToRender.forEach(trip => {
+                const card = document.createElement('div');
+                card.className = 'trip-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]';
+                
+                const participantCount = trip.editors?.length || 0;
+                
+                card.innerHTML = `
+                    <div class="h-28 bg-slate-200 flex items-end p-4 relative">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        <h3 class="text-2xl font-bold text-white z-10 truncate w-full">${trip.name}</h3>
+                    </div>
+                    <div class="p-4 flex-grow flex flex-col">
+                        <div class="flex-grow space-y-3 text-slate-600">
+                             <div class="flex items-center gap-2">
+                                <i class="fas fa-calendar-alt fa-fw text-sky-600"></i>
+                                <span>${trip.startDate || 'טרם נקבע'}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-users fa-fw text-sky-600"></i>
+                                <span>${participantCount} משתתפים</span>
+                            </div>
+                        </div>
+                        <div class="mt-5 pt-4 border-t border-slate-200 flex justify-between items-center gap-2">
+                            <a href="trip.html?id=${trip.id}" class="flex-1 text-center bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 px-3 rounded-lg transition-colors">
+                                פתח טיול
+                            </a>
+                            ${currentView === 'my' ? `<button data-trip-id="${trip.id}" data-trip-name="${trip.name}" class="share-btn text-center bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2.5 px-4 rounded-lg transition-colors" title="שתף טיול"><i class="fas fa-share-alt"></i></button>` : ''}
+                        </div>
+                    </div>
+                `;
+                DOM.tripsContainer.appendChild(card);
+            });
+        }
+        
+        // --- UI Logic & Event Listeners ---
+        function setupAuthUI(user) {
+            getDoc(doc(db, "users", user.uid)).then(docSnap => {
+                const name = docSnap.exists() ? (docSnap.data().name || 'משתמש') : 'משתמש';
+                DOM.authContainer.innerHTML = `
+                    <button id="user-name-btn" class="flex items-center gap-3 text-slate-700 font-bold hover:text-sky-600 transition-colors">
+                        <div class="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-extrabold">
+                           ${name.charAt(0)}
+                        </div>
+                        <span class="hidden md:inline">שלום, ${name}</span>
+                    </button>`;
+                document.getElementById('user-name-btn').addEventListener('click', () => {
+                    DOM.logoutModal.classList.remove('hidden');
+                });
             });
         }
 
-        async function processInvite(token, user) {
-            const invitesRef = collection(db, "invites");
-            const q = query(invitesRef, where("token", "==", token));
-            
-            try {
-                const snapshot = await getDocs(q);
+        DOM.myTripsTab.addEventListener('click', () => {
+            currentView = 'my';
+            DOM.myTripsTab.classList.add('active');
+            DOM.sharedTripsTab.classList.remove('active');
+            renderTrips();
+        });
 
-                if (snapshot.empty) {
-                    throw new Error("ההזמנה אינה חוקית או שכבר נעשה בה שימוש.");
-                }
+        DOM.sharedTripsTab.addEventListener('click', () => {
+            currentView = 'shared';
+            DOM.sharedTripsTab.classList.add('active');
+            DOM.myTripsTab.classList.remove('active');
+            renderTrips();
+        });
 
-                const batch = writeBatch(db);
-                const inviteDoc = snapshot.docs[0];
-                const { tripId, permission } = inviteDoc.data();
-                
-                // Get trip name for a friendlier success message
-                const tripRef = doc(db, "trips", tripId);
-                const tripDoc = await getDoc(tripRef);
-                const tripName = tripDoc.exists() ? tripDoc.data().name : "הטיול";
-
-                if (permission === 'editor') {
-                    batch.update(tripRef, {
-                        editors: arrayUnion(user.uid)
-                    });
-                }
-                
-                // Delete the token so it can't be reused
-                batch.delete(inviteDoc.ref); 
-                
-                await batch.commit();
-
-                // Show success and redirect
-                DOM.successMessage.textContent = `נהדר! צורפת בהצלחה לטיול "${tripName}".`;
-                showCard('successCard');
-                setTimeout(() => {
-                    window.location.href = 'index.html'; // Redirect to the main trips page
-                }, 3000); // 3-second delay
-
-            } catch (error) {
-                console.error("Error accepting invite:", error);
-                DOM.errorMessage.textContent = error.message || "אירעה שגיאה בעת ההצטרפות לטיול.";
-                showCard('errorCard');
+        DOM.tripsContainer.addEventListener('click', (e) => {
+            const shareBtn = e.target.closest('.share-btn');
+            if (shareBtn) {
+                const tripId = shareBtn.dataset.tripId;
+                const tripName = shareBtn.dataset.tripName;
+                openShareModal(tripId, tripName);
             }
+        });
+
+        DOM.cancelLogoutBtn.addEventListener('click', () => DOM.logoutModal.classList.add('hidden'));
+        DOM.confirmLogoutBtn.addEventListener('click', () => signOut(auth));
+
+        // --- Share Modal Logic ---
+        let activeTripId = null;
+
+        function openShareModal(tripId, tripName) {
+            activeTripId = tripId;
+            DOM.shareModalTitle.textContent = `שתף את "${tripName}"`;
+            DOM.shareModal.classList.remove('hidden');
+            DOM.shareLinkContainer.classList.add('hidden');
+            DOM.createShareLinkBtn.disabled = false;
+            
+            const btnIcon = DOM.createShareLinkBtn.querySelector('i');
+            btnIcon.className = 'fas fa-link';
+            DOM.createLinkText.textContent = 'צור קישור שיתוף';
+
+            loadSharedWithList(tripId);
         }
 
-        // --- Start the process on page load ---
-        handleInvite();
+        DOM.shareModalClose.addEventListener('click', () => DOM.shareModal.classList.add('hidden'));
+
+        DOM.createShareLinkBtn.addEventListener('click', async () => {
+            if (!activeTripId) return;
+            const btn = DOM.createShareLinkBtn;
+            btn.disabled = true;
+            
+            const btnIcon = btn.querySelector('i');
+            btnIcon.className = 'fas fa-spinner fa-spin';
+            DOM.createLinkText.textContent = 'יוצר קישור...';
+
+            const token = `tok_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            try {
+                await addDoc(collection(db, "invites"), {
+                    tripId: activeTripId, token, permission: 'editor', createdAt: serverTimestamp()
+                });
+                const shareUrl = `${window.location.origin}${window.location.pathname}?token=${token}`;
+                DOM.shareLinkInput.value = shareUrl;
+                DOM.shareLinkContainer.classList.remove('hidden');
+            } catch (error) {
+                console.error("Error creating share link", error);
+                alert("שגיאה ביצירת קישור השיתוף.");
+                btn.disabled = false;
+                btnIcon.className = 'fas fa-link';
+                DOM.createLinkText.textContent = 'צור קישור שיתוף';
+            }
+        });
+
+        DOM.copyLinkBtn.addEventListener('click', () => {
+            DOM.shareLinkInput.select();
+            document.execCommand('copy');
+            DOM.copyLinkBtn.textContent = 'הועתק!';
+            setTimeout(() => { DOM.copyLinkBtn.textContent = 'העתק'; }, 2000);
+        });
+        
+        async function loadSharedWithList(tripId) {
+            DOM.sharedWithList.innerHTML = `<p class="text-slate-500 text-center">טוען רשימת משתתפים...</p>`;
+            const tripDocSnap = await getDoc(doc(db, "trips", tripId));
+            if (!tripDocSnap.exists()) return;
+
+            const tripData = tripDocSnap.data();
+            const editors = tripData.editors || [];
+            if (editors.length === 0) {
+                 DOM.sharedWithList.innerHTML = `<p class="text-slate-500 text-center">הטיול לא משותף עם אף אחד עדיין.</p>`;
+                 return;
+            }
+
+            const userPromises = editors.map(uid => getDoc(doc(db, "users", uid)));
+            const userDocs = await Promise.all(userPromises);
+
+            DOM.sharedWithList.innerHTML = userDocs.map(userDoc => {
+                if (!userDoc.exists()) return '';
+                const userData = userDoc.data();
+                const isOwner = userData.uid === tripData.ownerId;
+                return `<div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg">
+                            <div class="flex items-center gap-3">
+                               <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">${userData.name?.charAt(0) || 'U'}</div>
+                                <span class="font-semibold text-slate-700">${userData.name || 'משתמש'}</span>
+                                <span class="text-sm text-slate-500 hidden sm:inline">(${userData.email})</span>
+                           </div>
+                            <span class="text-xs font-bold py-1 px-2 rounded-full ${isOwner ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'}">${isOwner ? 'יוצר' : 'עורך'}</span>
+                        </div>`;
+            }).join('');
+        }
 
     </script>
 </body>
