@@ -286,6 +286,8 @@
         input:checked + .toggle-slider:before {
             transform: translateX(22px);
         }
+        .status-text.ok { color: #10b981; }
+        .status-text.err { color: #ef4444; }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -323,8 +325,18 @@
 
             <div id="settings-panel-bg" class="settings-panel space-y-4">
                 <div>
-                    <label class="font-bold text-slate-700">תמונת רקע (URL)</label>
-                    <input id="bg-image-url" type="text" placeholder="הדבק קישור לתמונה" class="w-full mt-1 p-2 border rounded-md">
+                    <label class="font-bold text-slate-700">תמונת רקע</label>
+                    <div class="flex items-center gap-3 mt-1">
+                        <button id="bg-image-upload-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition whitespace-nowrap">
+                            <i class="fas fa-upload mr-1"></i> העלה תמונה
+                        </button>
+                        <button id="bg-image-remove-btn" class="hidden bg-red-600/80 hover:bg-red-700/80 text-white font-bold py-2 px-3 rounded-lg transition">
+                            <i class="fas fa-times"></i> הסר
+                        </button>
+                    </div>
+                    <input type="file" id="bg-image-upload-input" class="hidden" accept="image/*">
+                    <input type="hidden" id="bg-image-url-storage">
+                    <p id="bg-image-status" class="text-sm mt-2 text-slate-400 h-5"></p>
                 </div>
                 <div>
                     <label class="font-bold text-slate-700">או בחר צבע רקע</label>
@@ -530,7 +542,7 @@
             getFirestore, doc, getDoc, collection, onSnapshot, query, updateDoc, setDoc
         } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // ---------- Firebase ----------
+        // ---------- Firebase & Constants ----------
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -542,6 +554,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const IMAGE_WORKER_URL = "https://yellow-cloud-3f13.doronenakache.workers.dev/";
 
         // ---------- State ----------
         let currentUser = null;
@@ -561,7 +574,7 @@
         let isSmartAccordionActive = false;
         const accordionMaps = {};
         let smartAccordionInterval = null;
-        let currentRouteLayer = null; // Layer for OSRM route
+        let currentRouteLayer = null;
 
         // ---------- UI Elements ----------
         const initialLoader = document.getElementById('initial-loader');
@@ -582,6 +595,14 @@
         const customThemeControls = document.getElementById('custom-theme-controls');
         const smartAccordionControls = document.getElementById('smart-accordion-controls');
         const smartAccordionToggle = document.getElementById('smart-accordion-toggle');
+
+        // BG Image uploader elements
+        const bgImageUploadBtn = document.getElementById('bg-image-upload-btn');
+        const bgImageRemoveBtn = document.getElementById('bg-image-remove-btn');
+        const bgImageUploadInput = document.getElementById('bg-image-upload-input');
+        const bgImageUrlStorage = document.getElementById('bg-image-url-storage');
+        const bgImageStatus = document.getElementById('bg-image-status');
+        const bgColorPicker = document.getElementById('bg-color-picker');
 
         const authContainer = document.getElementById('auth-container');
         const tripHomeBtn = document.getElementById('trip-home-btn');
@@ -614,6 +635,7 @@
             settingsModal.classList.toggle('translate-x-full'); 
             overlay.classList.toggle('hidden'); 
             sidebar.classList.add('translate-x-full');
+            configureBgSettingsUI();
         }
         
         function parseLocalDateFlexible(s) { if (!s) return null; const m = s.trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/); if (!m) return null; let d = +m[1], mo = +m[2], y = +m[3]; if (y < 100) y += 2000; const dt = new Date(Date.UTC(y, mo-1, d)); return isNaN(dt.getTime()) ? null : dt; }
@@ -635,7 +657,18 @@
         }
 
         // ---------- Styling & Layout Functions ----------
-        function setBackground(bg) { if (bg.type === 'image') { pageBg.style.backgroundImage = `url('${bg.value}')`; document.body.style.backgroundColor = ''; } else { pageBg.style.backgroundImage = 'none'; document.body.style.backgroundColor = bg.value; } const overlayOpacity = 1 - (bg.brightness / 100); pageBgOverlay.style.backgroundColor = `rgba(0, 0, 0, ${overlayOpacity})`; }
+        function setBackground(bg) { 
+            if (bg.type === 'image') { 
+                pageBg.style.backgroundImage = `url('${bg.value}')`; 
+                document.body.style.backgroundColor = ''; 
+            } else { 
+                pageBg.style.backgroundImage = 'none'; 
+                document.body.style.backgroundColor = bg.value; 
+            } 
+            const overlayOpacity = 1 - (bg.brightness / 100); 
+            pageBgOverlay.style.backgroundColor = `rgba(0, 0, 0, ${overlayOpacity})`; 
+        }
+
         function setTheme(themeKey, customThemeData = null) { 
             const theme = themePresets[themeKey]; 
             if(!theme) return; 
@@ -698,6 +731,60 @@
             if(radio) radio.checked = true; 
             
             renderTimelineFromItems(currentScheduleItems); 
+        }
+        
+        // ---------- Image Upload Logic ----------
+        async function handleImageUpload(file, urlStorageElement, statusElement, onCompleteCallback) {
+            if (!file) return;
+
+            statusElement.textContent = '';
+            statusElement.className = 'status-text text-sm mt-2 text-slate-400 h-5';
+            
+            if (!file.type.startsWith('image/')) {
+                statusElement.textContent = 'יש לבחור קובץ תמונה בלבד.';
+                statusElement.classList.add('err');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                statusElement.textContent = 'הקובץ גדול מדי (עד 5MB).';
+                statusElement.classList.add('err');
+                return;
+            }
+
+            statusElement.textContent = 'מעלה תמונה...';
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch(IMAGE_WORKER_URL, { method: 'POST', body: formData });
+                const result = await response.json();
+
+                if (!response.ok || !result.data?.url) {
+                    throw new Error(result.error?.message || 'שגיאה לא ידועה מהשרת');
+                }
+
+                const imageUrl = result.data.url;
+                urlStorageElement.value = imageUrl;
+                statusElement.textContent = 'ההעלאה הושלמה!';
+                statusElement.classList.add('ok');
+
+                if (onCompleteCallback) onCompleteCallback(imageUrl);
+                
+                setTimeout(() => { statusElement.textContent = ''; statusElement.className = 'status-text text-sm mt-2 text-slate-400 h-5'; }, 3000);
+
+            } catch (error) {
+                console.error('Image upload failed:', error);
+                statusElement.textContent = `שגיאה: ${error.message}`;
+                statusElement.classList.add('err');
+            }
+        }
+
+        function configureBgSettingsUI() {
+            const hasBgImage = !!bgImageUrlStorage.value;
+            bgImageUploadBtn.innerHTML = hasBgImage 
+                ? '<i class="fas fa-sync-alt mr-1"></i> שנה תמונה' 
+                : '<i class="fas fa-upload mr-1"></i> העלה תמונה';
+            bgImageRemoveBtn.classList.toggle('hidden', !hasBgImage);
         }
 
         // ---------- Rendering Functions ----------
@@ -1216,9 +1303,29 @@
                 });
             });
 
+            // BG Settings Events
+            bgImageUploadBtn.addEventListener('click', () => bgImageUploadInput.click());
+            bgImageUploadInput.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    handleImageUpload(file, bgImageUrlStorage, bgImageStatus, (url) => {
+                        setBackground({ type: 'image', value: url, brightness: document.getElementById('bg-brightness-slider').value });
+                        configureBgSettingsUI();
+                    });
+                }
+                e.target.value = null;
+            });
+            bgImageRemoveBtn.addEventListener('click', () => {
+                bgImageUrlStorage.value = '';
+                setBackground({ type: 'color', value: bgColorPicker.value, brightness: document.getElementById('bg-brightness-slider').value });
+                configureBgSettingsUI();
+                bgImageStatus.textContent = 'התמונה הוסרה.';
+                setTimeout(() => bgImageStatus.textContent = '', 2000);
+            });
+
             document.getElementById('apply-bg-settings').addEventListener('click', () => {
-                const url = document.getElementById('bg-image-url').value;
-                const color = document.getElementById('bg-color-picker').value;
+                const url = bgImageUrlStorage.value;
+                const color = bgColorPicker.value;
                 const brightness = document.getElementById('bg-brightness-slider').value;
                 const bgSettings = { type: url ? 'image' : 'color', value: url || color, brightness: brightness };
                 setBackground(bgSettings);
@@ -1356,6 +1463,11 @@
                 setTheme(finalThemeSetting.key || 'light');
             }
             setBackground(finalBg);
+
+            // Set initial values in settings panel
+            bgImageUrlStorage.value = finalBg.type === 'image' ? finalBg.value : '';
+            bgColorPicker.value = finalBg.type === 'color' ? finalBg.value : '#f1f5f9';
+            document.getElementById('bg-brightness-slider').value = finalBg.brightness;
         }
 
         async function initPage() {
@@ -1367,7 +1479,6 @@
 
             if (!tripId || !dateStr) { alert('כתובת שגויה: חסר tripId או date.'); location.href = 'index.html'; return; }
 
-            // Set the "back" button link immediately
             tripHomeBtn.href = `trip.html?id=${tripId}`;
 
             attachEvents();
@@ -1379,7 +1490,6 @@
                 authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${displayName} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
                 document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth));
 
-                // --- 🚩 THIS IS THE UPDATED PERMISSION CHECK 🚩 ---
                 const tripRef = doc(db, 'trips', tripId);
                 const tripSnap = await getDoc(tripRef);
 
@@ -1388,7 +1498,6 @@
                     const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
 
                     if (canAccess) {
-                        // User has permission, continue loading the page
                         tripData = loadedTripData;
 
                         destForDate = findDestinationForDate(tripData, dateStr);
@@ -1435,19 +1544,16 @@
                             renderNotesList([]);
                         }
                     } else {
-                        // User does not have permission
                         alert('אין לך הרשאה לצפות בטיול זה.');
                         location.href = 'index.html';
-                        return; // Stop execution
+                        return;
                     }
                 } else {
-                    // Trip document does not exist
                     alert('הטיול לא נמצא.');
                     location.href = 'index.html';
-                    return; // Stop execution
+                    return;
                 }
 
-                // Hide loader only after all data and permissions are checked
                 initialLoader.style.opacity = '0';
                 mainContent.style.opacity = '1';
                 setTimeout(() => { initialLoader.style.display = 'none'; }, 500);
@@ -1488,7 +1594,6 @@
             refDetailModalContent.innerHTML = contentHtml;
             document.getElementById('close-ref-modal-btn').onclick = closeRefDetailModal;
 
-            // Init map if exists
             const mapContainer = refDetailModalContent.querySelector('#ref-modal-map');
             if (mapContainer && itemData.coords) {
                 setTimeout(() => {
