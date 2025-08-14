@@ -19,6 +19,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
   <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
 
+  <!-- Firebase (compat, ללא מודולים) -->
+  <script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore-compat.js"></script>
+
   <style>
     body { font-family: 'Assistant', sans-serif; }
 
@@ -169,12 +174,8 @@
     <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95"></div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-    import { getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
-
-    // Firebase
+  <script>
+    // --- Firebase: compat API (ללא מודולים) ---
     const firebaseConfig = {
       apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
       authDomain: "tiool-loz.firebaseapp.com",
@@ -183,11 +184,11 @@
       messagingSenderId: "226069823505",
       appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
     };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db   = firebase.firestore();
 
-    // State
+    // --- State ---
     let tripId = null;
     let tripData = null;
     let currentUser = null;
@@ -206,7 +207,7 @@
       datePicker: null,
     };
 
-    // DOM
+    // --- DOM refs ---
     const DOM = {
       loadingOverlay: document.getElementById('loading-overlay'),
       pageTitle: document.getElementById('page-title'),
@@ -236,7 +237,16 @@
       grandTotalContainer: document.getElementById('grand-total-container'),
     };
 
-    // Init
+    // --- Helpers ---
+    function hideLoader() {
+      DOM.loadingOverlay.style.opacity = '0';
+      setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
+    }
+
+    // Fallback: אם שום דבר לא קרה 10 שניות – הסתר overlay כדי שלא יישאר "תקוע"
+    setTimeout(() => { if (DOM.loadingOverlay && DOM.loadingOverlay.style.display !== 'none') hideLoader(); }, 10000);
+
+    // --- Init ---
     function initPage() {
       const urlParams = new URLSearchParams(window.location.search);
       tripId = urlParams.get('tripId');
@@ -247,7 +257,7 @@
       }
       DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
-      onAuthStateChanged(auth, (user) => {
+      auth.onAuthStateChanged((user) => {
         if (user) {
           currentUser = user;
           setupAuthUI(user);
@@ -262,16 +272,15 @@
       try {
         if (logisticsUnsubscribe) logisticsUnsubscribe();
 
-        const tripRef = doc(db, "trips", tripId);
-        const tripSnap = await getDoc(tripRef);
-        if (!tripSnap.exists()) {
+        const tripRef = db.collection('trips').doc(tripId);
+        const tripSnap = await tripRef.get();
+        if (!tripSnap.exists) {
           alert("הטיול לא נמצא.");
           window.location.href = 'index.html';
           return;
         }
 
-        const t = tripSnap.data();
-        // הרשאה: בעלים או ברשימת editors
+        const t = tripSnap.data() || {};
         const canAccess = (t.ownerId === currentUser.uid) || (Array.isArray(t.editors) && t.editors.includes(currentUser.uid));
         if (!canAccess) {
           alert('אין לך הרשאה לערוך את הלו"ז.');
@@ -284,10 +293,8 @@
         DOM.pageTitle.textContent = `לוגיסטיקה - ${tripData.name || ''}`;
         buildSidebarMenu();
 
-        const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
-        const q = query(logisticsCollectionRef);
-
-        logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
+        const logisticsCollectionRef = tripRef.collection('logistics');
+        logisticsUnsubscribe = logisticsCollectionRef.onSnapshot((snapshot) => {
           allItems = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
           renderApp();
           hideLoader();
@@ -298,42 +305,36 @@
         });
       } catch (err) {
         console.error(err);
-        hideLoader();
         alert('שגיאה בטעינת הדף.');
+        hideLoader();
       }
     }
 
-    function hideLoader() {
-      DOM.loadingOverlay.style.opacity = '0';
-      setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
-    }
-
-    // Auth UI
+    // --- Auth UI ---
     function setupAuthUI(user) {
-      const userDocRef = doc(db, "users", user.uid);
-      getDoc(userDocRef).then(docSnap => {
-        const name = docSnap.exists() ? (docSnap.data().name || 'משתמש') : 'משתמש';
+      db.collection('users').doc(user.uid).get().then(docSnap => {
+        const name = (docSnap.exists && (docSnap.data()?.name)) ? docSnap.data().name : 'משתמש';
         DOM.authContainer.innerHTML =
           `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${name} 👋</span>
            <button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
         document.getElementById('sign-out-btn').addEventListener('click', () =>
-          signOut(auth).then(() => window.location.href = 'index.html')
+          auth.signOut().then(() => window.location.href = 'index.html')
         );
       }).catch(() => {
         DOM.authContainer.innerHTML =
           `<button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
         document.getElementById('sign-out-btn').addEventListener('click', () =>
-          signOut(auth).then(() => window.location.href = 'index.html')
+          auth.signOut().then(() => window.location.href = 'index.html')
         );
       });
     }
 
-    // Sidebar
+    // --- Sidebar ---
     function buildSidebarMenu() {
       DOM.mainMenu.innerHTML = '';
       if (!tripData || !tripData.destinations) return;
 
-      tripData.destinations.forEach(dest => {
+      (tripData.destinations || []).forEach(dest => {
         const destinationDiv = document.createElement('div');
         const button = document.createElement('button');
         button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
@@ -380,7 +381,7 @@
       return dates;
     }
 
-    // Render
+    // --- Render ---
     function renderApp() {
       const hotels = allItems.filter(item => item.type === 'hotel');
       const transports = allItems.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
@@ -479,10 +480,10 @@
       return card;
     }
 
-    // Modal flow
+    // --- Modal flow ---
     function resetModalState() {
-      Object.values(modalState.maps).forEach(map => map.remove());
-      if (modalState.datePicker) modalState.datePicker.destroy();
+      Object.values(modalState.maps).forEach(map => map.remove && map.remove());
+      if (modalState.datePicker && modalState.datePicker.destroy) modalState.datePicker.destroy();
       modalState = {
         mainType: null, subType: null, currentStep: 1, data: {},
         maps: {}, mapMarkers: {}, datePicker: null,
@@ -510,7 +511,7 @@
         DOM.modal.classList.remove('opacity-0');
         DOM.modal.querySelector('.modal-content').classList.remove('scale-95');
         initializeFieldPlugins();
-        setTimeout(() => Object.values(modalState.maps).forEach(map => map?.invalidateSize()), 100);
+        setTimeout(() => Object.values(modalState.maps).forEach(map => map?.invalidateSize && map.invalidateSize()), 100);
       }, 10);
     }
 
@@ -536,7 +537,7 @@
             {id: 'booked_via', label: 'הוזמן דרך?', required: true}
           ]},
           { title: "תאריכים ומחיר", fields: [
-            {id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange', required: true},
+            {id: 'dates', label: 'תאריך צ' + 'ק-אין וצ' + 'ק-אאוט', type: 'daterange', required: true},
             {id: 'price', label: 'מחיר (בדולרים)', type: 'number', required: true}
           ]},
           { title: "מיקום המלון", fields: [
@@ -754,11 +755,7 @@
       const dateInput = DOM.modalForm.querySelector('#dates, #date');
       if (dateInput) {
         const isSingle = dateInput.id === 'date' || modalState.subType === 'flight';
-        modalState.datePicker = new Litepicker({
-          element: dateInput,
-          singleMode: isSingle,
-          format: 'DD/MM/YYYY'
-        });
+        modalState.datePicker = new Litepicker({ element: dateInput, singleMode: isSingle, format: 'DD/MM/YYYY' });
       }
 
       if (document.getElementById('map-container')) initMap('map-container', 'hotel');
@@ -806,7 +803,7 @@
           modalState.data.from = collectLegData('from', modalState.data.from);
           modalState.data.to = collectLegData('to', modalState.data.to);
           modalState.data.connections = (modalState.data.connections || []).map((conn, i) => collectLegData(`connection-${i}`, conn));
-          return; // no required check here
+          return;
         } else if (field.type === 'luggage') {
           modalState.data.hand_bag_count = document.getElementById('hand_bag_count').value;
           modalState.data.trolley_count = document.getElementById('trolley_count').value;
@@ -817,9 +814,7 @@
           return;
         } else {
           const input = document.getElementById(field.id);
-          if (input) {
-            value = (field.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
-          }
+          if (input) value = (field.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
         }
 
         if (field.required && (value === null || value === '' || (field.type === 'number' && !Number.isFinite(value)))) {
@@ -861,12 +856,12 @@
       const cleanedData = cleanDataForFirebase(finalData);
 
       try {
-        const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+        const logisticsCollectionRef = db.collection('trips').doc(tripId).collection('logistics');
         if (editingItem && editingItem.id) {
-          await updateDoc(doc(logisticsCollectionRef, editingItem.id), cleanedData);
+          await logisticsCollectionRef.doc(editingItem.id).update(cleanedData);
         } else {
-          cleanedData.createdAt = serverTimestamp();
-          await addDoc(logisticsCollectionRef, cleanedData);
+          cleanedData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+          await logisticsCollectionRef.add(cleanedData);
         }
         closeModal();
       } catch (err) {
@@ -875,7 +870,7 @@
       }
     }
 
-    // Maps & Geocoding
+    // --- Maps & Geocoding ---
     function initMap(containerId, mapKey) {
       if (modalState.maps[mapKey]) modalState.maps[mapKey].remove();
       const mapContainer = document.getElementById(containerId);
@@ -936,7 +931,7 @@
       collectStepData();
 
       Object.values(finalMap._layers).forEach(layer => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.PolylineDecorator) {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline || (L.PolylineDecorator && layer instanceof L.PolylineDecorator) || (L.LayerGroup && layer instanceof L.LayerGroup)) {
           finalMap.removeLayer(layer);
         }
       });
@@ -955,14 +950,16 @@
         finalMap.fitBounds(points, { padding: [50, 50] });
         if (points.length > 1) {
           const polyline = L.polyline(points, { color: '#3b82f6', weight: 3, dashArray: '10, 10' }).addTo(finalMap);
-          L.polylineDecorator(polyline, {
-            patterns: [{ offset: 25, repeat: 50, symbol: L.Symbol.arrowHead({ pixelSize: 12, pathOptions: { fillOpacity: 1, weight: 0, color: '#3b82f6' } }) }]
-          }).addTo(finalMap);
+          if (L.polylineDecorator) {
+            L.polylineDecorator(polyline, {
+              patterns: [{ offset: 25, repeat: 50, symbol: L.Symbol.arrowHead({ pixelSize: 12, pathOptions: { fillOpacity: 1, weight: 0, color: '#3b82f6' } }) }]
+            }).addTo(finalMap);
+          }
         }
       }
     }
 
-    // Dynamic form helpers
+    // --- Dynamic form helpers ---
     function addConnection() {
       if (!modalState.data.connections) modalState.data.connections = [];
       const index = modalState.data.connections.length;
@@ -975,7 +972,7 @@
       container.appendChild(div.firstChild);
 
       initMap(`map-connection-${index}`, `connection-${index}`);
-      setTimeout(() => modalState.maps[`connection-${index}`]?.invalidateSize(), 10);
+      setTimeout(() => modalState.maps[`connection-${index}`]?.invalidateSize && modalState.maps[`connection-${index}`].invalidateSize(), 10);
     }
 
     function addSeatInput(value = '') {
@@ -991,7 +988,7 @@
       container.appendChild(wrapper);
     }
 
-    // Delete modal
+    // --- Delete/Details Modals ---
     function handleDelete(id, name) {
       itemToDelete = { id, name };
       DOM.deleteModalTitle.textContent = `האם למחוק את "${name}"?`;
@@ -1006,7 +1003,7 @@
     async function confirmDeletion() {
       if (!itemToDelete) return;
       try {
-        await deleteDoc(doc(db, "trips", tripId, "logistics", itemToDelete.id));
+        await db.collection('trips').doc(tripId).collection('logistics').doc(itemToDelete.id).delete();
       } catch (error) {
         console.error("Failed to delete item:", error);
       } finally {
@@ -1023,7 +1020,7 @@
       }, 300);
     }
 
-    // Summary
+    // --- Summary ---
     function renderSummaryTables() {
       const categories = {
         hotel: { label: '🏨 מלונות', total: 0 },
@@ -1070,7 +1067,7 @@
       `;
     }
 
-    // Events
+    // --- Events ---
     document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
     DOM.modalCloseBtn.addEventListener('click', closeModal);
     DOM.modalForm.addEventListener('submit', handleFormSubmit);
@@ -1083,7 +1080,7 @@
         updateModalNav();
         setTimeout(() => {
           initializeFieldPlugins();
-          Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+          Object.values(modalState.maps).forEach(m => m?.invalidateSize && m.invalidateSize());
         }, 10);
       }
     });
@@ -1100,14 +1097,14 @@
       updateModalNav();
       setTimeout(() => {
         initializeFieldPlugins();
-        Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+        Object.values(modalState.maps).forEach(m => m?.invalidateSize && m.invalidateSize());
       }, 10);
     });
 
     DOM.modalForm.addEventListener('click', e => {
       const target = e.target.closest('button');
       if (!target) return;
-      const { action, legId } = target.dataset;
+      const { action, legId } = target.dataset || {};
 
       if (action === 'find-address') {
         const addr = document.getElementById('address')?.value || '';
@@ -1149,11 +1146,7 @@
     DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
     DOM.overlay.addEventListener('click', toggleSidebar);
 
-    // Delete modal events
-    DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
-    DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
-
-    // Safety: if יש שגיאה כללית—אל תשאיר overlay
+    // בטיחות: גם במקרה של שגיאות כלליות – אל תיתקע עם overlay
     window.addEventListener('error', () => hideLoader());
     window.addEventListener('unhandledrejection', () => hideLoader());
 
