@@ -63,6 +63,8 @@
       -webkit-backdrop-filter: blur(6px);
       border-top: 1px solid var(--glass-border);
     }
+    .status-text.ok { color: #10b981; }
+    .status-text.err { color: #ef4444; }
   </style>
 </head>
 <body class="bg-gray-900 text-slate-200 selection:bg-blue-600/40">
@@ -155,10 +157,17 @@
       </header>
       <main class="px-6 py-6 space-y-6">
         <div>
-          <label for="bg-image-url" class="block mb-2 font-semibold text-right">תמונת רקע (קישור)</label>
-          <input type="url" id="bg-image-url" placeholder="https://example.com/image.jpg"
-                 class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+          <label class="block mb-2 font-semibold text-right">תמונת רקע</label>
+          <div class="flex items-center gap-2">
+             <input type="url" id="bg-image-url" placeholder="הדבק קישור או העלה קובץ"
+                 class="flex-grow px-3 py-2 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
                  dir="ltr">
+            <label for="bg-image-upload" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition whitespace-nowrap">
+                <i class="fas fa-upload mr-1"></i> העלאה
+            </label>
+            <input type="file" id="bg-image-upload" class="hidden" accept="image/*">
+          </div>
+          <p id="bg-image-status" class="text-sm mt-2 text-slate-400 h-5"></p>
         </div>
         <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-white/5 border border-white/15">
           <div class="text-right">
@@ -229,23 +238,21 @@
                  class="w-full max-w-sm mx-auto p-3 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-white placeholder:text-slate-300">
         </div>
 
-        <div id="step-3" class="modal-content w-full step-hidden text-center">
-            <h3 class="text-xl font-semibold mb-2">תמונת נושא לטיול (אופציונלי)</h3>
-            <p class="text-sm text-slate-300 mb-4">בחרו תמונה מהמחשב שלכם.</p>
-            
-            <div class="w-full max-w-md mx-auto">
-                <label for="trip-image-upload" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition inline-block">
-                    <i class="fas fa-upload mr-2"></i> בחירת תמונה
-                </label>
-                <input type="file" id="trip-image-upload" class="hidden" accept="image/*">
-                <p id="upload-status" class="text-sm text-slate-300 mt-2 h-5"></p>
-            </div>
-            
-            <input type="hidden" id="trip-image-url">
-            
-            <div id="trip-image-preview" class="w-full max-w-md mx-auto mt-4 h-40 bg-white/5 rounded-lg border border-white/15 flex items-center justify-center text-slate-400 bg-cover bg-center">
-                <i class="fas fa-image text-4xl"></i>
-            </div>
+        <div id="step-3" class="modal-content w-full step-hidden">
+          <h3 class="text-xl font-semibold text-center mb-2">תמונת נושא לטיול (אופציונלי)</h3>
+          <p class="text-center text-sm text-slate-300 mb-4">העלו תמונה או הדביקו קישור</p>
+          <div class="flex items-center gap-2 max-w-md mx-auto">
+            <input type="url" id="trip-image-url" placeholder="https://example.com/cover.jpg"
+                   class="flex-grow p-3 rounded-lg bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder:text-slate-300 text-left" dir="ltr">
+            <label for="trip-image-upload" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition">
+              <i class="fas fa-upload"></i>
+            </label>
+            <input type="file" id="trip-image-upload" class="hidden" accept="image/*">
+          </div>
+           <p id="trip-image-status" class="text-center text-sm mt-2 text-slate-400 h-5"></p>
+          <div id="trip-image-preview" class="w-full max-w-md mx-auto mt-2 h-40 bg-white/5 rounded-lg border border-white/15 flex items-center justify-center text-slate-400 bg-cover bg-center">
+            <i class="fas fa-image text-4xl"></i>
+          </div>
         </div>
 
         <div id="step-4" class="modal-content w-full h-full step-hidden">
@@ -259,6 +266,7 @@
             <div id="destinations-list" class="space-y-2"></div>
             <div id="no-dests" class="text-slate-300 text-sm mt-4">טרם הוספת יעדים. לחץ/י “הוסף יעד”.</div>
           </div>
+
           <div id="dest-form-view" class="hidden">
             <h3 class="text-xl font-semibold mb-3" id="dest-form-title">הוספת יעד</h3>
             <div class="p-4 glass rounded-xl space-y-3 border border-white/15">
@@ -280,6 +288,7 @@
                 </div>
               </div>
               <div id="dest-form-map" class="w-full h-48 bg-white/5 rounded-lg border border-white/15 mt-2"></div>
+
               <div class="sticky-actions safe-bottom mt-4 pt-3">
                 <div class="flex justify-end gap-3">
                   <button id="cancel-destination-btn" class="glass px-4 py-2 rounded-lg hover:bg-white/10">ביטול</button>
@@ -325,6 +334,9 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    
+    // --- Image Uploader Configuration ---
+    const IMAGE_WORKER_URL = "https://yellow-cloud-3f13.doronenakache.workers.dev/";
 
     const DOM = {
       body: document.body,
@@ -340,7 +352,6 @@
       tripsGrid: document.getElementById('trips-grid'),
       noTripsMessage: document.getElementById('no-trips-message'),
       loginPromptMessage: document.getElementById('login-prompt-message'),
-      bgImageUrlInput: document.getElementById('bg-image-url'),
       settingsModal: document.getElementById('settings-modal'),
       logoutModal: document.getElementById('logout-modal'),
       confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
@@ -359,14 +370,21 @@
       saveTripBtn: document.getElementById('save-trip-btn'),
       tripNameInput: document.getElementById('trip-name'),
       tripDatesInput: document.getElementById('trip-dates'),
-      tripImageUrlInput: document.getElementById('trip-image-url'), // Hidden input for the final URL
-      tripImageUploadInput: document.getElementById('trip-image-upload'), // The actual file input
-      uploadStatus: document.getElementById('upload-status'), // Text for upload status
-      tripImagePreview: document.getElementById('trip-image-preview'),
       stepDots: Array.from({length: 5}, (_, i) => document.getElementById(`step-dot-${i+1}`)),
       stepProgress: document.getElementById('step-progress'),
 
-      // יעדים
+      // Background Image Uploader
+      bgImageUrlInput: document.getElementById('bg-image-url'),
+      bgImageUploadInput: document.getElementById('bg-image-upload'),
+      bgImageStatus: document.getElementById('bg-image-status'),
+
+      // Trip Cover Image Uploader
+      tripImageUrlInput: document.getElementById('trip-image-url'),
+      tripImageUploadInput: document.getElementById('trip-image-upload'),
+      tripImageStatus: document.getElementById('trip-image-status'),
+      tripImagePreview: document.getElementById('trip-image-preview'),
+
+      // Destinations
       destListView: document.getElementById('dest-list-view'),
       destinationsList: document.getElementById('destinations-list'),
       addDestinationBtn: document.getElementById('add-destination-btn'),
@@ -397,8 +415,6 @@
     let formMap = null;
     let formMarker = null;
     let destDatePicker = null;
-    
-    const WORKER_URL = 'https://yellow-cloud-3f13.doronenakache.workers.dev/';
 
     function openModal(modal) {
       if (!modal) return;
@@ -539,6 +555,93 @@
       }
     });
 
+    // --- New Image Upload Logic ---
+    async function handleImageUpload(file, urlInputElement, statusElement, onCompleteCallback) {
+        if (!file) return;
+
+        // Reset status
+        statusElement.textContent = '';
+        statusElement.className = 'status-text text-center text-sm mt-2 text-slate-400 h-5';
+        
+        // Validation
+        if (!file.type.startsWith('image/')) {
+            statusElement.textContent = 'יש לבחור קובץ תמונה בלבד.';
+            statusElement.classList.add('err');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            statusElement.textContent = 'הקובץ גדול מדי (עד 5MB).';
+            statusElement.classList.add('err');
+            return;
+        }
+
+        statusElement.textContent = 'מעלה תמונה...';
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            const response = await fetch(IMAGE_WORKER_URL, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.data?.url) {
+                throw new Error(result.error?.message || 'שגיאה לא ידועה מהשרת');
+            }
+
+            const imageUrl = result.data.url;
+            urlInputElement.value = imageUrl;
+            statusElement.textContent = 'ההעלאה הושלמה!';
+            statusElement.classList.add('ok');
+
+            if (onCompleteCallback) {
+                onCompleteCallback(imageUrl);
+            }
+            // Clear status message after a few seconds
+            setTimeout(() => { statusElement.textContent = ''; statusElement.className = 'status-text text-center text-sm mt-2 text-slate-400 h-5'; }, 3000);
+
+        } catch (error) {
+            console.error('Image upload failed:', error);
+            statusElement.textContent = `שגיאה: ${error.message}`;
+            statusElement.classList.add('err');
+        }
+    }
+
+    DOM.bgImageUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageUpload(file, DOM.bgImageUrlInput, DOM.bgImageStatus, (url) => {
+                document.body.style.backgroundImage = `url('${url}')`;
+            });
+        }
+        e.target.value = null; // Reset file input
+    });
+
+    function updateTripImagePreview(url) {
+      if (url) {
+        DOM.tripImagePreview.style.backgroundImage = `url('${url}')`;
+        DOM.tripImagePreview.innerHTML = '';
+      } else {
+        DOM.tripImagePreview.style.backgroundImage = 'none';
+        DOM.tripImagePreview.innerHTML = '<i class="fas fa-image text-4xl"></i>';
+      }
+    }
+
+    DOM.tripImageUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageUpload(file, DOM.tripImageUrlInput, DOM.tripImageStatus, updateTripImagePreview);
+        }
+        e.target.value = null; // Reset file input
+    });
+    
+    DOM.tripImageUrlInput.addEventListener('input', () => {
+      updateTripImagePreview(DOM.tripImageUrlInput.value.trim());
+    });
+
+    // General Events
     DOM.loginBtn.addEventListener('click', () => location.href = 'login.html');
     DOM.settingsBtn.addEventListener('click', () => openModal(DOM.settingsModal));
     DOM.addExpenseBtn.addEventListener('click', () => openModal(DOM.addExpenseModal));
@@ -548,7 +651,9 @@
       if (isHidden) { container.classList.remove('hidden'); window.scrollTo(0, container.offsetTop - 80); }
       else { container.classList.add('hidden'); }
     });
+
     DOM.disableAutoToggle.addEventListener('click', () => DOM.disableAutoToggle.classList.toggle('on'));
+
     DOM.saveSettingsBtn.addEventListener('click', async () => {
       if (!currentUser) return;
       const bgImage = DOM.bgImageUrlInput.value.trim() || null;
@@ -562,11 +667,13 @@
         closeModal();
       } catch (err) { console.error('Error saving settings:', err); }
     });
+
     DOM.userNameBtn.addEventListener('click', () => openModal(DOM.logoutModal));
     DOM.confirmLogoutBtn.addEventListener('click', () => {
       signOut(auth).catch(err => console.error('Signout error:', err));
       closeModal();
     });
+
     DOM.tripsGrid.addEventListener('click', (e) => {
       const editBtn = e.target.closest('.edit-trip-btn');
       if (editBtn) { e.preventDefault(); openEditModal(editBtn.dataset.tripId); }
@@ -604,6 +711,7 @@
       DOM.saveTripBtn.classList.toggle('hidden', currentStep !== DOM.stepElems.length - 1);
 
       updateStepperUI();
+
       if (currentStep === 4) generateReviewMap();
     }
 
@@ -612,13 +720,11 @@
       currentStep = 0;
       DOM.tripNameInput.value = '';
       DOM.tripDatesInput.value = '';
-      DOM.tripImageUrlInput.value = ''; // Reset hidden URL input
-      DOM.tripImageUploadInput.value = ''; // Reset file input
-      DOM.uploadStatus.textContent = '';
-      DOM.uploadStatus.classList.remove('text-green-400', 'text-red-400');
-      DOM.tripImagePreview.style.backgroundImage = 'none';
-      DOM.tripImagePreview.innerHTML = '<i class="fas fa-image text-4xl"></i>';
-
+      DOM.tripImageUrlInput.value = '';
+      DOM.tripImageStatus.textContent = '';
+      DOM.tripImageStatus.className = 'status-text text-center text-sm mt-2 text-slate-400 h-5';
+      updateTripImagePreview(null);
+      
       destinations = [];
       editingIndex = null;
       renderDestList();
@@ -654,14 +760,8 @@
       DOM.saveTripBtn.textContent = 'שמור שינויים';
       DOM.tripNameInput.value = tripData.name || '';
       DOM.tripDatesInput.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
-      
-      // Handle existing image
-      const coverImage = tripData.coverImage || '';
-      DOM.tripImageUrlInput.value = coverImage;
-      if (coverImage) {
-        DOM.tripImagePreview.style.backgroundImage = `url('${coverImage}')`;
-        DOM.tripImagePreview.innerHTML = '';
-      }
+      DOM.tripImageUrlInput.value = tripData.coverImage || '';
+      updateTripImagePreview(tripData.coverImage || '');
 
       destinations = Array.isArray(tripData.destinations) ? [...tripData.destinations] : [];
       renderDestList();
@@ -672,53 +772,7 @@
       setStep(0);
     }
 
-    // NEW: Handle image upload to worker
-    async function handleImageUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        DOM.uploadStatus.textContent = 'מעלה תמונה...';
-        DOM.uploadStatus.classList.remove('text-green-400', 'text-red-400');
-        DOM.tripImagePreview.style.backgroundImage = 'none';
-        DOM.tripImagePreview.innerHTML = '<i class="fas fa-spinner fa-spin text-4xl text-blue-400"></i>';
-        DOM.tripImageUrlInput.value = '';
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const response = await fetch(WORKER_URL, {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.text();
-                throw new Error(`שגיאת שרת: ${response.status} - ${errorData}`);
-            }
-
-            const result = await response.json(); 
-            
-            if (result.url) {
-                DOM.tripImageUrlInput.value = result.url; // Set the hidden input value
-                DOM.tripImagePreview.style.backgroundImage = `url('${result.url}')`;
-                DOM.tripImagePreview.innerHTML = '';
-                DOM.uploadStatus.textContent = 'העלאה הושלמה!';
-                DOM.uploadStatus.classList.add('text-green-400');
-            } else {
-                throw new Error(result.error || 'השרת לא החזיר קישור תקין.');
-            }
-        } catch (error) {
-            console.error('Upload error:', error);
-            DOM.uploadStatus.textContent = `שגיאה בהעלאה. נסה שוב.`;
-            DOM.uploadStatus.classList.add('text-red-400');
-            DOM.tripImagePreview.innerHTML = '<i class="fas fa-image text-4xl"></i>';
-            DOM.tripImageUrlInput.value = '';
-        }
-    }
-
-
-    // ===== יעדים: תצוגת רשימה וטופס-למסך =====
+    // ===== Destinations Logic =====
     function renderDestList() {
       DOM.destinationsList.innerHTML = destinations.map((d, idx) => `
         <div class="glass rounded-lg px-3 py-2 flex items-center justify-between">
@@ -851,7 +905,7 @@
         name: DOM.tripNameInput.value.trim(),
         startDate: tripStart || '',
         endDate: tripEnd || '',
-        coverImage: DOM.tripImageUrlInput.value.trim() || null, // Reads from the hidden input
+        coverImage: DOM.tripImageUrlInput.value.trim() || null,
         destinations
       };
 
@@ -880,20 +934,16 @@
       }
     }
 
-    // Event Listeners
+    // Modal & Stepper events
     DOM.createTripBtn.addEventListener('click', openCreateModal);
-
     document.addEventListener('click', (e) => {
       if (e.target.matches('[data-close-modal]') || e.target.closest('[data-close-modal]')) closeModal();
     });
     DOM.modalBackdrop.addEventListener('click', closeModal);
-
     DOM.nextBtn.addEventListener('click', () => setStep(currentStep + 1));
     DOM.backBtn.addEventListener('click', () => setStep(currentStep - 1));
 
-    // NEW: Listen for file selection on the upload input
-    DOM.tripImageUploadInput.addEventListener('change', handleImageUpload);
-
+    // Destinations events
     DOM.addDestinationBtn.addEventListener('click', () => openDestForm());
     DOM.destFindBtn.addEventListener('click', findOnMapForm);
     DOM.destSaveBtn.addEventListener('click', saveDestinationFromForm);
