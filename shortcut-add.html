@@ -1,71 +1,167 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>הוספת הוצאה</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>הוספת הוצאה מהירה</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet"/>
+
   <style>
-    body { font-family:'Assistant',sans-serif; background:#0b1020; color:#e5e7eb; }
-    .card { max-width:420px; margin:10vh auto; background:rgba(255,255,255,0.06);
-            border:1px solid rgba(255,255,255,0.15); border-radius:16px; padding:28px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); text-align:center; }
+    :root { --glass: rgba(255,255,255,0.1); --glass-border: rgba(255,255,255,0.2); }
+    body { font-family: 'Assistant', sans-serif; background-color: #0b1020; }
+    #bg-gradient {
+      background:
+        radial-gradient(1200px 800px at 85% -10%, rgba(59,130,246,0.25), transparent 60%),
+        radial-gradient(1000px 700px at 0% 100%, rgba(168,85,247,0.25), transparent 60%),
+        linear-gradient(180deg, #0f172a 0%, #111827 65%, #0b1020 100%);
+    }
+    .glass { background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border); }
   </style>
 </head>
-<body>
-  <main class="p-4">
-    <div class="card">
-      <div id="icon" class="text-5xl mb-4">⏳</div>
-      <h1 id="title" class="text-xl font-bold mb-1">מוסיף הוצאה…</h1>
-      <p id="msg" class="opacity-90">מעבד את הנתונים ונרשם לגיליון…</p>
-      <a id="btn" href="#" class="hidden inline-block mt-5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">סגור</a>
+<body class="bg-gray-900 text-slate-200">
+
+  <div id="bg-gradient" class="fixed inset-0 -z-10"></div>
+  
+  <main class="min-h-screen flex items-center justify-center p-4">
+    <div class="glass rounded-2xl w-full max-w-sm p-8 text-center">
+        <div id="icon-container" class="text-5xl mb-5">
+            <i class="fas fa-spinner fa-spin text-blue-400"></i>
+        </div>
+        <h1 id="status-title" class="text-2xl font-bold mb-2">מעבד בקשה...</h1>
+        <p id="status-message" class="text-slate-300 h-10">נא המתן בזמן שאנחנו מוסיפים את ההוצאה שלך.</p>
+        <a id="action-link" href="index.html" class="hidden mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"></a>
     </div>
   </main>
 
-  <script>
-    // כתובת ה-Apps Script שלך (Web App - /exec)
-    const scriptUrl = "https://script.google.com/macros/s/AKfycbzlRRA1rtwAVEcpZHCXmheeUvwXcMvnRCWwLhYg8XRj-6cQDmWEjTI8F0LJqjsTTrrVPw/exec";
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-    const $ = (id) => document.getElementById(id);
-    function setState(icon, title, msg, btnText = "", href = "#") {
-      $("icon").textContent = icon;
-      $("title").textContent = title;
-      $("msg").textContent = msg;
-      if (btnText) {
-        const b = $("btn");
-        b.textContent = btnText;
-        b.href = href;
-        b.classList.remove("hidden");
-      }
+    const firebaseConfig = {
+      apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+      authDomain: "tiool-loz.firebaseapp.com",
+      projectId: "tiool-loz",
+      storageBucket: "tiool-loz.appspot.com",
+      messagingSenderId: "226069823505",
+      appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const DOM = {
+        iconContainer: document.getElementById('icon-container'),
+        statusTitle: document.getElementById('status-title'),
+        statusMessage: document.getElementById('status-message'),
+        actionLink: document.getElementById('action-link'),
+    };
+
+    function updateStatus(icon, title, message, linkText = '', linkHref = '#') {
+        DOM.iconContainer.innerHTML = icon;
+        DOM.statusTitle.textContent = title;
+        DOM.statusMessage.textContent = message;
+        if (linkText) {
+            DOM.actionLink.textContent = linkText;
+            DOM.actionLink.href = linkHref;
+            DOM.actionLink.classList.remove('hidden');
+        } else {
+            DOM.actionLink.classList.add('hidden');
+        }
     }
 
-    (async function init() {
-      const q = new URLSearchParams(location.search);
-      const trip = q.get("trip");
-      const amount = q.get("amount");
-      const description = q.get("description");
+    async function addExpense(tripId, amount, description, user) {
+        updateStatus(
+            '<i class="fas fa-spinner fa-spin text-blue-400"></i>',
+            'מוסיף הוצאה...',
+            'שומר את הפרטים במסד הנתונים.'
+        );
 
-      if (!trip || !amount || !description) {
-        setState("⚠️", "פרטים חסרים", "נדרשים פרמטרים trip, amount, description.", "לדף הבית", "index.html");
-        return;
-      }
+        try {
+            const expensesColRef = collection(db, "trips", tripId, "expenses");
+            await addDoc(expensesColRef, {
+                description: description,
+                amount: parseFloat(amount),
+                currency: 'ILS', // Default currency, can be changed
+                category: 'אחר', // Default category for shortcut
+                date: new Date().toISOString().split('T')[0], // Today's date
+                notes: 'נוסף באמצעות קיצור דרך',
+                ownerId: user.uid,
+                createdAt: serverTimestamp(),
+            });
 
-      try {
-        const url = `${scriptUrl}?trip=${encodeURIComponent(trip)}&amount=${encodeURIComponent(amount)}&description=${encodeURIComponent(description)}`;
-        const res = await fetch(url, { method: "GET" });
-        const text = await res.text();
+            updateStatus(
+                '<i class="fas fa-check-circle text-green-400"></i>',
+                'ההוצאה נוספה בהצלחה!',
+                'החלון ייסגר אוטומטית בעוד מספר שניות.'
+            );
 
-        if (res.ok && /OK/i.test(text)) {
-          setState("✅", "ההוצאה נוספה!", "הנתון נרשם בהצלחה לגיליון. החלון ייסגר אוטומטית…", "סגור");
-          setTimeout(() => { window.close(); }, 1800);
-        } else {
-          setState("❌", "שגיאה בהוספה", text || "בקשה נכשלה.", "נסה שוב", "#");
+            // Try to close the window after 3 seconds, suitable for shortcuts
+            setTimeout(() => {
+                window.close();
+                // Fallback message if the window doesn't close
+                DOM.statusMessage.textContent = "ניתן לסגור את החלון.";
+            }, 3000);
+
+        } catch (error) {
+            console.error("Error adding expense:", error);
+            updateStatus(
+                '<i class="fas fa-times-circle text-red-400"></i>',
+                'שגיאה בהוספת הוצאה',
+                `אירעה שגיאה: ${error.message}`,
+                'חזרה לדף הבית',
+                'index.html'
+            );
         }
-      } catch (e) {
-        setState("❌", "שגיאה בחיבור", e.message, "נסה שוב", "#");
-      }
-    })();
+    }
+
+    function init() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tripId = urlParams.get('trip');
+        const amount = urlParams.get('amount');
+        const description = urlParams.get('description');
+
+        if (!tripId || !amount || !description) {
+            updateStatus(
+                '<i class="fas fa-exclamation-triangle text-yellow-400"></i>',
+                'פרטים חסרים',
+                'לא התקבלו כל הפרטים הנדרשים (מזהה טיול, סכום ותיאור).',
+                'חזרה לדף הבית',
+                'index.html'
+            );
+            return;
+        }
+
+        updateStatus(
+            '<i class="fas fa-spinner fa-spin text-blue-400"></i>',
+            'מאמת זהות...',
+            'בודק אם המשתמש מחובר...'
+        );
+
+        // We need to wait for the auth state to be determined
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            unsubscribe(); // Stop listening after we get the first result
+            if (user) {
+                // User is signed in, add the expense.
+                addExpense(tripId, amount, description, user);
+            } else {
+                // No user is signed in.
+                updateStatus(
+                    '<i class="fas fa-sign-in-alt text-red-400"></i>',
+                    'נדרשת התחברות',
+                    'עליך להתחבר לאתר לפני שתוכל להוסיף הוצאה.',
+                    'עבור לדף התחברות',
+                    'login.html'
+                );
+            }
+        });
+    }
+
+    // Start the process
+    init();
   </script>
 </body>
 </html>
