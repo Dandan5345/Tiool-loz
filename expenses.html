@@ -8,71 +8,119 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet"/>
+
   <style>
-    body { font-family: 'Assistant', sans-serif; background-color: #f4f6f9; }
-    .glass {
-      background: rgba(255,255,255,0.8);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border-radius: 12px;
-      padding: 20px;
-      margin: 20px auto;
-      max-width: 800px;
-    }
+    body { font-family: 'Assistant', sans-serif; background:#f4f6f9; }
+    .glass { background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+             border-radius: 14px; padding: 22px; margin: 24px auto; max-width: 900px; border:1px solid #e5e7eb; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: center; }
-    th { background: #2563eb; color: white; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; }
+    th { background:#2563eb; color:#fff; position: sticky; top: 0; }
+    .tag { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:12px; }
   </style>
 </head>
 <body>
   <main class="min-h-screen p-4">
     <div class="glass shadow-lg">
-      <h1 class="text-2xl font-bold mb-4 text-blue-700"><i class="fa-solid fa-receipt"></i> הוצאות הטיול</h1>
+      <div class="flex items-center justify-between mb-3">
+        <h1 class="text-2xl font-bold text-blue-700"><i class="fa-solid fa-receipt"></i> הוצאות הטיול</h1>
+        <div id="tripTag" class="tag"></div>
+      </div>
       <p id="status" class="text-gray-600 mb-4">טוען נתונים...</p>
+
       <table id="expensesTable" class="hidden">
         <thead>
           <tr>
             <th>תאריך</th>
             <th>תיאור</th>
-            <th>סכום</th>
+            <th>סכום (₪)</th>
           </tr>
         </thead>
         <tbody></tbody>
+        <tfoot>
+          <tr>
+            <th colspan="2">סה״כ</th>
+            <th id="sumCell">—</th>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </main>
 
   <script>
-    const sheetId = "12kW_mLuxSUOPZGI_5oJo61jHZsLd3avF-VLhShfqf8U"; // מזהה הגיליון שלך
+    // קונפיג: סדר העמודות בגיליון
+    // A: תאריך, B: תיאור, C: סכום (מספר), D: מזהה טיול
+    const urlParams = new URLSearchParams(location.search);
+    const sheetId = urlParams.get("sheetId") || "12kW_mLuxSUOPZGI_5oJo61jHZsLd3avF-VLhShfqf8U"; // ברירת מחדל: שלך
+    const tripId  = urlParams.get("trip") || ""; // אם ריק – נטען הכול
+    const gid     = urlParams.get("gid") || "0";
+
+    document.getElementById("tripTag").textContent = tripId ? `Trip: ${tripId}` : "כל הטיולים";
+
+    // נשתמש ב־gviz query של גוגל שיטס ומחזירים CSV
+    // אם יש tripId -> נוסיף where D='<tripId>'
+    function buildUrl() {
+      // שאילתא בסיסית: בחר A,B,C (תאריך, תיאור, סכום)
+      let tq = "select A,B,C";
+      if (tripId) {
+        // שים לב: צריך לעטוף במרכאות יחידות ולברוח מרכאות
+        const safeTrip = tripId.replace(/'/g, "\\'");
+        tq += ` where D='${safeTrip}'`;
+      }
+      const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq`;
+      const params = new URLSearchParams({
+        gid: gid,
+        tqx: "out:csv",
+        tq:  tq
+      });
+      return `${base}?${params.toString()}`;
+    }
 
     async function loadExpenses() {
-      try {
-        // מושך את הנתונים כ-CSV
-        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
-        const res = await fetch(url);
-        const csvText = await res.text();
+      const statusEl = document.getElementById("status");
+      const tableEl  = document.getElementById("expensesTable");
+      const tbody    = tableEl.querySelector("tbody");
+      const sumCell  = document.getElementById("sumCell");
+      tbody.innerHTML = "";
+      sumCell.textContent = "—";
 
-        // המרה לשורות
-        const rows = csvText.trim().split("\n").map(r => r.split(","));
-        const tbody = document.querySelector("#expensesTable tbody");
-        tbody.innerHTML = "";
+      try {
+        const res = await fetch(buildUrl());
+        if (!res.ok) throw new Error("שגיאה בשליפת הנתונים מהגיליון");
+        const csv = await res.text();
+
+        // המרה פשוטה מ-CSV לשורות/תאים (מתאים למקרה שאין פסיקים בתוך תאים)
+        // אם יש פסיקים בתיאור, מומלץ לשמור את הגיליון ללא פסיקים בתיאור או להשתמש במפענח CSV מתקדם.
+        const rows = csv.trim() ? csv.trim().split("\n").map(r => r.split(",")) : [];
+
+        if (rows.length <= 1) {
+          statusEl.textContent = "לא נמצאו הוצאות לטיול הזה.";
+          return;
+        }
 
         // דלג על שורת כותרות
+        let total = 0;
         rows.slice(1).forEach(r => {
+          const date = (r[0] || "").trim();
+          const desc = (r[1] || "").trim();
+          const amount = parseFloat((r[2] || "0").replace(/[^\d.\-]/g,"")) || 0;
+
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${r[0] || ""}</td>
-            <td>${r[1] || ""}</td>
-            <td>${r[2] || ""} ₪</td>
+            <td>${date}</td>
+            <td>${desc}</td>
+            <td>${amount.toLocaleString('he-IL', {minimumFractionDigits: 0, maximumFractionDigits: 2})}</td>
           `;
           tbody.appendChild(tr);
+          total += amount;
         });
 
-        document.getElementById("status").classList.add("hidden");
-        document.getElementById("expensesTable").classList.remove("hidden");
+        sumCell.textContent = total.toLocaleString('he-IL', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+        statusEl.classList.add("hidden");
+        tableEl.classList.remove("hidden");
 
       } catch (e) {
-        document.getElementById("status").textContent = "שגיאה בטעינת הנתונים: " + e.message;
+        statusEl.textContent = "שגיאה: " + e.message;
       }
     }
 
