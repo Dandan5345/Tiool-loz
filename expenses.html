@@ -6,79 +6,140 @@
     <title>מעקב הוצאות</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Assistant', sans-serif; -webkit-font-smoothing: antialiased; }
-        .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #09f; animation: spin 1s ease infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        html{height:100%;scrollbar-gutter:stable both-edges}
+        body{
+            font-family:'Assistant',sans-serif;
+            min-height:100%;
+            overflow-y:scroll;
+            overscroll-behavior-y:contain;
+            -webkit-font-smoothing:antialiased;
+            background-color: #f8fafc; /* Light gray background */
+        }
+        .card{
+            background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88));
+            border-radius: 16px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+            border: 1px solid rgba(226,232,240,0.7);
+        }
         .modal { transition: opacity 0.3s ease; }
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body>
 
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
-        <i class="fas fa-dollar-sign text-5xl text-blue-600 animate-spin"></i>
-        <p class="text-xl font-bold text-slate-700">טוען את מרכז ההוצאות...</p>
+        <i class="fas fa-dollar-sign text-5xl text-green-600 animate-spin"></i>
+        <p class="text-xl font-bold text-slate-700">טוען נתונים...</p>
+    </div>
+    
+    <div id="add-expense-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[101] p-4 modal">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h2 class="text-2xl font-bold">הוספת הוצאה חדשה</h2>
+                <button id="close-expense-modal-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            
+            <form id="add-expense-form" class="space-y-4">
+                <div>
+                    <label for="expense-description" class="block text-sm font-medium text-slate-700 mb-1">תיאור</label>
+                    <input type="text" id="expense-description" class="w-full p-2 border rounded-md" placeholder="ארוחת ערב, כרטיסים לרכבת..." required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="expense-amount" class="block text-sm font-medium text-slate-700 mb-1">סכום</label>
+                        <input type="number" id="expense-amount" step="0.01" class="w-full p-2 border rounded-md" placeholder="50.75" required>
+                    </div>
+                    <div>
+                        <label for="expense-currency" class="block text-sm font-medium text-slate-700 mb-1">מטבע</label>
+                        <select id="expense-currency" class="w-full p-2 border rounded-md bg-white">
+                            <option value="USD" selected>$ (דולר)</option>
+                            <option value="EUR">€ (אירו)</option>
+                            <option value="GBP">£ (פאונד)</option>
+                            <option value="ILS">₪ (שקל)</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
+                    <select id="expense-category" class="w-full p-2 border rounded-md bg-white">
+                        <option>אוכל ומסעדות</option>
+                        <option>תחבורה</option>
+                        <option>לינה</option>
+                        <option>אטרקציות ובילויים</option>
+                        <option>קניות</option>
+                        <option>אחר</option>
+                    </select>
+                </div>
+                <div class="mt-6 flex justify-end gap-4">
+                    <button type="button" id="cancel-expense-btn" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button type="submit" id="save-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg">שמור הוצאה</button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <div id="app-container" class="min-h-screen">
-        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+    <div id="main-content" class="min-h-screen">
+        <header class="bg-white backdrop-blur-sm sticky top-0 z-30 shadow-sm">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
-                    <a id="back-to-trip-btn" href="#" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-arrow-left ml-2"></i> חזרה לטיול</a>
-                    <h1 class="text-xl font-bold text-gray-800">מעקב הוצאות</h1>
-                    <div id="header-buttons" class="hidden flex items-center space-x-2 rtl:space-x-reverse">
-                         <button id="change-sheet-btn" class="bg-yellow-500 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-yellow-600 transition">
-                            <i class="fas fa-edit ml-2"></i> החלף גיליון
-                        </button>
-                         <button id="manage-participants-btn" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition">
-                            <i class="fas fa-users ml-2"></i> ניהול משתתפים
-                        </button>
-                        <button id="copy-shortcut-link-btn" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-green-700 transition">
-                            <i class="fab fa-apple ml-2"></i> העתק קישור לקיצור
-                        </button>
+                    <div class="flex items-center gap-4">
+                        <a id="back-to-trip-btn" href="#" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-arrow-left ml-2"></i>חזרה למרכז הבקרה</a>
+                        <h1 id="page-title" class="text-xl font-bold text-slate-800">מעקב הוצאות</h1>
                     </div>
                 </div>
             </div>
         </header>
 
-        <main id="main-content" class="container mx-auto p-4 md:p-6 lg:p-8">
-            <div id="setup-view" class="hidden text-center bg-white p-8 rounded-xl shadow-lg mt-8">
-                <h2 class="text-2xl font-semibold mb-4">שלב ראשון: חיבור Google Sheets</h2>
-                <p class="text-gray-600 mb-6 max-w-2xl mx-auto">
-                    כדי להתחיל לעקוב אחר הוצאות, צרו גיליון Google Sheets חדש, לחצו על "שיתוף" (Share), הגדירו הרשאה ל-"כל מי שיש לו את הקישור" בתור "עורך" (Editor), והדביקו את הקישור כאן.
-                </p>
-                <div class="max-w-lg mx-auto">
-                    <input type="url" id="sheet-url-input" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-left" dir="ltr">
-                    <button id="save-sheet-url-btn" class="w-full mt-4 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 transition transform hover:scale-105">
-                        שמירה והגדרת הגיליון
-                    </button>
+        <main>
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            
+                <div id="setup-container" class="hidden max-w-2xl mx-auto">
+                    <div class="card p-8 text-center">
+                        <i class="fas fa-file-excel text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-2xl font-bold text-slate-800">הגדרה ראשונית לניהול הוצאות</h2>
+                        <p class="text-slate-600 mt-2 mb-6">כדי להתחיל, יש לקשר גיליון של Google Sheets שישמש לשמירת כל ההוצאות.</p>
+                        
+                        <div class="text-right bg-slate-50 p-4 rounded-lg border">
+                            <h3 class="font-bold mb-2">הוראות:</h3>
+                            <ul class="list-decimal list-inside space-y-2 text-sm">
+                                <li><strong>צרו</strong> גיליון Google Sheets חדש בחשבון הגוגל שלכם.</li>
+                                <li>לחצו על כפתור <strong>"שיתוף" (Share)</strong> הירוק למעלה.</li>
+                                <li>תחת "General access", שנו את ההגדרה ל-<strong>"Anyone with the link"</strong>.</li>
+                                <li>ודאו שהתפקיד (Role) מוגדר כ-<strong>"Editor" (עורך)</strong>.</li>
+                                <li>לחצו על **"Copy link"** והדביקו אותו בתיבה למטה.</li>
+                            </ul>
+                        </div>
+
+                        <div class="mt-6">
+                            <label for="sheet-url-input" class="block text-sm font-medium text-slate-700 mb-1">הדבק את הקישור כאן:</label>
+                            <input type="url" id="sheet-url-input" class="w-full p-3 border rounded-md text-center" placeholder="https://docs.google.com/spreadsheets/d/...">
+                            <button id="save-sheet-url-btn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-6 rounded-lg text-lg">
+                                שמור והתחל לנהל הוצאות
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                 <div id="setup-loader" class="hidden mx-auto mt-4 spinner"></div>
-                 <p id="setup-error" class="text-red-500 mt-2 hidden"></p>
-            </div>
-            <div id="dashboard-view" class="hidden">
-                <div class="bg-white rounded-xl shadow-lg overflow-hidden" style="height: 75vh;">
-                    <iframe id="sheet-iframe" class="w-full h-full border-0" src=""></iframe>
+
+                <div id="main-ui-container" class="hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-slate-800">סיכום ההוצאות</h2>
+                        <button id="add-new-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-lg flex items-center gap-2">
+                            <i class="fas fa-plus"></i> הוסף הוצאה חדשה
+                        </button>
+                    </div>
+
+                    <div id="expenses-list-container" class="bg-white p-6 rounded-xl shadow-md">
+                        <p class="text-slate-500 text-center">טוען הוצאות...</p>
+                        </div>
                 </div>
+
             </div>
         </main>
-    </div>
-
-    <div id="participants-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-            <h2 class="text-2xl font-bold mb-6 text-center">ניהול משתתפים</h2>
-            <div id="participants-form" class="space-y-4"></div>
-            <div class="mt-8 flex justify-between gap-4">
-                <button id="cancel-participants-btn" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition">ביטול</button>
-                <button id="save-participants-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">שמירה</button>
-            </div>
-            <div id="participants-loader" class="hidden mx-auto mt-4 spinner"></div>
-            <p id="participants-error" class="text-red-500 mt-2 hidden text-center"></p>
-        </div>
     </div>
 
     <script type="module">
@@ -86,6 +147,7 @@
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
+        // --- Firebase Init ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -94,222 +156,184 @@
             messagingSenderId: "226069823505",
             appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
         };
-        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbnpURtWJ3GpyG3D8XNicf4AdcGjPRRKyYRx2jbL58lO1Bu8e4A2wd8JNz3j8yOsM-/exec";
-        let db, auth, tripId, tripData = {}, currentUser;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
+        // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
-            setupView: document.getElementById('setup-view'),
-            dashboardView: document.getElementById('dashboard-view'),
-            headerButtons: document.getElementById('header-buttons'),
-            sheetIframe: document.getElementById('sheet-iframe'),
-            saveSheetUrlBtn: document.getElementById('save-sheet-url-btn'),
-            sheetUrlInput: document.getElementById('sheet-url-input'),
-            setupLoader: document.getElementById('setup-loader'),
-            setupError: document.getElementById('setup-error'),
-            participantsModal: document.getElementById('participants-modal'),
-            manageParticipantsBtn: document.getElementById('manage-participants-btn'),
-            saveParticipantsBtn: document.getElementById('save-participants-btn'),
-            cancelParticipantsBtn: document.getElementById('cancel-participants-btn'),
-            participantsForm: document.getElementById('participants-form'),
-            participantsLoader: document.getElementById('participants-loader'),
-            participantsError: document.getElementById('participants-error'),
-            copyShortcutBtn: document.getElementById('copy-shortcut-link-btn'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
-            changeSheetBtn: document.getElementById('change-sheet-btn'),
+            setupContainer: document.getElementById('setup-container'),
+            mainUiContainer: document.getElementById('main-ui-container'),
+            sheetUrlInput: document.getElementById('sheet-url-input'),
+            saveSheetUrlBtn: document.getElementById('save-sheet-url-btn'),
+            addExpenseModal: document.getElementById('add-expense-modal'),
+            addNewExpenseBtn: document.getElementById('add-new-expense-btn'),
+            closeExpenseModalBtn: document.getElementById('close-expense-modal-btn'),
+            cancelExpenseBtn: document.getElementById('cancel-expense-btn'),
+            addExpenseForm: document.getElementById('add-expense-form'),
+            saveExpenseBtn: document.getElementById('save-expense-btn'),
+            expensesListContainer: document.getElementById('expenses-list-container'),
         };
 
-        function init() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-            } catch (e) { handleFatalError("שגיאה בחיבור לשירותי Firebase."); return; }
-            
+        let currentUser = null;
+        let tripId = null;
+        let tripData = null;
+        
+        // --- Core Logic ---
+        function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
-            if (!tripId) { handleFatalError("שגיאה: לא נמצא מזהה טיול בכתובת ה-URL."); return; }
+            if (!tripId) {
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
+                return;
+            }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     currentUser = user;
-                    loadTripData();
+                    loadTripAndSetupUI();
                 } else {
-                    window.location.href = `login.html?redirect=expenses.html?tripId=${tripId}`;
+                    window.location.href = 'login.html';
                 }
             });
         }
 
-        async function loadTripData() {
-            try {
-                const tripRef = doc(db, "trips", tripId);
-                const tripSnap = await getDoc(tripRef);
-                if (tripSnap.exists()) {
-                    const loadedTripData = tripSnap.data();
-                    if (loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid)) {
-                        tripData = loadedTripData;
-                        if (!tripData.participants) {
-                            tripData.participants = [ { name: 'Me', active: true }, { name: 'Person 2', active: false }, { name: 'Person 3', active: false }, { name: 'Person 4', active: false }, ];
-                        }
-                        updateUI();
-                    } else { handleFatalError("אין לך הרשאה לצפות בדף זה."); }
-                } else { handleFatalError("הטיול המבוקש לא נמצא."); }
-            } catch (e) {
-                console.error("Error loading trip data:", e);
-                handleFatalError("אירעה שגיאה בטעינת נתוני הטיול.");
-            } finally {
-                DOM.loadingOverlay.style.opacity = '0';
-                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
+        async function loadTripAndSetupUI() {
+            const tripRef = doc(db, "trips", tripId);
+            const tripSnap = await getDoc(tripRef);
+
+            if (tripSnap.exists()) {
+                tripData = tripSnap.data();
+                document.title = `הוצאות - ${tripData.name}`;
+                
+                if (tripData.expensesSheetUrl) {
+                    showMainUI();
+                } else {
+                    showSetupUI();
+                }
+            } else {
+                alert("הטיול לא נמצא.");
+                window.location.href = 'index.html';
             }
+            DOM.loadingOverlay.style.display = 'none';
         }
 
-        function updateUI() {
-            const hasSheetUrl = typeof tripData.expensesSheetUrl === 'string' && tripData.expensesSheetUrl.trim() !== '';
-            if (hasSheetUrl) {
-                DOM.setupView.classList.add('hidden');
-                DOM.dashboardView.classList.remove('hidden');
-                DOM.headerButtons.classList.remove('hidden');
-                DOM.sheetIframe.src = tripData.expensesSheetUrl.replace('/edit', '/preview?rm=minimal');
-            } else {
-                DOM.dashboardView.classList.add('hidden');
-                DOM.headerButtons.classList.add('hidden');
-                DOM.setupView.classList.remove('hidden');
+        function showSetupUI() {
+            DOM.setupContainer.classList.remove('hidden');
+            DOM.mainUiContainer.classList.add('hidden');
+        }
+
+        function showMainUI() {
+            DOM.setupContainer.classList.add('hidden');
+            DOM.mainUiContainer.classList.remove('hidden');
+            // Here you would typically call a function to load existing expenses
+            // e.g., loadExpensesFromSheet();
+        }
+
+        async function handleSaveSheetUrl() {
+            const url = DOM.sheetUrlInput.value.trim();
+            if (!url.startsWith("https://docs.google.com/spreadsheets/")) {
+                alert("נא להזין קישור תקין של Google Sheets.");
+                return;
+            }
+            
+            DOM.saveSheetUrlBtn.disabled = true;
+            DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> שומר...';
+
+            try {
+                const tripRef = doc(db, "trips", tripId);
+                await updateDoc(tripRef, {
+                    expensesSheetUrl: url
+                });
+                tripData.expensesSheetUrl = url; // Update local copy
+                showMainUI();
+            } catch (error) {
+                console.error("Error saving sheet URL:", error);
+                alert("אירעה שגיאה בשמירת הקישור. נסה שוב.");
+            } finally {
+                DOM.saveSheetUrlBtn.disabled = false;
+                DOM.saveSheetUrlBtn.textContent = 'שמור והתחל לנהל הוצאות';
             }
         }
         
-        // --- THIS IS THE UPDATED FUNCTION ---
-        async function callAppsScript(action, payload) {
-            let response;
-            try {
-                // The main change: Removed 'redirect: follow' and simplified the call.
-                response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: {
-                        // This Content-Type is a known working method for Google Apps Script
-                        'Content-Type': 'text/plain;charset=utf-8',
-                    },
-                    body: JSON.stringify({ action, ...payload }),
-                });
-            } catch (networkError) {
-                console.error('Fetch API failed completely. This is a Network Error or CORS preflight failure.', networkError);
-                throw new Error('שגיאת רשת. ייתכן שחומת אש או הדפדפן חוסמים את הגישה ל-Google Scripts. נסה מרשת אחרת או דפדפן אחר אם הבעיה נמשכת.');
-            }
+        function openExpenseModal() { DOM.addExpenseModal.classList.remove('hidden'); }
+        function closeExpenseModal() { DOM.addExpenseModal.classList.add('hidden'); }
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Apps Script response was not OK:', response.status, errorText);
-                throw new Error(`השרת החזיר שגיאה (${response.status}). ודא שהפריסה (Deployment) של הסקריפט עדכנית.`);
-            }
-
-            try {
-                const result = await response.json();
-                if (result.status === 'error') {
-                    console.error("Apps Script returned a logical error:", result.message);
-                    throw new Error(result.message);
-                }
-                return result.data;
-            } catch (jsonError) {
-                console.error('Failed to parse JSON response from Apps Script:', jsonError);
-                throw new Error('התקבלה תגובה לא תקינה מהשרת. ודא שהסקריפט פרוס כהלכה.');
-            }
-        }
-
-        function showChangeSheetUI() {
-            DOM.dashboardView.classList.add('hidden');
-            DOM.headerButtons.classList.add('hidden');
-            DOM.setupView.classList.remove('hidden');
-            DOM.sheetUrlInput.value = tripData.expensesSheetUrl || '';
-            DOM.setupError.textContent = 'ניתן להדביק קישור חדש כעת.';
-            DOM.setupError.classList.remove('hidden', 'text-red-500');
-            DOM.setupError.classList.add('text-blue-500');
-        }
-        function populateParticipantsModal() {
-            DOM.participantsForm.innerHTML = '';
-            tripData.participants.forEach((p, index) => {
-                const participantHTML = `<div class="flex items-center gap-4"><input type="checkbox" id="p${index}-active" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${p.active ? 'checked' : ''}><input type="text" id="p${index}-name" value="${p.name}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"></div>`;
-                DOM.participantsForm.insertAdjacentHTML('beforeend', participantHTML);
-            });
-        }
-        function showParticipantsModal() {
-            populateParticipantsModal();
-            DOM.participantsModal.classList.remove('hidden');
-            setTimeout(() => DOM.participantsModal.classList.remove('opacity-0'), 10);
-        }
-        function hideParticipantsModal() {
-            DOM.participantsModal.classList.add('opacity-0');
-            setTimeout(() => DOM.participantsModal.classList.add('hidden'), 300);
-        }
-        DOM.changeSheetBtn.addEventListener('click', () => {
-            if (confirm('האם אתה בטוח שברצונך להחליף את גיליון ההוצאות הקיים?')) {
-                showChangeSheetUI();
-            }
-        });
-        DOM.saveSheetUrlBtn.addEventListener('click', async () => {
-            const url = DOM.sheetUrlInput.value.trim();
-            if (!url.startsWith('https://docs.google.com/spreadsheets/d/')) {
-                DOM.setupError.textContent = 'נא להזין קישור תקין של Google Sheets.';
-                DOM.setupError.classList.remove('hidden');
+        async function handleSaveExpense(event) {
+            event.preventDefault();
+            const expenseData = {
+                description: document.getElementById('expense-description').value,
+                amount: parseFloat(document.getElementById('expense-amount').value),
+                currency: document.getElementById('expense-currency').value,
+                category: document.getElementById('expense-category').value
+            };
+            
+            if (!expenseData.description || isNaN(expenseData.amount)) {
+                alert("נא למלא תיאור וסכום תקינים.");
                 return;
             }
-            setLoading(DOM.saveSheetUrlBtn, DOM.setupLoader, true);
-            DOM.setupError.classList.add('hidden');
-            try {
-                await callAppsScript('setup', { sheetUrl: url });
-                const tripRef = doc(db, "trips", tripId);
-                await updateDoc(tripRef, { expensesSheetUrl: url });
-                tripData.expensesSheetUrl = url;
-                updateUI();
-            } catch (error) {
-                console.error("Error setting up sheet:", error);
-                DOM.setupError.textContent = `אירעה שגיאה: ${error.message}`;
-                DOM.setupError.classList.remove('hidden');
-            } finally {
-                setLoading(DOM.saveSheetUrlBtn, DOM.setupLoader, false);
-            }
-        });
-        DOM.manageParticipantsBtn.addEventListener('click', showParticipantsModal);
-        DOM.cancelParticipantsBtn.addEventListener('click', hideParticipantsModal);
-        DOM.saveParticipantsBtn.addEventListener('click', async () => {
-            const newParticipants = [];
-            for (let i = 0; i < 4; i++) {
-                newParticipants.push({ name: document.getElementById(`p${i}-name`).value.trim() || `Person ${i+1}`, active: document.getElementById(`p${i}-active`).checked });
-            }
-            setLoading(DOM.saveParticipantsBtn, DOM.participantsLoader, true);
-            DOM.participantsError.classList.add('hidden');
-            try {
-                await callAppsScript('updatePeople', { sheetUrl: tripData.expensesSheetUrl, participants: newParticipants });
-                const tripRef = doc(db, "trips", tripId);
-                await updateDoc(tripRef, { participants: newParticipants });
-                tripData.participants = newParticipants;
-                hideParticipantsModal();
-            } catch (error) {
-                console.error("Error updating participants:", error);
-                DOM.participantsError.textContent = 'שגיאה בעדכון המשתתפים. נסה שוב.';
-                DOM.participantsError.classList.remove('hidden');
-            } finally {
-                setLoading(DOM.saveParticipantsBtn, DOM.participantsLoader, false);
-            }
-        });
-        DOM.copyShortcutBtn.addEventListener('click', () => {
-            if (!tripData.expensesSheetUrl) { alert("יש לחבר גיליון הוצאות תחילה."); return; }
-            const baseUrl = `${APPS_SCRIPT_URL}?action=addExpense&sheetUrl=${encodeURIComponent(tripData.expensesSheetUrl)}`;
-            navigator.clipboard.writeText(baseUrl).then(() => {
-                DOM.copyShortcutBtn.innerHTML = '<i class="fas fa-check ml-2"></i> הועתק!';
-                setTimeout(() => { DOM.copyShortcutBtn.innerHTML = '<i class="fab fa-apple ml-2"></i> העתק קישור לקיצור'; }, 2000);
-            }).catch(err => { alert('העתקת הקישור נכשלה.'); });
-        });
-        function setLoading(button, loader, isLoading) {
-            button.disabled = isLoading;
-            button.classList.toggle('opacity-50', isLoading);
-            loader.classList.toggle('hidden', !isLoading);
+
+            DOM.saveExpenseBtn.disabled = true;
+            DOM.saveExpenseBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> שומר...';
+
+            await addExpenseToSheet(expenseData);
+            
+            DOM.saveExpenseBtn.disabled = false;
+            DOM.saveExpenseBtn.textContent = 'שמור הוצאה';
+            DOM.addExpenseForm.reset();
+            closeExpenseModal();
         }
-        function handleFatalError(message) {
-            DOM.loadingOverlay.style.display = 'none';
-            document.getElementById('main-content').innerHTML = `<div class="text-center bg-white p-8 rounded-xl shadow-lg mt-8"><h2 class="text-2xl font-semibold text-red-600 mb-4">אירעה שגיאה</h2><p class="text-gray-600">${message}</p><a href="index.html" class="inline-block mt-6 bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700">חזרה לדף הבית</a></div>`;
+
+        async function addExpenseToSheet(expenseData) {
+            // =================================================================
+            // ====> הדבק כאן את כתובת ה-URL שתקבל מ-Google Apps Script <====
+            // =================================================================
+            const webAppUrl = 'PASTE_YOUR_WEB_APP_URL_HERE'; 
+
+            if (webAppUrl === 'PASTE_YOUR_WEB_APP_URL_HERE') {
+                alert('שגיאת הגדרה: יש להדביק את כתובת ה-URL של ה-Apps Script בקוד.');
+                return;
+            }
+
+            const payload = {
+                sheetUrl: tripData.expensesSheetUrl,
+                expense: expenseData
+            };
+
+            try {
+                const response = await fetch(webAppUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    console.log('Successfully added to Google Sheet:', result.message);
+                    // כאן תוכל להוסיף את ההוצאה לרשימה המוצגת בדף באופן דינמי
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error adding expense:', error);
+                alert('אירעה שגיאה בהוספת ההוצאה: ' + error.message);
+            }
         }
-        document.addEventListener('DOMContentLoaded', init);
+
+        // --- Event Listeners ---
+        DOM.saveSheetUrlBtn.addEventListener('click', handleSaveSheetUrl);
+        DOM.addNewExpenseBtn.addEventListener('click', openExpenseModal);
+        DOM.closeExpenseModalBtn.addEventListener('click', closeExpenseModal);
+        DOM.cancelExpenseBtn.addEventListener('click', closeExpenseModal);
+        DOM.addExpenseForm.addEventListener('submit', handleSaveExpense);
+
+        // --- Start the page ---
+        initPage();
     </script>
 </body>
 </html>
