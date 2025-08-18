@@ -136,7 +136,7 @@
         <div class="mt-4 text-center">
           <button id="add-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition">
             <i class="fas fa-dollar-sign mr-2"></i>
-            הוסף הוצאה
+            הוסף הוצאה מהירה
           </button>
         </div>
 
@@ -160,7 +160,7 @@
         <h2 class="text-xl font-bold">הגדרות</h2>
         <button data-close-modal class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="px-6 py-6 space-y-6">
+      <main class="px-6 py-6 space-y-6 overflow-y-auto max-h-[75vh] no-scrollbar">
         <div>
           <label class="block mb-2 font-semibold text-right">תמונת רקע</label>
           <div class="flex items-center gap-3">
@@ -184,8 +184,20 @@
         </div>
         <div id="default-trip-section" class="hidden">
           <h3 class="font-semibold mb-2">טיול ברירת מחדל</h3>
-          <p class="text-sm text-slate-300 mb-3">בחר/י טיול שייטען אוטומטית בכניסה.</p>
+          <p class="text-sm text-slate-300 mb-3">בחר/י טיול להוספת הוצאות מהירה דרך קיצור באייפון.</p>
           <div id="default-trip-list" class="space-y-2 max-h-56 overflow-y-auto no-scrollbar pr-1"></div>
+          
+          <!-- NEW: Default Trip ID Display -->
+          <div id="default-trip-id-container" class="hidden mt-4 p-4 rounded-xl bg-white/5 border border-white/15">
+            <h4 class="font-semibold text-lime-300">מזהה טיול לקיצור דרך</h4>
+            <p class="text-sm text-slate-300 mt-1 mb-3">העתק/י את המזהה הבא והדבק/י אותו בשדה המתאים בקיצור באייפון.</p>
+            <div class="flex items-center gap-2">
+              <input type="text" id="default-trip-id-input" readonly class="w-full p-2 rounded-lg bg-black/30 text-slate-300 font-mono text-sm text-left" dir="ltr">
+              <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap">
+                <i class="fas fa-copy"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </main>
       <footer class="px-6 py-4 border-t border-white/20 flex justify-end gap-3">
@@ -205,16 +217,6 @@
     </div>
   </div>
   
-  <div id="add-expense-modal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="glass rounded-2xl w-full max-w-lg p-6 text-center">
-      <header class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">הוספת הוצאה</h2>
-        <button data-close-modal class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
-      </header>
-      <p class="text-slate-200/90">כאן יופיע הטופס להוספת הוצאות.</p>
-    </div>
-  </div>
-
   <!-- Create/Edit Trip Modal -->
   <div id="create-trip-modal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
     <div class="glass rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
@@ -375,11 +377,15 @@
       logoutModal: document.getElementById('logout-modal'),
       confirmLogoutBtn: document.getElementById('confirm-logout-btn'),
       addExpenseBtn: document.getElementById('add-expense-btn'),
-      addExpenseModal: document.getElementById('add-expense-modal'),
       saveSettingsBtn: document.getElementById('save-settings-btn'),
       defaultTripSection: document.getElementById('default-trip-section'),
       defaultTripList: document.getElementById('default-trip-list'),
       disableAutoToggle: document.getElementById('disable-auto-redirect-toggle'),
+      // New elements for Trip ID display
+      defaultTripIdContainer: document.getElementById('default-trip-id-container'),
+      defaultTripIdInput: document.getElementById('default-trip-id-input'),
+      copyTripIdBtn: document.getElementById('copy-trip-id-btn'),
+      
       createTripBtn: document.getElementById('create-trip-btn'),
       createTripModal: document.getElementById('create-trip-modal'),
       modalTitle: document.getElementById('modal-title'),
@@ -463,8 +469,8 @@
         isInitialLoad = false;
       }
     }
-    function cameFromTripPage() { try { return document.referrer.includes('trip.html'); } catch { return false; } }
-    function forceRedirectToTrip(tripId) { window.location.replace(`trip.html?id=${encodeURIComponent(tripId)}`); }
+    function cameFromTripPage() { try { return document.referrer.includes('dashboard.html'); } catch { return false; } }
+    function forceRedirectToTrip(tripId) { window.location.replace(`dashboard.html?id=${encodeURIComponent(tripId)}`); }
 
     function applyUserSettings(settings) {
       cachedSettings = settings || {};
@@ -505,13 +511,24 @@
       });
     }
 
+    function updateDefaultTripIdDisplay() {
+        const selectedRadio = document.querySelector('input[name="default-trip"]:checked');
+        if (selectedRadio) {
+            DOM.defaultTripIdInput.value = selectedRadio.value;
+            DOM.defaultTripIdContainer.classList.remove('hidden');
+        } else {
+            DOM.defaultTripIdInput.value = '';
+            DOM.defaultTripIdContainer.classList.add('hidden');
+        }
+    }
+
     async function updateTripsUI(trips) {
       if (trips.length > 0) {
         DOM.noTripsMessage.classList.add('hidden');
         const defaultCover = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1000';
         DOM.tripsGrid.innerHTML = trips.map(trip => `
           <div class="relative group">
-            <a href="trip.html?id=${trip.id}"
+            <a href="dashboard.html?id=${trip.id}"
                class="trip-card relative aspect-[4/3] rounded-2xl flex flex-col justify-end p-4 text-white no-underline overflow-hidden"
                style="background-image: url('${trip.coverImage || defaultCover}')">
                <div class="relative z-10">
@@ -546,6 +563,7 @@
         DOM.defaultTripList.innerHTML = '';
         DOM.defaultTripSection.classList.add('hidden');
       }
+      updateDefaultTripIdDisplay();
     }
 
     onAuthStateChanged(auth, (user) => {
@@ -690,7 +708,9 @@
     // General Events
     DOM.loginBtn.addEventListener('click', () => location.href = 'login.html');
     DOM.settingsBtn.addEventListener('click', () => openModal(DOM.settingsModal));
-    DOM.addExpenseBtn.addEventListener('click', () => openModal(DOM.addExpenseModal));
+    DOM.addExpenseBtn.addEventListener('click', () => {
+        window.open('shortcut-add.html', '_blank');
+    });
     DOM.toggleTripsBtn.addEventListener('click', () => {
       const container = DOM.tripsContainer;
       const isHidden = container.classList.contains('hidden');
@@ -723,6 +743,24 @@
     DOM.tripsGrid.addEventListener('click', (e) => {
       const editBtn = e.target.closest('.edit-trip-btn');
       if (editBtn) { e.preventDefault(); openEditModal(editBtn.dataset.tripId); }
+    });
+
+    // New Listeners for Trip ID
+    DOM.defaultTripList.addEventListener('change', updateDefaultTripIdDisplay);
+    DOM.copyTripIdBtn.addEventListener('click', () => {
+        const input = DOM.defaultTripIdInput;
+        input.select();
+        input.setSelectionRange(0, 99999); // For mobile devices
+        try {
+            document.execCommand('copy');
+            const originalText = DOM.copyTripIdBtn.innerHTML;
+            DOM.copyTripIdBtn.innerHTML = 'הועתק!';
+            setTimeout(() => {
+                DOM.copyTripIdBtn.innerHTML = originalText;
+            }, 1500);
+        } catch (err) {
+            alert('שגיאה: לא ניתן להעתיק את המזהה.');
+        }
     });
 
     // Stepper
@@ -978,7 +1016,7 @@
           };
           const docRef = await addDoc(collection(db, "trips"), dataToSave);
           alert('הטיול נשמר בהצלחה!');
-          window.location.href = `trip.html?id=${docRef.id}`;
+          window.location.href = `dashboard.html?id=${docRef.id}`;
         }
       } catch (err) {
         console.error('Error saving document:', err);
