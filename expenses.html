@@ -43,7 +43,10 @@
                 <div class="flex items-center justify-between h-16">
                     <a id="back-to-trip-btn" href="#" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-arrow-left ml-2"></i> חזרה לטיול</a>
                     <h1 class="text-xl font-bold text-gray-800">מעקב הוצאות</h1>
-                    <div id="header-buttons" class="hidden space-x-2 rtl:space-x-reverse">
+                    <div id="header-buttons" class="hidden flex items-center space-x-2 rtl:space-x-reverse">
+                         <button id="change-sheet-btn" class="bg-yellow-500 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-yellow-600 transition">
+                            <i class="fas fa-edit ml-2"></i> החלף גיליון
+                        </button>
                          <button id="manage-participants-btn" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition">
                             <i class="fas fa-users ml-2"></i> ניהול משתתפים
                         </button>
@@ -85,9 +88,7 @@
     <div id="participants-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
         <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
             <h2 class="text-2xl font-bold mb-6 text-center">ניהול משתתפים</h2>
-            <div id="participants-form" class="space-y-4">
-                <!-- Participant fields will be injected here by JS -->
-            </div>
+            <div id="participants-form" class="space-y-4"></div>
             <div class="mt-8 flex justify-between gap-4">
                 <button id="cancel-participants-btn" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition">ביטול</button>
                 <button id="save-participants-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">שמירה</button>
@@ -102,7 +103,6 @@
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // --- CONFIGURATION ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -114,10 +114,8 @@
         
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbnpURtWJ3GpyG3D8XNicf4AdcGjPRRKyYRx2jbL58lO1Bu8e4A2wd8JNz3j8yOsM-/exec";
 
-        // --- APPLICATION STATE ---
         let db, auth, tripId, tripData = {}, currentUser;
 
-        // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
             setupView: document.getElementById('setup-view'),
@@ -137,9 +135,9 @@
             participantsError: document.getElementById('participants-error'),
             copyShortcutBtn: document.getElementById('copy-shortcut-link-btn'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
+            changeSheetBtn: document.getElementById('change-sheet-btn'),
         };
 
-        // --- INITIALIZATION ---
         function init() {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -169,7 +167,6 @@
             });
         }
 
-        // --- DATA HANDLING ---
         async function loadTripData() {
             try {
                 const tripRef = doc(db, "trips", tripId);
@@ -180,6 +177,7 @@
                     const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
                     
                     if (canAccess) {
+                        console.log("Trip data loaded from Firebase:", loadedTripData);
                         tripData = loadedTripData;
                         if (!tripData.participants) {
                             tripData.participants = [
@@ -198,15 +196,12 @@
                 console.error("Error loading trip data:", error);
                 handleFatalError("אירעה שגיאה בטעינת נתוני הטיול.");
             } finally {
-                // Hide loading overlay regardless of outcome
                 DOM.loadingOverlay.style.opacity = '0';
                 setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
             }
         }
 
-        // --- UI LOGIC ---
         function updateUI() {
-            // Explicitly check for a valid, non-empty string
             const hasSheetUrl = typeof tripData.expensesSheetUrl === 'string' && tripData.expensesSheetUrl.trim() !== '';
 
             if (hasSheetUrl) {
@@ -219,6 +214,16 @@
                 DOM.headerButtons.classList.add('hidden');
                 DOM.setupView.classList.remove('hidden');
             }
+        }
+
+        function showChangeSheetUI() {
+            DOM.dashboardView.classList.add('hidden');
+            DOM.headerButtons.classList.add('hidden');
+            DOM.setupView.classList.remove('hidden');
+            DOM.sheetUrlInput.value = tripData.expensesSheetUrl || '';
+            DOM.setupError.textContent = 'ניתן להדביק קישור חדש כעת.';
+            DOM.setupError.classList.remove('hidden', 'text-red-500');
+            DOM.setupError.classList.add('text-blue-500');
         }
 
         function populateParticipantsModal() {
@@ -245,7 +250,12 @@
             setTimeout(() => DOM.participantsModal.classList.add('hidden'), 300);
         }
 
-        // --- EVENT HANDLERS ---
+        DOM.changeSheetBtn.addEventListener('click', () => {
+            if (confirm('האם אתה בטוח שברצונך להחליף את גיליון ההוצאות הקיים?')) {
+                showChangeSheetUI();
+            }
+        });
+
         DOM.saveSheetUrlBtn.addEventListener('click', async () => {
             const url = DOM.sheetUrlInput.value.trim();
             if (!url.startsWith('https://docs.google.com/spreadsheets/d/')) {
@@ -319,7 +329,6 @@
             });
         });
 
-        // --- HELPERS ---
         async function callAppsScript(action, payload) {
             const response = await fetch(APPS_SCRIPT_URL, {
                 method: 'POST',
@@ -356,7 +365,6 @@
             `;
         }
         
-        // --- START THE APP ---
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
