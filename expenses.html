@@ -57,7 +57,7 @@
 
         <main id="main-content" class="container mx-auto p-4 md:p-6 lg:p-8">
             <!-- Initial Setup View -->
-            <div id="setup-view" class="text-center bg-white p-8 rounded-xl shadow-lg mt-8">
+            <div id="setup-view" class="hidden text-center bg-white p-8 rounded-xl shadow-lg mt-8">
                 <h2 class="text-2xl font-semibold mb-4">שלב ראשון: חיבור Google Sheets</h2>
                 <p class="text-gray-600 mb-6 max-w-2xl mx-auto">
                     כדי להתחיל לעקוב אחר הוצאות, צרו גיליון Google Sheets חדש, לחצו על "שיתוף" (Share), הגדירו הרשאה ל-"כל מי שיש לו את הקישור" בתור "עורך" (Editor), והדביקו את הקישור כאן.
@@ -100,7 +100,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- CONFIGURATION ---
         const firebaseConfig = {
@@ -112,7 +112,6 @@
             appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
         };
         
-        // Google Apps Script Web App URL
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbnpURtWJ3GpyG3D8XNicf4AdcGjPRRKyYRx2jbL58lO1Bu8e4A2wd8JNz3j8yOsM-/exec";
 
         // --- APPLICATION STATE ---
@@ -121,7 +120,6 @@
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
-            appContainer: document.getElementById('app-container'),
             setupView: document.getElementById('setup-view'),
             dashboardView: document.getElementById('dashboard-view'),
             headerButtons: document.getElementById('header-buttons'),
@@ -143,15 +141,20 @@
 
         // --- INITIALIZATION ---
         function init() {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                handleFatalError("שגיאה בחיבור לשירותי Firebase.");
+                return;
+            }
             
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
-                window.location.href = 'index.html';
+                handleFatalError("שגיאה: לא נמצא מזהה טיול בכתובת ה-URL.");
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
@@ -161,53 +164,60 @@
                     currentUser = user;
                     loadTripData();
                 } else {
-                    window.location.href = 'login.html';
+                    window.location.href = `login.html?redirect=expenses.html?tripId=${tripId}`;
                 }
             });
         }
 
         // --- DATA HANDLING ---
         async function loadTripData() {
-            const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
+            try {
+                const tripRef = doc(db, "trips", tripId);
+                const tripSnap = await getDoc(tripRef);
 
-            if (tripSnap.exists()) {
-                const loadedTripData = tripSnap.data();
-                const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
-                
-                if (canAccess) {
-                    tripData = loadedTripData;
-                    // Initialize participants if they don't exist
-                    if (!tripData.participants) {
-                        tripData.participants = [
-                            { name: 'Me', active: true }, { name: 'Person 2', active: false },
-                            { name: 'Person 3', active: false }, { name: 'Person 4', active: false },
-                        ];
+                if (tripSnap.exists()) {
+                    const loadedTripData = tripSnap.data();
+                    const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
+                    
+                    if (canAccess) {
+                        tripData = loadedTripData;
+                        if (!tripData.participants) {
+                            tripData.participants = [
+                                { name: 'Me', active: true }, { name: 'Person 2', active: false },
+                                { name: 'Person 3', active: false }, { name: 'Person 4', active: false },
+                            ];
+                        }
+                        updateUI();
+                    } else {
+                        handleFatalError("אין לך הרשאה לצפות בדף זה.");
                     }
-                    updateUI();
-                    DOM.loadingOverlay.style.opacity = '0';
-                    setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
                 } else {
-                    alert("אין לך הרשאה לצפות בדף זה.");
-                    window.location.href = 'index.html';
+                    handleFatalError("הטיול המבוקש לא נמצא.");
                 }
-            } else {
-                alert("הטיול לא נמצא.");
-                window.location.href = 'index.html';
+            } catch (error) {
+                console.error("Error loading trip data:", error);
+                handleFatalError("אירעה שגיאה בטעינת נתוני הטיול.");
+            } finally {
+                // Hide loading overlay regardless of outcome
+                DOM.loadingOverlay.style.opacity = '0';
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
             }
         }
 
         // --- UI LOGIC ---
         function updateUI() {
-            if (tripData.expensesSheetUrl) {
+            // Explicitly check for a valid, non-empty string
+            const hasSheetUrl = typeof tripData.expensesSheetUrl === 'string' && tripData.expensesSheetUrl.trim() !== '';
+
+            if (hasSheetUrl) {
                 DOM.setupView.classList.add('hidden');
                 DOM.dashboardView.classList.remove('hidden');
                 DOM.headerButtons.classList.remove('hidden');
                 DOM.sheetIframe.src = tripData.expensesSheetUrl.replace('/edit', '/preview?rm=minimal');
             } else {
-                DOM.setupView.classList.remove('hidden');
                 DOM.dashboardView.classList.add('hidden');
                 DOM.headerButtons.classList.add('hidden');
+                DOM.setupView.classList.remove('hidden');
             }
         }
 
@@ -235,7 +245,6 @@
             setTimeout(() => DOM.participantsModal.classList.add('hidden'), 300);
         }
 
-
         // --- EVENT HANDLERS ---
         DOM.saveSheetUrlBtn.addEventListener('click', async () => {
             const url = DOM.sheetUrlInput.value.trim();
@@ -249,18 +258,14 @@
             DOM.setupError.classList.add('hidden');
 
             try {
-                // 1. Save URL to Firebase
+                await callAppsScript('setup', { sheetUrl: url });
                 const tripRef = doc(db, "trips", tripId);
                 await updateDoc(tripRef, { expensesSheetUrl: url });
                 tripData.expensesSheetUrl = url;
-
-                // 2. Call Apps Script to set up the sheet
-                await callAppsScript('setup', { sheetUrl: url });
-
                 updateUI();
             } catch (error) {
                 console.error("Error setting up sheet:", error);
-                DOM.setupError.textContent = 'אירעה שגיאה. בדוק את הרשאות השיתוף של הגיליון ונסה שוב.';
+                DOM.setupError.textContent = 'אירעה שגיאה. בדוק את הרשאות השיתוף של הגיליון (Editor לכל מי שיש קישור) ונסה שוב.';
                 DOM.setupError.classList.remove('hidden');
             } finally {
                 setLoading(DOM.saveSheetUrlBtn, DOM.setupLoader, false);
@@ -286,11 +291,9 @@
                     sheetUrl: tripData.expensesSheetUrl,
                     participants: newParticipants
                 });
-                
                 const tripRef = doc(db, "trips", tripId);
                 await updateDoc(tripRef, { participants: newParticipants });
                 tripData.participants = newParticipants;
-                
                 hideParticipantsModal();
             } catch (error) {
                 console.error("Error updating participants:", error);
@@ -326,6 +329,10 @@
                 redirect: 'follow'
             });
 
+            if (!response.ok) {
+                throw new Error(`Apps Script request failed with status ${response.status}`);
+            }
+
             const result = await response.json();
             if (result.status === 'error') throw new Error(result.message);
             return result.data;
@@ -335,6 +342,18 @@
             button.disabled = isLoading;
             button.classList.toggle('opacity-50', isLoading);
             loader.classList.toggle('hidden', !isLoading);
+        }
+
+        function handleFatalError(message) {
+            DOM.loadingOverlay.style.display = 'none';
+            const mainContent = document.getElementById('main-content');
+            mainContent.innerHTML = `
+                <div class="text-center bg-white p-8 rounded-xl shadow-lg mt-8">
+                    <h2 class="text-2xl font-semibold text-red-600 mb-4">אירעה שגיאה</h2>
+                    <p class="text-gray-600">${message}</p>
+                    <a href="index.html" class="inline-block mt-6 bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700">חזרה לדף הבית</a>
+                </div>
+            `;
         }
         
         // --- START THE APP ---
