@@ -101,7 +101,7 @@
                 <div id="setup-container" class="hidden max-w-2xl mx-auto">
                     <div class="card p-8 text-center">
                         <i class="fas fa-file-excel text-5xl text-green-500 mb-4"></i>
-                        <h2 class="text-2xl font-bold text-slate-800">הגדרה ראשונית לניהול הוצאות</h2>
+                        <h2 class="text-2xl font-bold text-slate-800">קישור גיליון Google Sheets</h2>
                         <p class="text-slate-600 mt-2 mb-6">כדי להתחיל, יש לקשר גיליון של Google Sheets שישמש לשמירת כל ההוצאות.</p>
                         
                         <div class="text-right bg-slate-50 p-4 rounded-lg border">
@@ -118,19 +118,25 @@
                         <div class="mt-6">
                             <label for="sheet-url-input" class="block text-sm font-medium text-slate-700 mb-1">הדבק את הקישור כאן:</label>
                             <input type="url" id="sheet-url-input" class="w-full p-3 border rounded-md text-center" placeholder="https://docs.google.com/spreadsheets/d/...">
+                            <div id="validation-feedback" class="text-red-600 font-semibold text-sm mt-2 min-h-[20px]"></div>
                             <button id="save-sheet-url-btn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-6 rounded-lg text-lg">
-                                שמור והתחל לנהל הוצאות
+                                בדוק ושמור קישור
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div id="main-ui-container" class="hidden">
-                    <div class="flex justify-between items-center mb-6">
+                    <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
                         <h2 class="text-3xl font-bold text-slate-800">סיכום ההוצאות</h2>
-                        <button id="add-new-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-lg flex items-center gap-2">
-                            <i class="fas fa-plus"></i> הוסף הוצאה חדשה
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <button id="change-sheet-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg text-sm">
+                                <i class="fas fa-exchange-alt ml-2"></i>החלף קובץ
+                            </button>
+                            <button id="add-new-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-lg flex items-center gap-2">
+                                <i class="fas fa-plus"></i> הוסף הוצאה חדשה
+                            </button>
+                        </div>
                     </div>
 
                     <div id="expenses-list-container" class="bg-white p-6 rounded-xl shadow-md">
@@ -168,6 +174,8 @@
             mainUiContainer: document.getElementById('main-ui-container'),
             sheetUrlInput: document.getElementById('sheet-url-input'),
             saveSheetUrlBtn: document.getElementById('save-sheet-url-btn'),
+            validationFeedback: document.getElementById('validation-feedback'),
+            changeSheetBtn: document.getElementById('change-sheet-btn'),
             addExpenseModal: document.getElementById('add-expense-modal'),
             addNewExpenseBtn: document.getElementById('add-new-expense-btn'),
             closeExpenseModalBtn: document.getElementById('close-expense-modal-btn'),
@@ -225,6 +233,8 @@
         function showSetupUI() {
             DOM.setupContainer.classList.remove('hidden');
             DOM.mainUiContainer.classList.add('hidden');
+            DOM.sheetUrlInput.value = tripData.expensesSheetUrl || ''; // Pre-fill if exists
+            DOM.validationFeedback.textContent = '';
         }
 
         function showMainUI() {
@@ -237,26 +247,58 @@
         async function handleSaveSheetUrl() {
             const url = DOM.sheetUrlInput.value.trim();
             if (!url.startsWith("https://docs.google.com/spreadsheets/")) {
-                alert("נא להזין קישור תקין של Google Sheets.");
+                DOM.validationFeedback.textContent = "נא להזין קישור תקין של Google Sheets.";
                 return;
             }
             
             DOM.saveSheetUrlBtn.disabled = true;
-            DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> שומר...';
+            DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> מאמת קישור...';
+            DOM.validationFeedback.textContent = '';
+            
+            // --- ** NEW **: Validation logic before saving ---
+            const isVerified = await verifySheetConnection(url);
 
+            if (isVerified) {
+                DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-check mr-2"></i> שומר...';
+                try {
+                    const tripRef = doc(db, "trips", tripId);
+                    await updateDoc(tripRef, { expensesSheetUrl: url });
+                    tripData.expensesSheetUrl = url; // Update local copy
+                    showMainUI();
+                } catch (error) {
+                    console.error("Error saving sheet URL to Firebase:", error);
+                    DOM.validationFeedback.textContent = "שגיאה בשמירה ל-Firebase. נסה שוב.";
+                }
+            }
+            // else: error message is already set by verifySheetConnection()
+
+            DOM.saveSheetUrlBtn.disabled = false;
+            DOM.saveSheetUrlBtn.textContent = 'בדוק ושמור קישור';
+        }
+
+        async function verifySheetConnection(sheetUrl) {
+            // This function sends a test expense to verify permissions
+            const testPayload = {
+                sheetUrl: sheetUrl,
+                expense: { description: '--- Test Connection ---', amount: 0.01, category: 'Test', currency: 'TST' }
+            };
+            
             try {
-                const tripRef = doc(db, "trips", tripId);
-                await updateDoc(tripRef, {
-                    expensesSheetUrl: url
+                const response = await fetch(getWebAppUrl(), {
+                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(testPayload)
                 });
-                tripData.expensesSheetUrl = url; // Update local copy
-                showMainUI();
+                const result = await response.json();
+                if (result.status === 'success') {
+                    return true;
+                } else {
+                    // Error from Apps Script, likely permissions
+                    throw new Error(result.message);
+                }
             } catch (error) {
-                console.error("Error saving sheet URL:", error);
-                alert("אירעה שגיאה בשמירת הקישור. נסה שוב.");
-            } finally {
-                DOM.saveSheetUrlBtn.disabled = false;
-                DOM.saveSheetUrlBtn.textContent = 'שמור והתחל לנהל הוצאות';
+                console.error("Verification failed:", error);
+                DOM.validationFeedback.textContent = 'אימות נכשל. ודא שהקישור נכון והשיתוף הוגדר ל-"Anyone with the link can EDIT".';
+                return false;
             }
         }
         
@@ -287,28 +329,21 @@
             DOM.addExpenseForm.reset();
             closeExpenseModal();
         }
+        
+        // --- ** UPDATED **: URL is now in a function ---
+        function getWebAppUrl() {
+            return 'https://script.google.com/macros/s/AKfycbx9bButq4rb7TFlXM3ZYHgymJXkE_o8dyQ-S62LmDa-bA8EXDxfLUam8a5BzhaceDim/exec';
+        }
 
         async function addExpenseToSheet(expenseData) {
-            // =================================================================
-            // ====> הדבק כאן את כתובת ה-URL שתקבל מ-Google Apps Script <====
-            // =================================================================
-            const webAppUrl = 'https://script.google.com/macros/s/AKfycbx9bButq4rb7TFlXM3ZYHgymJXkE_o8dyQ-S62LmDa-bA8EXDxfLUam8a5BzhaceDim/exec'; 
-
-            if (webAppUrl === 'https://script.google.com/macros/s/AKfycbx9bButq4rb7TFlXM3ZYHgymJXkE_o8dyQ-S62LmDa-bA8EXDxfLUam8a5BzhaceDim/exec') {
-                alert('שגיאת הגדרה: יש להדביק את כתובת ה-URL של ה-Apps Script בקוד.');
-                return;
-            }
-
             const payload = {
                 sheetUrl: tripData.expensesSheetUrl,
                 expense: expenseData
             };
 
             try {
-                const response = await fetch(webAppUrl, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                const response = await fetch(getWebAppUrl(), {
+                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
@@ -327,6 +362,7 @@
 
         // --- Event Listeners ---
         DOM.saveSheetUrlBtn.addEventListener('click', handleSaveSheetUrl);
+        DOM.changeSheetBtn.addEventListener('click', showSetupUI); // ** NEW **
         DOM.addNewExpenseBtn.addEventListener('click', openExpenseModal);
         DOM.closeExpenseModalBtn.addEventListener('click', closeExpenseModal);
         DOM.cancelExpenseBtn.addEventListener('click', closeExpenseModal);
