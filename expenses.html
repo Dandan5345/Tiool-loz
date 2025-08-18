@@ -5,145 +5,160 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מעקב הוצאות</title>
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Icons + Font -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        html{height:100%;scrollbar-gutter:stable both-edges}
-        body{
-            font-family:'Assistant',sans-serif;
-            min-height:100%;
-            overflow-y:scroll;
-            overscroll-behavior-y:contain;
-            -webkit-font-smoothing:antialiased;
-            background-color: #f8fafc; /* Light gray background */
-        }
-        .card{
-            background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88));
-            border-radius: 16px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.10);
-            border: 1px solid rgba(226,232,240,0.7);
-        }
+        body { font-family: 'Assistant', sans-serif; }
         .modal { transition: opacity 0.3s ease; }
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
     </style>
 </head>
-<body>
+<body class="bg-slate-100">
 
+    <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-dollar-sign text-5xl text-green-600 animate-spin"></i>
-        <p class="text-xl font-bold text-slate-700">טוען נתונים...</p>
+        <p class="text-xl font-bold text-slate-700">טוען נתוני הוצאות...</p>
     </div>
-    
-    <div id="add-expense-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[101] p-4 modal">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+
+    <!-- Add/Edit Expense Modal -->
+    <div id="expense-modal" class="modal hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 opacity-0">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h2 class="text-2xl font-bold">הוספת הוצאה חדשה</h2>
-                <button id="close-expense-modal-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת הוצאה חדשה</h3>
+                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
-            
-            <form id="add-expense-form" class="space-y-4">
+            <form id="expense-form" class="space-y-4">
+                <input type="hidden" id="expense-id">
+                
                 <div>
-                    <label for="expense-description" class="block text-sm font-medium text-slate-700 mb-1">תיאור</label>
-                    <input type="text" id="expense-description" class="w-full p-2 border rounded-md" placeholder="ארוחת ערב, כרטיסים לרכבת..." required>
+                    <label for="expense-description" class="block text-sm font-medium text-slate-700 mb-1">תיאור ההוצאה</label>
+                    <input type="text" id="expense-description" class="w-full p-2 border rounded-md" placeholder="לדוגמה: ארוחת ערב במסעדה" required>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="expense-amount" class="block text-sm font-medium text-slate-700 mb-1">סכום</label>
-                        <input type="number" id="expense-amount" step="0.01" class="w-full p-2 border rounded-md" placeholder="50.75" required>
+                        <input type="number" id="expense-amount" step="0.01" class="w-full p-2 border rounded-md" placeholder="100" required>
                     </div>
                     <div>
                         <label for="expense-currency" class="block text-sm font-medium text-slate-700 mb-1">מטבע</label>
                         <select id="expense-currency" class="w-full p-2 border rounded-md bg-white">
-                            <option value="USD" selected>$ (דולר)</option>
-                            <option value="EUR">€ (אירו)</option>
-                            <option value="GBP">£ (פאונד)</option>
-                            <option value="ILS">₪ (שקל)</option>
+                            <option>USD</option>
+                            <option>EUR</option>
+                            <option>GBP</option>
+                            <option>ILS</option>
+                            <option>JPY</option>
+                            <option>CHF</option>
                         </select>
                     </div>
                 </div>
-                <div>
-                    <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
-                    <select id="expense-category" class="w-full p-2 border rounded-md bg-white">
-                        <option>אוכל ומסעדות</option>
-                        <option>תחבורה</option>
-                        <option>לינה</option>
-                        <option>אטרקציות ובילויים</option>
-                        <option>קניות</option>
-                        <option>אחר</option>
-                    </select>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
+                        <select id="expense-category" class="w-full p-2 border rounded-md bg-white">
+                            <option value="אוכל ושתיה">🍔 אוכל ושתיה</option>
+                            <option value="תחבורה">🚗 תחבורה</option>
+                            <option value="לינה">🏨 לינה</option>
+                            <option value="אטרקציות">🎢 אטרקציות</option>
+                            <option value="קניות">🛍️ קניות</option>
+                            <option value="אחר">📎 אחר</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="expense-date" class="block text-sm font-medium text-slate-700 mb-1">תאריך</label>
+                        <input type="date" id="expense-date" class="w-full p-2 border rounded-md" required>
+                    </div>
                 </div>
-                <div class="mt-6 flex justify-end gap-4">
-                    <button type="button" id="cancel-expense-btn" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
-                    <button type="submit" id="save-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg">שמור הוצאה</button>
+                
+                <div>
+                    <label for="expense-notes" class="block text-sm font-medium text-slate-700 mb-1">הערות (אופציונלי)</label>
+                    <textarea id="expense-notes" rows="2" class="w-full p-2 border rounded-md" placeholder="פרטים נוספים על ההוצאה..."></textarea>
+                </div>
+
+                <div class="flex justify-end gap-4 pt-4">
+                    <button type="button" id="modal-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור הוצאה</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div id="main-content" class="min-h-screen">
-        <header class="bg-white backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+    <!-- Main Content -->
+    <div id="main-content">
+        <header class="bg-white shadow-sm sticky top-0 z-30">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
-                    <div class="flex items-center gap-4">
-                        <a id="back-to-trip-btn" href="#" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-arrow-left ml-2"></i>חזרה למרכז הבקרה</a>
-                        <h1 id="page-title" class="text-xl font-bold text-slate-800">מעקב הוצאות</h1>
-                    </div>
+                    <a id="back-to-dashboard" href="#" class="text-slate-700 font-bold hover:text-blue-600">
+                        <i class="fas fa-arrow-right ml-2"></i> חזרה למרכז הבקרה
+                    </a>
+                    <h1 class="text-xl font-bold text-slate-800">מעקב הוצאות</h1>
+                    <div class="w-24"></div> <!-- Spacer -->
                 </div>
             </div>
         </header>
 
         <main>
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
             
-                <div id="setup-container" class="hidden max-w-2xl mx-auto">
-                    <div class="card p-8 text-center">
-                        <i class="fas fa-file-excel text-5xl text-green-500 mb-4"></i>
-                        <h2 class="text-2xl font-bold text-slate-800">קישור גיליון Google Sheets</h2>
-                        <p class="text-slate-600 mt-2 mb-6">כדי להתחיל, יש לקשר גיליון של Google Sheets שישמש לשמירת כל ההוצאות.</p>
-                        
-                        <div class="text-right bg-slate-50 p-4 rounded-lg border">
-                            <h3 class="font-bold mb-2">הוראות:</h3>
-                            <ul class="list-decimal list-inside space-y-2 text-sm">
-                                <li><strong>צרו</strong> גיליון Google Sheets חדש בחשבון הגוגל שלכם.</li>
-                                <li>לחצו על כפתור <strong>"שיתוף" (Share)</strong> הירוק למעלה.</li>
-                                <li>תחת "General access", שנו את ההגדרה ל-<strong>"Anyone with the link"</strong>.</li>
-                                <li>ודאו שהתפקיד (Role) מוגדר כ-<strong>"Editor" (עורך)</strong>.</li>
-                                <li>לחצו על **"Copy link"** והדביקו אותו בתיבה למטה.</li>
-                            </ul>
-                        </div>
+                <!-- Summary Section -->
+                <section id="summary-section" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Total Spending Card -->
+                    <div class="bg-white p-6 rounded-2xl shadow-lg text-center">
+                        <h3 class="text-slate-500 font-semibold">סה"כ הוצאות (USD)</h3>
+                        <p id="total-usd-summary" class="text-3xl font-bold text-blue-600 mt-2">$0</p>
+                    </div>
+                    <!-- Other currency summaries will be added here dynamically -->
+                </section>
 
-                        <div class="mt-6">
-                            <label for="sheet-url-input" class="block text-sm font-medium text-slate-700 mb-1">הדבק את הקישור כאן:</label>
-                            <input type="url" id="sheet-url-input" class="w-full p-3 border rounded-md text-center" placeholder="https://docs.google.com/spreadsheets/d/...">
-                            <div id="validation-feedback" class="text-red-600 font-semibold text-sm mt-2 min-h-[20px]"></div>
-                            <button id="save-sheet-url-btn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-6 rounded-lg text-lg">
-                                בדוק ושמור קישור
-                            </button>
+                <!-- Chart Section -->
+                <section class="bg-white p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות לפי קטגוריה</h3>
+                    <div class="max-h-80 flex justify-center">
+                        <canvas id="expenses-chart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Expenses Table Section -->
+                <section>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold text-slate-800">רשימת הוצאות</h3>
+                        <button id="add-expense-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition">
+                            <i class="fas fa-plus ml-2"></i>הוסף הוצאה
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right">
+                                <thead class="bg-slate-50 border-b">
+                                    <tr>
+                                        <th class="p-4 font-semibold text-slate-600">תיאור</th>
+                                        <th class="p-4 font-semibold text-slate-600">קטגוריה</th>
+                                        <th class="p-4 font-semibold text-slate-600">תאריך</th>
+                                        <th class="p-4 font-semibold text-slate-600">סכום</th>
+                                        <th class="p-4 font-semibold text-slate-600">פעולות</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expenses-table-body">
+                                    <!-- Rows will be injected here by JavaScript -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                </div>
-
-                <div id="main-ui-container" class="hidden">
-                    <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
-                        <h2 class="text-3xl font-bold text-slate-800">סיכום ההוצאות</h2>
-                        <div class="flex items-center gap-3">
-                            <button id="change-sheet-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg text-sm">
-                                <i class="fas fa-exchange-alt ml-2"></i>החלף קובץ
-                            </button>
-                            <button id="add-new-expense-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-lg flex items-center gap-2">
-                                <i class="fas fa-plus"></i> הוסף הוצאה חדשה
-                            </button>
-                        </div>
+                    <div id="no-expenses-message" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
+                        <i class="fas fa-receipt text-4xl text-slate-300 mb-4"></i>
+                        <p class="text-slate-500">עדיין לא נוספו הוצאות. <br> לחץ על "הוסף הוצאה" כדי להתחיל.</p>
                     </div>
-
-                    <div id="expenses-list-container" class="bg-white p-6 rounded-xl shadow-md">
-                        <p class="text-slate-500 text-center">טוען הוצאות...</p>
-                        </div>
-                </div>
-
+                </section>
             </div>
         </main>
     </div>
@@ -151,7 +166,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, addDoc, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -169,27 +184,32 @@
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
-            backToTripBtn: document.getElementById('back-to-trip-btn'),
-            setupContainer: document.getElementById('setup-container'),
-            mainUiContainer: document.getElementById('main-ui-container'),
-            sheetUrlInput: document.getElementById('sheet-url-input'),
-            saveSheetUrlBtn: document.getElementById('save-sheet-url-btn'),
-            validationFeedback: document.getElementById('validation-feedback'),
-            changeSheetBtn: document.getElementById('change-sheet-btn'),
-            addExpenseModal: document.getElementById('add-expense-modal'),
-            addNewExpenseBtn: document.getElementById('add-new-expense-btn'),
-            closeExpenseModalBtn: document.getElementById('close-expense-modal-btn'),
-            cancelExpenseBtn: document.getElementById('cancel-expense-btn'),
-            addExpenseForm: document.getElementById('add-expense-form'),
-            saveExpenseBtn: document.getElementById('save-expense-btn'),
-            expensesListContainer: document.getElementById('expenses-list-container'),
+            addExpenseBtn: document.getElementById('add-expense-btn'),
+            expenseModal: document.getElementById('expense-modal'),
+            modalCloseBtn: document.getElementById('modal-close-btn'),
+            modalCancelBtn: document.getElementById('modal-cancel-btn'),
+            modalTitle: document.getElementById('modal-title'),
+            expenseForm: document.getElementById('expense-form'),
+            expenseId: document.getElementById('expense-id'),
+            expenseDescription: document.getElementById('expense-description'),
+            expenseAmount: document.getElementById('expense-amount'),
+            expenseCurrency: document.getElementById('expense-currency'),
+            expenseCategory: document.getElementById('expense-category'),
+            expenseDate: document.getElementById('expense-date'),
+            expenseNotes: document.getElementById('expense-notes'),
+            expensesTableBody: document.getElementById('expenses-table-body'),
+            noExpensesMessage: document.getElementById('no-expenses-message'),
+            summarySection: document.getElementById('summary-section'),
+            backToDashboardLink: document.getElementById('back-to-dashboard'),
+            chartCanvas: document.getElementById('expenses-chart'),
         };
 
         let currentUser = null;
         let tripId = null;
-        let tripData = null;
-        
-        // --- Core Logic ---
+        let expensesUnsubscribe = null;
+        let expensesChart = null;
+
+        // --- Page Initialization ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
@@ -198,175 +218,255 @@
                 window.location.href = 'index.html';
                 return;
             }
-            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+            DOM.backToDashboardLink.href = `dashboard.html?id=${tripId}`;
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     currentUser = user;
-                    loadTripAndSetupUI();
+                    listenForExpenses();
                 } else {
                     window.location.href = 'login.html';
                 }
             });
+            setupEventListeners();
         }
 
-        async function loadTripAndSetupUI() {
-            const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
+        // --- Data Fetching & Rendering ---
+        function listenForExpenses() {
+            if (expensesUnsubscribe) expensesUnsubscribe();
+            
+            const expensesColRef = collection(db, "trips", tripId, "expenses");
+            expensesUnsubscribe = onSnapshot(expensesColRef, (snapshot) => {
+                const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Sort expenses by date, newest first
+                expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+                renderExpenses(expenses);
+                updateSummary(expenses);
+                updateChart(expenses);
+                DOM.loadingOverlay.style.display = 'none';
+            }, (error) => {
+                console.error("Error fetching expenses:", error);
+                alert("שגיאה בטעינת ההוצאות.");
+                DOM.loadingOverlay.style.display = 'none';
+            });
+        }
 
-            if (tripSnap.exists()) {
-                tripData = tripSnap.data();
-                document.title = `הוצאות - ${tripData.name}`;
-                
-                if (tripData.expensesSheetUrl) {
-                    showMainUI();
-                } else {
-                    showSetupUI();
-                }
+        function renderExpenses(expenses) {
+            DOM.expensesTableBody.innerHTML = '';
+            if (expenses.length === 0) {
+                DOM.noExpensesMessage.classList.remove('hidden');
+                document.querySelector('.overflow-x-auto').classList.add('hidden');
             } else {
-                alert("הטיול לא נמצא.");
-                window.location.href = 'index.html';
+                DOM.noExpensesMessage.classList.add('hidden');
+                document.querySelector('.overflow-x-auto').classList.remove('hidden');
             }
-            DOM.loadingOverlay.style.display = 'none';
-        }
 
-        function showSetupUI() {
-            DOM.setupContainer.classList.remove('hidden');
-            DOM.mainUiContainer.classList.add('hidden');
-            DOM.sheetUrlInput.value = tripData.expensesSheetUrl || ''; // Pre-fill if exists
-            DOM.validationFeedback.textContent = '';
+            expenses.forEach(exp => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <p class="font-bold text-slate-800">${exp.description}</p>
+                        <p class="text-sm text-slate-500">${exp.notes || ''}</p>
+                    </td>
+                    <td class="p-4 text-slate-600">${exp.category}</td>
+                    <td class="p-4 text-slate-600">${new Date(exp.date).toLocaleDateString('he-IL')}</td>
+                    <td class="p-4 font-bold text-lg text-red-600">
+                        ${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${exp.currency}
+                    </td>
+                    <td class="p-4 text-slate-500">
+                        <button class="edit-btn p-2 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                        <button class="delete-btn p-2 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                    </td>
+                `;
+                DOM.expensesTableBody.appendChild(tr);
+            });
         }
+        
+        function updateSummary(expenses) {
+            const summary = expenses.reduce((acc, exp) => {
+                if (!acc[exp.currency]) {
+                    acc[exp.currency] = 0;
+                }
+                acc[exp.currency] += Number(exp.amount);
+                return acc;
+            }, {});
 
-        function showMainUI() {
-            DOM.setupContainer.classList.add('hidden');
-            DOM.mainUiContainer.classList.remove('hidden');
-            // Here you would typically call a function to load existing expenses
-            // e.g., loadExpensesFromSheet();
-        }
-
-        async function handleSaveSheetUrl() {
-            const url = DOM.sheetUrlInput.value.trim();
-            if (!url.startsWith("https://docs.google.com/spreadsheets/")) {
-                DOM.validationFeedback.textContent = "נא להזין קישור תקין של Google Sheets.";
+            DOM.summarySection.innerHTML = ''; // Clear previous summary
+            
+            if (Object.keys(summary).length === 0) {
+                 DOM.summarySection.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full">
+                        <h3 class="text-slate-500 font-semibold">אין הוצאות להצגה</h3>
+                        <p class="text-slate-400 mt-2">התחילו להוסיף הוצאות כדי לראות סיכום</p>
+                    </div>`;
                 return;
             }
-            
-            DOM.saveSheetUrlBtn.disabled = true;
-            DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> מאמת קישור...';
-            DOM.validationFeedback.textContent = '';
-            
-            // --- ** NEW **: Validation logic before saving ---
-            const isVerified = await verifySheetConnection(url);
 
-            if (isVerified) {
-                DOM.saveSheetUrlBtn.innerHTML = '<i class="fas fa-check mr-2"></i> שומר...';
-                try {
-                    const tripRef = doc(db, "trips", tripId);
-                    await updateDoc(tripRef, { expensesSheetUrl: url });
-                    tripData.expensesSheetUrl = url; // Update local copy
-                    showMainUI();
-                } catch (error) {
-                    console.error("Error saving sheet URL to Firebase:", error);
-                    DOM.validationFeedback.textContent = "שגיאה בשמירה ל-Firebase. נסה שוב.";
-                }
-            }
-            // else: error message is already set by verifySheetConnection()
-
-            DOM.saveSheetUrlBtn.disabled = false;
-            DOM.saveSheetUrlBtn.textContent = 'בדוק ושמור קישור';
-        }
-
-        async function verifySheetConnection(sheetUrl) {
-            // This function sends a test expense to verify permissions
-            const testPayload = {
-                sheetUrl: sheetUrl,
-                expense: { description: '--- Test Connection ---', amount: 0.01, category: 'Test', currency: 'TST' }
-            };
-            
-            try {
-                const response = await fetch(getWebAppUrl(), {
-                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(testPayload)
-                });
-                const result = await response.json();
-                if (result.status === 'success') {
-                    return true;
-                } else {
-                    // Error from Apps Script, likely permissions
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error("Verification failed:", error);
-                DOM.validationFeedback.textContent = 'אימות נכשל. ודא שהקישור נכון והשיתוף הוגדר ל-"Anyone with the link can EDIT".';
-                return false;
+            for (const currency in summary) {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-6 rounded-2xl shadow-lg text-center';
+                card.innerHTML = `
+                    <h3 class="text-slate-500 font-semibold">סה"כ הוצאות (${currency})</h3>
+                    <p class="text-3xl font-bold text-blue-600 mt-2">${summary[currency].toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                `;
+                DOM.summarySection.appendChild(card);
             }
         }
         
-        function openExpenseModal() { DOM.addExpenseModal.classList.remove('hidden'); }
-        function closeExpenseModal() { DOM.addExpenseModal.classList.add('hidden'); }
+        function updateChart(expenses) {
+            const categoryData = expenses.reduce((acc, exp) => {
+                // For simplicity, we'll convert all amounts to a base currency (e.g., USD) for the chart.
+                // This is a rough conversion and should be improved with real rates in a real app.
+                const amountInUSD = convertToUSD(exp.amount, exp.currency);
+                if (!acc[exp.category]) {
+                    acc[exp.category] = 0;
+                }
+                acc[exp.category] += amountInUSD;
+                return acc;
+            }, {});
 
-        async function handleSaveExpense(event) {
-            event.preventDefault();
+            const labels = Object.keys(categoryData);
+            const data = Object.values(categoryData);
+
+            const chartConfig = {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'הוצאות ב-USD',
+                        data: data,
+                        backgroundColor: [
+                            '#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308'
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            };
+            
+            if (expensesChart) {
+                expensesChart.data.labels = labels;
+                expensesChart.data.datasets[0].data = data;
+                expensesChart.update();
+            } else {
+                expensesChart = new Chart(DOM.chartCanvas, chartConfig);
+            }
+        }
+
+        function convertToUSD(amount, currency) {
+            // Rough conversion rates for demonstration.
+            const rates = { USD: 1, EUR: 1.08, GBP: 1.25, ILS: 0.27, JPY: 0.0064, CHF: 1.10 };
+            return amount * (rates[currency] || 1);
+        }
+
+        // --- Modal & Form Logic ---
+        function openModal(expense = null) {
+            DOM.expenseForm.reset();
+            const expenseDocRef = expense ? doc(db, "trips", tripId, "expenses", expense.id) : null;
+            
+            if (expenseDocRef) {
+                getDoc(expenseDocRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                        const expenseData = docSnap.data();
+                        // Edit mode
+                        DOM.modalTitle.textContent = 'עריכת הוצאה';
+                        DOM.expenseId.value = expense.id;
+                        DOM.expenseDescription.value = expenseData.description;
+                        DOM.expenseAmount.value = expenseData.amount;
+                        DOM.expenseCurrency.value = expenseData.currency;
+                        DOM.expenseCategory.value = expenseData.category;
+                        DOM.expenseDate.value = expenseData.date;
+                        DOM.expenseNotes.value = expenseData.notes || '';
+                    }
+                });
+            } else {
+                // Add mode
+                DOM.modalTitle.textContent = 'הוספת הוצאה חדשה';
+                DOM.expenseId.value = '';
+                DOM.expenseDate.valueAsDate = new Date(); // Default to today
+            }
+            DOM.expenseModal.classList.remove('hidden');
+            setTimeout(() => DOM.expenseModal.classList.remove('opacity-0'), 10);
+        }
+
+        function closeModal() {
+            DOM.expenseModal.classList.add('opacity-0');
+            setTimeout(() => DOM.expenseModal.classList.add('hidden'), 300);
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const id = DOM.expenseId.value;
             const expenseData = {
-                description: document.getElementById('expense-description').value,
-                amount: parseFloat(document.getElementById('expense-amount').value),
-                currency: document.getElementById('expense-currency').value,
-                category: document.getElementById('expense-category').value
-            };
-            
-            if (!expenseData.description || isNaN(expenseData.amount)) {
-                alert("נא למלא תיאור וסכום תקינים.");
-                return;
-            }
-
-            DOM.saveExpenseBtn.disabled = true;
-            DOM.saveExpenseBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> שומר...';
-
-            await addExpenseToSheet(expenseData);
-            
-            DOM.saveExpenseBtn.disabled = false;
-            DOM.saveExpenseBtn.textContent = 'שמור הוצאה';
-            DOM.addExpenseForm.reset();
-            closeExpenseModal();
-        }
-        
-        // --- ** UPDATED **: URL is now in a function ---
-        function getWebAppUrl() {
-            return 'https://script.google.com/macros/s/AKfycbx9bButq4rb7TFlXM3ZYHgymJXkE_o8dyQ-S62LmDa-bA8EXDxfLUam8a5BzhaceDim/exec';
-        }
-
-        async function addExpenseToSheet(expenseData) {
-            const payload = {
-                sheetUrl: tripData.expensesSheetUrl,
-                expense: expenseData
+                description: DOM.expenseDescription.value,
+                amount: parseFloat(DOM.expenseAmount.value),
+                currency: DOM.expenseCurrency.value,
+                category: DOM.expenseCategory.value,
+                date: DOM.expenseDate.value,
+                notes: DOM.expenseNotes.value,
+                ownerId: currentUser.uid,
             };
 
             try {
-                const response = await fetch(getWebAppUrl(), {
-                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    console.log('Successfully added to Google Sheet:', result.message);
-                    // כאן תוכל להוסיף את ההוצאה לרשימה המוצגת בדף באופן דינמי
+                if (id) {
+                    // Update existing expense
+                    const expenseRef = doc(db, "trips", tripId, "expenses", id);
+                    await updateDoc(expenseRef, expenseData);
                 } else {
-                    throw new Error(result.message);
+                    // Add new expense
+                    expenseData.createdAt = serverTimestamp();
+                    const expensesColRef = collection(db, "trips", tripId, "expenses");
+                    await addDoc(expensesColRef, expenseData);
                 }
+                closeModal();
             } catch (error) {
-                console.error('Error adding expense:', error);
-                alert('אירעה שגיאה בהוספת ההוצאה: ' + error.message);
+                console.error("Error saving expense:", error);
+                alert("שגיאה בשמירת ההוצאה.");
             }
         }
 
-        // --- Event Listeners ---
-        DOM.saveSheetUrlBtn.addEventListener('click', handleSaveSheetUrl);
-        DOM.changeSheetBtn.addEventListener('click', showSetupUI); // ** NEW **
-        DOM.addNewExpenseBtn.addEventListener('click', openExpenseModal);
-        DOM.closeExpenseModalBtn.addEventListener('click', closeExpenseModal);
-        DOM.cancelExpenseBtn.addEventListener('click', closeExpenseModal);
-        DOM.addExpenseForm.addEventListener('submit', handleSaveExpense);
+        async function handleDelete(id) {
+            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+                try {
+                    const expenseRef = doc(db, "trips", tripId, "expenses", id);
+                    await deleteDoc(expenseRef);
+                } catch (error) {
+                    console.error("Error deleting expense:", error);
+                    alert("שגיאה במחיקת ההוצאה.");
+                }
+            }
+        }
+        
+        function handleTableClick(e) {
+            const target = e.target.closest('button');
+            if (!target) return;
+            
+            const id = target.dataset.id;
+            
+            if (target.classList.contains('delete-btn')) {
+                handleDelete(id);
+            } else if (target.classList.contains('edit-btn')) {
+                openModal({ id: id });
+            }
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            DOM.addExpenseBtn.addEventListener('click', () => openModal());
+            DOM.modalCloseBtn.addEventListener('click', closeModal);
+            DOM.modalCancelBtn.addEventListener('click', closeModal);
+            DOM.expenseForm.addEventListener('submit', handleFormSubmit);
+            DOM.expensesTableBody.addEventListener('click', handleTableClick);
+        }
 
         // --- Start the page ---
         initPage();
