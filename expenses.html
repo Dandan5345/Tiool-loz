@@ -1,343 +1,344 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>מעקב הוצאות</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מעקב הוצאות</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-  <!-- Tailwind / Icons / Font -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
-
-  <style>
-    body { font-family: 'Assistant', sans-serif; background: #0f172a; }
-    .card{ background: #ffffffcc; backdrop-filter: blur(6px); border-radius: 16px; border:1px solid #e2e8f0; box-shadow: 0 6px 18px rgba(0,0,0,.1);}
-    .modal-bg{ background: rgba(0,0,0,.65); }
-    .badge{ display:inline-flex; align-items:center; gap:.4rem; font-weight:700; font-size:.75rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:9999px; padding:.2rem .6rem; color:#334155; }
-  </style>
-</head>
-<body class="min-h-screen">
-
-  <!-- Header -->
-  <header class="bg-white/90 backdrop-blur sticky top-0 z-30 shadow-sm">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-      <a href="index.html" class="font-bold text-slate-700 hover:text-blue-600"><i class="fa-solid fa-home"></i> דף הבית</a>
-      <div class="flex items-center gap-3">
-        <button id="btn-manage-people" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold">
-          <i class="fa-solid fa-users ml-2"></i>ניהול משתתפים
-        </button>
-        <button id="btn-change-sheet" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold">
-          <i class="fa-solid fa-link ml-2"></i>שינוי/חיבור גיליון
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Main -->
-  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <section class="text-center">
-      <h1 id="trip-title" class="text-3xl md:text-4xl font-extrabold text-white drop-shadow">מעקב הוצאות</h1>
-      <p class="text-slate-300 mt-2">ניהול הוצאות לטיול הנוכחי, שיתוף עם הצוות ועדכון מהיר דרך הקיצור באייפון.</p>
-    </section>
-
-    <!-- First-time helper card -->
-    <section id="helper-card" class="hidden card p-5">
-      <h2 class="text-xl font-bold text-slate-800 mb-3">חיבור הגיליון (פעם ראשונה)</h2>
-      <ol class="list-decimal mr-5 space-y-2 text-slate-700">
-        <li>פתח/י Google Sheets חדש לטיול.</li>
-        <li>לחץ/י <b>שיתוף</b> → בחר/י <b>כל מי שיש קישור – עורך</b> → שמור/י.</li>
-        <li>הדבק/י כאן את הקישור לגיליון ושמור/י. המערכת תעצב ותכין אותו אוטומטית.</li>
-      </ol>
-      <div class="mt-4 flex gap-2">
-        <input id="sheet-url-input" type="url" class="w-full p-3 border rounded-md" placeholder="הדבק קישור מלא לגיליון (https://docs.google.com/spreadsheets/d/XXXX/edit)"/>
-        <button id="btn-save-sheet" class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg">שמור וחבר</button>
-      </div>
-      <p id="helper-msg" class="mt-2 text-sm text-slate-600"></p>
-    </section>
-
-    <!-- Iframe -->
-    <section id="iframe-wrap" class="card p-3">
-      <div id="sheet-missing" class="text-center py-16">
-        <p class="text-slate-600">לא מחובר עדיין גיליון הוצאות לטיול הזה.</p>
-        <button id="btn-open-helper" class="mt-4 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold">
-          חבר גיליון עכשיו
-        </button>
-      </div>
-      <iframe id="sheet-iframe" class="hidden w-full h-[70vh] rounded-lg border" referrerpolicy="no-referrer"></iframe>
-    </section>
-
-    <!-- Shortcuts helper -->
-    <section class="card p-5">
-      <h2 class="text-lg font-bold text-slate-800 mb-2"><i class="fa-solid fa-bolt"></i> קיצור באייפון – הוסף הוצאה</h2>
-      <p class="text-slate-700 mb-2">שמור/י את כתובת ה-API לשימוש בקיצור (תוכל/י להדביק אותה ולשנות רק את הסכום/תיאור):</p>
-      <pre id="shortcut-url" class="bg-slate-100 p-3 rounded-md overflow-x-auto text-sm"></pre>
-      <button id="btn-copy-shortcut" class="mt-2 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold"><i class="fa-regular fa-copy ml-2"></i>העתק</button>
-      <p class="text-xs text-slate-500 mt-2">טיפ: בקיצור שמור את כתובת הבסיס, ושנה בכל הרצה רק amount/description/what/who/date.</p>
-    </section>
-  </main>
-
-  <!-- Manage People Modal -->
-  <div id="people-modal" class="fixed inset-0 modal-bg hidden z-50 p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-lg mx-auto p-6">
-      <div class="flex items-center justify-between border-b pb-2">
-        <h3 class="text-xl font-bold">ניהול משתתפים (עד 4)</h3>
-        <button id="people-close" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark fa-lg"></i></button>
-      </div>
-
-      <div class="mt-4 space-y-3" id="people-fields">
-        <!-- דינמי -->
-      </div>
-
-      <div class="mt-6 flex justify-end gap-3">
-        <button id="people-cancel" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold">ביטול</button>
-        <button id="people-save" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold">שמור</button>
-      </div>
-      <p id="people-msg" class="mt-3 text-sm"></p>
-    </div>
-  </div>
-
-  <!-- Firebase + App -->
-  <script type="module">
-    /* =========================
-       Firebase Init (כמו אצלך)
-    ========================== */
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
-
-    // ---- הגדרות Firebase שלך (כמו בדף trip.html) ----
-    const firebaseConfig = {
-      apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-      authDomain: "tiool-loz.firebaseapp.com",
-      projectId: "tiool-loz",
-      storageBucket: "tiool-loz.appspot.com",
-      messagingSenderId: "226069823505",
-      appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db   = getFirestore(app);
-
-    /* =========================
-       קונפיג Apps Script
-    ========================== */
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwyO6gcpgSLMFx-hpwat8oVnjDSg18YoPPFE4OG9fKIE4QEeSFZL_ECK1o0JlfmSB2I/exec";
-    // ⚠️ token גלוי בדף. עובד, אך עדיף להסתיר בעתיד מאחורי Worker.
-    const API_TOKEN   = "a8f93k2Lns9!d02kQ5zX";
-
-    /* =========================
-       DOM
-    ========================== */
-    const els = {
-      title: document.getElementById('trip-title'),
-      helperCard: document.getElementById('helper-card'),
-      sheetUrlInput: document.getElementById('sheet-url-input'),
-      btnSaveSheet: document.getElementById('btn-save-sheet'),
-      helperMsg: document.getElementById('helper-msg'),
-      iframeWrap: document.getElementById('iframe-wrap'),
-      iframe: document.getElementById('sheet-iframe'),
-      missing: document.getElementById('sheet-missing'),
-      btnOpenHelper: document.getElementById('btn-open-helper'),
-      btnChangeSheet: document.getElementById('btn-change-sheet'),
-      btnManagePeople: document.getElementById('btn-manage-people'),
-      shortcutUrl: document.getElementById('shortcut-url'),
-      btnCopyShortcut: document.getElementById('btn-copy-shortcut'),
-      peopleModal: document.getElementById('people-modal'),
-      peopleFields: document.getElementById('people-fields'),
-      peopleSave: document.getElementById('people-save'),
-      peopleCancel: document.getElementById('people-cancel'),
-      peopleClose: document.getElementById('people-close'),
-      peopleMsg: document.getElementById('people-msg'),
-    };
-
-    let currentUser = null;
-    let tripId = null;
-    let tripDoc = null;
-    let sheetUrl = null;
-    let sheetId = null;
-    let participants = [ // ברירת מחדל
-      { name: "Me", active: true },
-      { name: "Person 2", active: false },
-      { name: "Person 3", active: false },
-      { name: "Person 4", active: false },
-    ];
-
-    function qs(param){ return new URLSearchParams(location.search).get(param); }
-    function extractSheetIdFromUrl(url){
-      const m = url.match(/\/spreadsheets\/d\/([^\/]+)/i);
-      return m ? m[1] : null;
-    }
-
-    function showIframe(url){
-      els.missing.classList.add('hidden');
-      els.iframe.classList.remove('hidden');
-      // כדי לאשר טעינה מיידית, נשאיר /edit (קריא יותר למשתמש)
-      els.iframe.src = url;
-    }
-    function showHelper(){
-      els.helperCard.classList.remove('hidden');
-      els.missing.classList.add('hidden');
-      els.iframe.classList.add('hidden');
-    }
-    function hideHelper(){
-      els.helperCard.classList.add('hidden');
-    }
-
-    // קריאה ל-Apps Script
-    async function callScript(action, params={}){
-      const u = new URL(WEB_APP_URL);
-      u.searchParams.set('action', action);
-      u.searchParams.set('token', API_TOKEN);
-      for (const [k,v] of Object.entries(params)){
-        if (v === undefined || v === null) continue;
-        u.searchParams.set(k, String(v));
-      }
-      const res = await fetch(u.toString(), { method: 'GET' });
-      const json = await res.json().catch(() => ({}));
-      if (!json.ok) throw new Error(json.message || 'שגיאה בלתי צפויה');
-      return json;
-    }
-
-    // מציג את כתובת הבסיס לקיצור
-    function renderShortcutBase(){
-      if (!sheetId) { els.shortcutUrl.textContent = "חבר תחילה גיליון."; return; }
-      const base = `${WEB_APP_URL}?action=addExpense&sheetId=${encodeURIComponent(sheetId)}&token=${encodeURIComponent(API_TOKEN)}&amount=123.45&what=אוכל&desc=פיצה&who=Me&date=18/08/2025`;
-      els.shortcutUrl.textContent = base;
-    }
-
-    // People modal UI
-    function openPeopleModal(){
-      els.peopleFields.innerHTML = '';
-      participants.forEach((p, idx) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-center gap-3 border p-3 rounded-lg';
-        row.innerHTML = `
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" ${p.active ? 'checked' : ''} data-idx="${idx}" class="p-active">
-            פעיל
-          </label>
-          <input type="text" value="${p.name}" data-idx="${idx}" class="p-name flex-1 p-2 border rounded-md" placeholder="שם משתתף">
-          <span class="text-xs text-slate-500">P${idx+1}</span>
-        `;
-        els.peopleFields.appendChild(row);
-      });
-      els.peopleMsg.textContent = '';
-      els.peopleModal.classList.remove('hidden');
-    }
-    function closePeopleModal(){ els.peopleModal.classList.add('hidden'); }
-
-    async function savePeople(){
-      // קרא מהטופס
-      const names = Array.from(els.peopleFields.querySelectorAll('.p-name'));
-      const actvs = Array.from(els.peopleFields.querySelectorAll('.p-active'));
-      names.forEach((inp, i) => { participants[i].name = inp.value.trim() || `Person ${i+1}`; });
-      actvs.forEach((chk, i) => { participants[i].active = chk.checked; });
-
-      // שמירה בפיירבייס
-      const ref = doc(db, "trips", tripId);
-      await updateDoc(ref, { participants });
-
-      // עדכון ב-Sheet דרך Apps Script
-      await callScript('updatePeople', {
-        sheetId,
-        p1Name: participants[0].name, p1Active: participants[0].active,
-        p2Name: participants[1].name, p2Active: participants[1].active,
-        p3Name: participants[2].name, p3Active: participants[2].active,
-        p4Name: participants[3].name, p4Active: participants[3].active
-      });
-
-      els.peopleMsg.textContent = 'נשמר בהצלחה!';
-      els.peopleMsg.className = 'mt-3 text-sm text-emerald-600';
-      setTimeout(closePeopleModal, 800);
-      renderShortcutBase();
-    }
-
-    // טעינת מסמך הטיול
-    async function loadTrip(){
-      tripId = qs('tripId');
-      if (!tripId) { alert("לא נמצא tripId ב-URL"); location.href = 'index.html'; return; }
-
-      const ref = doc(db, "trips", tripId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) { alert("טיול לא נמצא"); location.href = 'index.html'; return; }
-      tripDoc = snap.data();
-      els.title.textContent = tripDoc.name ? `מעקב הוצאות – ${tripDoc.name}` : 'מעקב הוצאות';
-
-      // אם שמורים משתתפים – נטען
-      if (Array.isArray(tripDoc.participants) && tripDoc.participants.length === 4){
-        participants = tripDoc.participants.map(p => ({ name: p.name || '', active: !!p.active }));
-      }
-
-      // קישור גיליון
-      sheetUrl = tripDoc.expensesSheetUrl || null;
-      if (sheetUrl){
-        sheetId = extractSheetIdFromUrl(sheetUrl);
-        if (!sheetId){
-          // אם שמור לא תקין – נחייב חיבור מחדש
-          showHelper();
-        }else{
-          hideHelper();
-          showIframe(sheetUrl);
-          renderShortcutBase();
+    <style>
+        body {
+            font-family: 'Assistant', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
-      }else{
-        showHelper();
-      }
-    }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        .modal { transition: opacity 0.3s ease; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
 
-    // חיבור/שינוי גיליון
-    async function saveAndConnectSheet(){
-      const url = (els.sheetUrlInput.value || '').trim();
-      if (!url){ els.helperMsg.textContent = 'נא להדביק קישור לגיליון.'; els.helperMsg.className='mt-2 text-sm text-red-600'; return; }
-      const id = extractSheetIdFromUrl(url);
-      if (!id){ els.helperMsg.textContent = 'קישור לא תקין. ודא שהקישור בפורמט /spreadsheets/d/XXXX/edit'; els.helperMsg.className='mt-2 text-sm text-red-600'; return; }
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-dollar-sign text-5xl text-blue-600 animate-spin"></i>
+        <p class="text-xl font-bold text-slate-700">טוען את מרכז ההוצאות...</p>
+    </div>
 
-      // שמירה בפיירבייס
-      const ref = doc(db, "trips", tripId);
-      await updateDoc(ref, { expensesSheetUrl: url });
+    <div id="app-container" class="min-h-screen">
+        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <a id="back-to-trip-btn" href="#" class="text-slate-700 font-bold hover:text-blue-600"><i class="fas fa-arrow-left ml-2"></i> חזרה לטיול</a>
+                    <h1 class="text-xl font-bold text-gray-800">מעקב הוצאות</h1>
+                    <div id="header-buttons" class="hidden space-x-2 rtl:space-x-reverse">
+                         <button id="manage-participants-btn" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition">
+                            <i class="fas fa-users ml-2"></i> ניהול משתתפים
+                        </button>
+                        <button id="copy-shortcut-link-btn" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-green-700 transition">
+                            <i class="fab fa-apple ml-2"></i> העתק קישור לקיצור
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-      sheetUrl = url; sheetId = id;
+        <main id="main-content" class="container mx-auto p-4 md:p-6 lg:p-8">
+            <!-- Initial Setup View -->
+            <div id="setup-view" class="text-center bg-white p-8 rounded-xl shadow-lg mt-8">
+                <h2 class="text-2xl font-semibold mb-4">שלב ראשון: חיבור Google Sheets</h2>
+                <p class="text-gray-600 mb-6 max-w-2xl mx-auto">
+                    כדי להתחיל לעקוב אחר הוצאות, צרו גיליון Google Sheets חדש, לחצו על "שיתוף" (Share), הגדירו הרשאה ל-"כל מי שיש לו את הקישור" בתור "עורך" (Editor), והדביקו את הקישור כאן.
+                </p>
+                <div class="max-w-lg mx-auto">
+                    <input type="url" id="sheet-url-input" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-left" dir="ltr">
+                    <button id="save-sheet-url-btn" class="w-full mt-4 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 transition transform hover:scale-105">
+                        שמירה והגדרת הגיליון
+                    </button>
+                </div>
+                 <div id="setup-loader" class="hidden mx-auto mt-4 spinner"></div>
+                 <p id="setup-error" class="text-red-500 mt-2 hidden"></p>
+            </div>
 
-      // קריאת SETUP חד-פעמית
-      try{
-        els.helperMsg.textContent = 'מכין את הגיליון...'; els.helperMsg.className='mt-2 text-sm text-slate-600';
-        await callScript('setup', { sheetId, tripId });
-        els.helperMsg.textContent = 'הגיליון מוכן! טוען תצוגה...'; els.helperMsg.className='mt-2 text-sm text-emerald-600';
-        setTimeout(() => {
-          hideHelper();
-          showIframe(sheetUrl);
-          renderShortcutBase();
-        }, 500);
-      }catch(e){
-        els.helperMsg.textContent = 'שגיאה: ' + e.message; els.helperMsg.className='mt-2 text-sm text-red-600';
-      }
-    }
+            <!-- Main Dashboard View -->
+            <div id="dashboard-view" class="hidden">
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden" style="height: 75vh;">
+                    <iframe id="sheet-iframe" class="w-full h-full border-0" src=""></iframe>
+                </div>
+            </div>
+        </main>
+    </div>
 
-    // אתחול
-    onAuthStateChanged(auth, async (user) => {
-      // אם צריך – אפשר להכריח לוגין כמו ב-trip.html; כאן נאפשר גם בלי
-      currentUser = user || null;
-      await loadTrip();
-    });
+    <!-- Participants Modal -->
+    <div id="participants-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center">ניהול משתתפים</h2>
+            <div id="participants-form" class="space-y-4">
+                <!-- Participant fields will be injected here by JS -->
+            </div>
+            <div class="mt-8 flex justify-between gap-4">
+                <button id="cancel-participants-btn" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition">ביטול</button>
+                <button id="save-participants-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">שמירה</button>
+            </div>
+            <div id="participants-loader" class="hidden mx-auto mt-4 spinner"></div>
+            <p id="participants-error" class="text-red-500 mt-2 hidden text-center"></p>
+        </div>
+    </div>
 
-    /* ====== Events ====== */
-    els.btnOpenHelper?.addEventListener('click', showHelper);
-    els.btnChangeSheet?.addEventListener('click', showHelper);
-    els.btnSaveSheet?.addEventListener('click', saveAndConnectSheet);
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-    els.btnManagePeople?.addEventListener('click', openPeopleModal);
-    els.peopleSave?.addEventListener('click', savePeople);
-    els.peopleCancel?.addEventListener('click', closePeopleModal);
-    els.peopleClose?.addEventListener('click', closePeopleModal);
+        // --- CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        
+        // Google Apps Script Web App URL
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbnpURtWJ3GpyG3D8XNicf4AdcGjPRRKyYRx2jbL58lO1Bu8e4A2wd8JNz3j8yOsM-/exec";
 
-    els.btnCopyShortcut?.addEventListener('click', async () => {
-      try{
-        await navigator.clipboard.writeText(els.shortcutUrl.textContent || '');
-        els.btnCopyShortcut.textContent = 'הועתק!';
-        setTimeout(()=> els.btnCopyShortcut.innerHTML = '<i class="fa-regular fa-copy ml-2"></i>העתק', 900);
-      }catch{}
-    });
-  </script>
+        // --- APPLICATION STATE ---
+        let db, auth, tripId, tripData = {}, currentUser;
+
+        // --- DOM Elements ---
+        const DOM = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            appContainer: document.getElementById('app-container'),
+            setupView: document.getElementById('setup-view'),
+            dashboardView: document.getElementById('dashboard-view'),
+            headerButtons: document.getElementById('header-buttons'),
+            sheetIframe: document.getElementById('sheet-iframe'),
+            saveSheetUrlBtn: document.getElementById('save-sheet-url-btn'),
+            sheetUrlInput: document.getElementById('sheet-url-input'),
+            setupLoader: document.getElementById('setup-loader'),
+            setupError: document.getElementById('setup-error'),
+            participantsModal: document.getElementById('participants-modal'),
+            manageParticipantsBtn: document.getElementById('manage-participants-btn'),
+            saveParticipantsBtn: document.getElementById('save-participants-btn'),
+            cancelParticipantsBtn: document.getElementById('cancel-participants-btn'),
+            participantsForm: document.getElementById('participants-form'),
+            participantsLoader: document.getElementById('participants-loader'),
+            participantsError: document.getElementById('participants-error'),
+            copyShortcutBtn: document.getElementById('copy-shortcut-link-btn'),
+            backToTripBtn: document.getElementById('back-to-trip-btn'),
+        };
+
+        // --- INITIALIZATION ---
+        function init() {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('tripId');
+            if (!tripId) {
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
+                return;
+            }
+            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    loadTripData();
+                } else {
+                    window.location.href = 'login.html';
+                }
+            });
+        }
+
+        // --- DATA HANDLING ---
+        async function loadTripData() {
+            const tripRef = doc(db, "trips", tripId);
+            const tripSnap = await getDoc(tripRef);
+
+            if (tripSnap.exists()) {
+                const loadedTripData = tripSnap.data();
+                const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
+                
+                if (canAccess) {
+                    tripData = loadedTripData;
+                    // Initialize participants if they don't exist
+                    if (!tripData.participants) {
+                        tripData.participants = [
+                            { name: 'Me', active: true }, { name: 'Person 2', active: false },
+                            { name: 'Person 3', active: false }, { name: 'Person 4', active: false },
+                        ];
+                    }
+                    updateUI();
+                    DOM.loadingOverlay.style.opacity = '0';
+                    setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
+                } else {
+                    alert("אין לך הרשאה לצפות בדף זה.");
+                    window.location.href = 'index.html';
+                }
+            } else {
+                alert("הטיול לא נמצא.");
+                window.location.href = 'index.html';
+            }
+        }
+
+        // --- UI LOGIC ---
+        function updateUI() {
+            if (tripData.expensesSheetUrl) {
+                DOM.setupView.classList.add('hidden');
+                DOM.dashboardView.classList.remove('hidden');
+                DOM.headerButtons.classList.remove('hidden');
+                DOM.sheetIframe.src = tripData.expensesSheetUrl.replace('/edit', '/preview?rm=minimal');
+            } else {
+                DOM.setupView.classList.remove('hidden');
+                DOM.dashboardView.classList.add('hidden');
+                DOM.headerButtons.classList.add('hidden');
+            }
+        }
+
+        function populateParticipantsModal() {
+            DOM.participantsForm.innerHTML = '';
+            tripData.participants.forEach((p, index) => {
+                const participantHTML = `
+                    <div class="flex items-center gap-4">
+                        <input type="checkbox" id="p${index}-active" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${p.active ? 'checked' : ''}>
+                        <input type="text" id="p${index}-name" value="${p.name}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                `;
+                DOM.participantsForm.insertAdjacentHTML('beforeend', participantHTML);
+            });
+        }
+        
+        function showParticipantsModal() {
+            populateParticipantsModal();
+            DOM.participantsModal.classList.remove('hidden');
+            setTimeout(() => DOM.participantsModal.classList.remove('opacity-0'), 10);
+        }
+
+        function hideParticipantsModal() {
+            DOM.participantsModal.classList.add('opacity-0');
+            setTimeout(() => DOM.participantsModal.classList.add('hidden'), 300);
+        }
+
+
+        // --- EVENT HANDLERS ---
+        DOM.saveSheetUrlBtn.addEventListener('click', async () => {
+            const url = DOM.sheetUrlInput.value.trim();
+            if (!url.startsWith('https://docs.google.com/spreadsheets/d/')) {
+                DOM.setupError.textContent = 'נא להזין קישור תקין של Google Sheets.';
+                DOM.setupError.classList.remove('hidden');
+                return;
+            }
+            
+            setLoading(DOM.saveSheetUrlBtn, DOM.setupLoader, true);
+            DOM.setupError.classList.add('hidden');
+
+            try {
+                // 1. Save URL to Firebase
+                const tripRef = doc(db, "trips", tripId);
+                await updateDoc(tripRef, { expensesSheetUrl: url });
+                tripData.expensesSheetUrl = url;
+
+                // 2. Call Apps Script to set up the sheet
+                await callAppsScript('setup', { sheetUrl: url });
+
+                updateUI();
+            } catch (error) {
+                console.error("Error setting up sheet:", error);
+                DOM.setupError.textContent = 'אירעה שגיאה. בדוק את הרשאות השיתוף של הגיליון ונסה שוב.';
+                DOM.setupError.classList.remove('hidden');
+            } finally {
+                setLoading(DOM.saveSheetUrlBtn, DOM.setupLoader, false);
+            }
+        });
+
+        DOM.manageParticipantsBtn.addEventListener('click', showParticipantsModal);
+        DOM.cancelParticipantsBtn.addEventListener('click', hideParticipantsModal);
+
+        DOM.saveParticipantsBtn.addEventListener('click', async () => {
+            const newParticipants = [];
+            for (let i = 0; i < 4; i++) {
+                const active = document.getElementById(`p${i}-active`).checked;
+                const name = document.getElementById(`p${i}-name`).value.trim();
+                newParticipants.push({ name: name || `Person ${i+1}`, active });
+            }
+
+            setLoading(DOM.saveParticipantsBtn, DOM.participantsLoader, true);
+            DOM.participantsError.classList.add('hidden');
+
+            try {
+                await callAppsScript('updatePeople', { 
+                    sheetUrl: tripData.expensesSheetUrl,
+                    participants: newParticipants
+                });
+                
+                const tripRef = doc(db, "trips", tripId);
+                await updateDoc(tripRef, { participants: newParticipants });
+                tripData.participants = newParticipants;
+                
+                hideParticipantsModal();
+            } catch (error) {
+                console.error("Error updating participants:", error);
+                DOM.participantsError.textContent = 'שגיאה בעדכון המשתתפים. נסה שוב.';
+                DOM.participantsError.classList.remove('hidden');
+            } finally {
+                setLoading(DOM.saveParticipantsBtn, DOM.participantsLoader, false);
+            }
+        });
+
+        DOM.copyShortcutBtn.addEventListener('click', () => {
+            if (!tripData.expensesSheetUrl) {
+                alert("יש לחבר גיליון הוצאות תחילה.");
+                return;
+            }
+            const baseUrl = `${APPS_SCRIPT_URL}?action=addExpense&sheetUrl=${encodeURIComponent(tripData.expensesSheetUrl)}`;
+            
+            navigator.clipboard.writeText(baseUrl).then(() => {
+                DOM.copyShortcutBtn.innerHTML = '<i class="fas fa-check ml-2"></i> הועתק!';
+                setTimeout(() => { DOM.copyShortcutBtn.innerHTML = '<i class="fab fa-apple ml-2"></i> העתק קישור לקיצור'; }, 2000);
+            }).catch(err => {
+                alert('העתקת הקישור נכשלה.');
+            });
+        });
+
+        // --- HELPERS ---
+        async function callAppsScript(action, payload) {
+            const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...payload }),
+                redirect: 'follow'
+            });
+
+            const result = await response.json();
+            if (result.status === 'error') throw new Error(result.message);
+            return result.data;
+        }
+
+        function setLoading(button, loader, isLoading) {
+            button.disabled = isLoading;
+            button.classList.toggle('opacity-50', isLoading);
+            loader.classList.toggle('hidden', !isLoading);
+        }
+        
+        // --- START THE APP ---
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 </html>
