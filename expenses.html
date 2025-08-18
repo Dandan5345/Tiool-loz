@@ -178,40 +178,44 @@
             }
         }
         
+        // --- THIS IS THE UPDATED FUNCTION ---
         async function callAppsScript(action, payload) {
             let response;
             try {
+                // The main change: Removed 'redirect: follow' and simplified the call.
                 response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    headers: {
+                        // This Content-Type is a known working method for Google Apps Script
+                        'Content-Type': 'text/plain;charset=utf-8',
+                    },
                     body: JSON.stringify({ action, ...payload }),
-                    redirect: 'follow'
                 });
             } catch (networkError) {
-                console.error('Network Error:', networkError);
-                throw new Error('שגיאת רשת. בדוק את חיבור האינטרנט שלך.');
+                console.error('Fetch API failed completely. This is a Network Error or CORS preflight failure.', networkError);
+                throw new Error('שגיאת רשת. ייתכן שחומת אש או הדפדפן חוסמים את הגישה ל-Google Scripts. נסה מרשת אחרת או דפדפן אחר אם הבעיה נמשכת.');
             }
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Apps Script response not OK:', response.status, errorText);
-                throw new Error(`השרת החזיר שגיאה (${response.status}). ייתכן שהפריסה (Deployment) של הסקריפט אינה עדכנית.`);
+                console.error('Apps Script response was not OK:', response.status, errorText);
+                throw new Error(`השרת החזיר שגיאה (${response.status}). ודא שהפריסה (Deployment) של הסקריפט עדכנית.`);
             }
 
             try {
                 const result = await response.json();
                 if (result.status === 'error') {
+                    console.error("Apps Script returned a logical error:", result.message);
                     throw new Error(result.message);
                 }
                 return result.data;
             } catch (jsonError) {
-                console.error('JSON Parsing Error:', jsonError);
+                console.error('Failed to parse JSON response from Apps Script:', jsonError);
                 throw new Error('התקבלה תגובה לא תקינה מהשרת. ודא שהסקריפט פרוס כהלכה.');
             }
         }
 
-        // --- All other functions (event handlers, helpers) remain the same ---
         function showChangeSheetUI() {
             DOM.dashboardView.classList.add('hidden');
             DOM.headerButtons.classList.add('hidden');
