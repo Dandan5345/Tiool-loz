@@ -29,6 +29,43 @@
         <p class="text-xl font-bold text-slate-700">טוען נתוני הוצאות...</p>
     </div>
 
+    <!-- Settings Modal (NEW) -->
+    <div id="settings-modal" class="modal hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4 opacity-0">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-2xl font-bold">הגדרות קיצור דרך</h3>
+                <button id="settings-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <div class="space-y-6">
+                <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">1. מזהה הטיול הנוכחי</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="trip-id-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr">
+                        <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מזהה טיול">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">2. המפתח הסודי האישי שלך</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="api-key-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr" placeholder="לחץ על הכפתור כדי ליצור מפתח...">
+                        <button id="copy-api-key-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מפתח סודי">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                     <button id="generate-api-key-btn" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        צור/החלף מפתח סודי (פעולה זו תבטל מפתח קודם)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Add/Edit Expense Modal -->
     <div id="expense-modal" class="modal hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 opacity-0">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg">
@@ -102,7 +139,10 @@
                         <i class="fas fa-arrow-right ml-2"></i> חזרה למרכז הבקרה
                     </a>
                     <h1 class="text-xl font-bold text-slate-800">מעקב הוצאות</h1>
-                    <div class="w-24"></div> <!-- Spacer -->
+                    <!-- NEW: Settings Button -->
+                    <button id="settings-btn" class="text-slate-600 hover:text-blue-600 p-2" title="הגדרות קיצור דרך">
+                        <i class="fas fa-cog fa-lg"></i>
+                    </button>
                 </div>
             </div>
         </header>
@@ -112,12 +152,7 @@
             
                 <!-- Summary Section -->
                 <section id="summary-section" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <!-- Total Spending Card -->
-                    <div class="bg-white p-6 rounded-2xl shadow-lg text-center">
-                        <h3 class="text-slate-500 font-semibold">סה"כ הוצאות (USD)</h3>
-                        <p id="total-usd-summary" class="text-3xl font-bold text-blue-600 mt-2">$0</p>
-                    </div>
-                    <!-- Other currency summaries will be added here dynamically -->
+                    <!-- Cards will be generated here -->
                 </section>
 
                 <!-- Chart Section -->
@@ -149,7 +184,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="expenses-table-body">
-                                    <!-- Rows will be injected here by JavaScript -->
+                                    <!-- Rows will be injected here -->
                                 </tbody>
                             </table>
                         </div>
@@ -166,7 +201,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, addDoc, doc, getDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -202,6 +237,15 @@
             summarySection: document.getElementById('summary-section'),
             backToDashboardLink: document.getElementById('back-to-dashboard'),
             chartCanvas: document.getElementById('expenses-chart'),
+            // New Settings Elements
+            settingsBtn: document.getElementById('settings-btn'),
+            settingsModal: document.getElementById('settings-modal'),
+            settingsModalCloseBtn: document.getElementById('settings-modal-close-btn'),
+            tripIdInput: document.getElementById('trip-id-input'),
+            copyTripIdBtn: document.getElementById('copy-trip-id-btn'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            copyApiKeyBtn: document.getElementById('copy-api-key-btn'),
+            generateApiKeyBtn: document.getElementById('generate-api-key-btn'),
         };
 
         let currentUser = null;
@@ -218,7 +262,7 @@
                 window.location.href = 'index.html';
                 return;
             }
-            DOM.backToDashboardLink.href = `dashboard.html?id=${tripId}`;
+            DOM.backToDashboardLink.href = `trip.html?id=${tripId}`;
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
@@ -238,7 +282,6 @@
             const expensesColRef = collection(db, "trips", tripId, "expenses");
             expensesUnsubscribe = onSnapshot(expensesColRef, (snapshot) => {
                 const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                // Sort expenses by date, newest first
                 expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
                 renderExpenses(expenses);
                 updateSummary(expenses);
@@ -246,20 +289,14 @@
                 DOM.loadingOverlay.style.display = 'none';
             }, (error) => {
                 console.error("Error fetching expenses:", error);
-                alert("שגיאה בטעינת ההוצאות.");
                 DOM.loadingOverlay.style.display = 'none';
             });
         }
 
         function renderExpenses(expenses) {
             DOM.expensesTableBody.innerHTML = '';
-            if (expenses.length === 0) {
-                DOM.noExpensesMessage.classList.remove('hidden');
-                document.querySelector('.overflow-x-auto').classList.add('hidden');
-            } else {
-                DOM.noExpensesMessage.classList.add('hidden');
-                document.querySelector('.overflow-x-auto').classList.remove('hidden');
-            }
+            DOM.noExpensesMessage.classList.toggle('hidden', expenses.length > 0);
+            document.querySelector('.overflow-x-auto').classList.toggle('hidden', expenses.length === 0);
 
             expenses.forEach(exp => {
                 const tr = document.createElement('tr');
@@ -285,21 +322,14 @@
         
         function updateSummary(expenses) {
             const summary = expenses.reduce((acc, exp) => {
-                if (!acc[exp.currency]) {
-                    acc[exp.currency] = 0;
-                }
-                acc[exp.currency] += Number(exp.amount);
+                acc[exp.currency] = (acc[exp.currency] || 0) + Number(exp.amount);
                 return acc;
             }, {});
 
-            DOM.summarySection.innerHTML = ''; // Clear previous summary
+            DOM.summarySection.innerHTML = '';
             
             if (Object.keys(summary).length === 0) {
-                 DOM.summarySection.innerHTML = `
-                    <div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full">
-                        <h3 class="text-slate-500 font-semibold">אין הוצאות להצגה</h3>
-                        <p class="text-slate-400 mt-2">התחילו להוסיף הוצאות כדי לראות סיכום</p>
-                    </div>`;
+                 DOM.summarySection.innerHTML = `<div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
                 return;
             }
 
@@ -316,13 +346,8 @@
         
         function updateChart(expenses) {
             const categoryData = expenses.reduce((acc, exp) => {
-                // For simplicity, we'll convert all amounts to a base currency (e.g., USD) for the chart.
-                // This is a rough conversion and should be improved with real rates in a real app.
                 const amountInUSD = convertToUSD(exp.amount, exp.currency);
-                if (!acc[exp.category]) {
-                    acc[exp.category] = 0;
-                }
-                acc[exp.category] += amountInUSD;
+                acc[exp.category] = (acc[exp.category] || 0) + amountInUSD;
                 return acc;
             }, {});
 
@@ -336,21 +361,11 @@
                     datasets: [{
                         label: 'הוצאות ב-USD',
                         data: data,
-                        backgroundColor: [
-                            '#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308'
-                        ],
+                        backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308'],
                         hoverOffset: 4
                     }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                        }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
             };
             
             if (expensesChart) {
@@ -363,47 +378,43 @@
         }
 
         function convertToUSD(amount, currency) {
-            // Rough conversion rates for demonstration.
             const rates = { USD: 1, EUR: 1.08, GBP: 1.25, ILS: 0.27, JPY: 0.0064, CHF: 1.10 };
             return amount * (rates[currency] || 1);
         }
 
-        // --- Modal & Form Logic ---
-        function openModal(expense = null) {
+        // --- Expense Modal & Form Logic ---
+        function openExpenseModal(expense = null) {
             DOM.expenseForm.reset();
-            const expenseDocRef = expense ? doc(db, "trips", tripId, "expenses", expense.id) : null;
-            
-            if (expenseDocRef) {
+            if (expense) {
+                const expenseDocRef = doc(db, "trips", tripId, "expenses", expense.id);
                 getDoc(expenseDocRef).then(docSnap => {
                     if (docSnap.exists()) {
-                        const expenseData = docSnap.data();
-                        // Edit mode
+                        const data = docSnap.data();
                         DOM.modalTitle.textContent = 'עריכת הוצאה';
                         DOM.expenseId.value = expense.id;
-                        DOM.expenseDescription.value = expenseData.description;
-                        DOM.expenseAmount.value = expenseData.amount;
-                        DOM.expenseCurrency.value = expenseData.currency;
-                        DOM.expenseCategory.value = expenseData.category;
-                        DOM.expenseDate.value = expenseData.date;
-                        DOM.expenseNotes.value = expenseData.notes || '';
+                        DOM.expenseDescription.value = data.description;
+                        DOM.expenseAmount.value = data.amount;
+                        DOM.expenseCurrency.value = data.currency;
+                        DOM.expenseCategory.value = data.category;
+                        DOM.expenseDate.value = data.date;
+                        DOM.expenseNotes.value = data.notes || '';
                     }
                 });
             } else {
-                // Add mode
                 DOM.modalTitle.textContent = 'הוספת הוצאה חדשה';
                 DOM.expenseId.value = '';
-                DOM.expenseDate.valueAsDate = new Date(); // Default to today
+                DOM.expenseDate.valueAsDate = new Date();
             }
             DOM.expenseModal.classList.remove('hidden');
             setTimeout(() => DOM.expenseModal.classList.remove('opacity-0'), 10);
         }
 
-        function closeModal() {
+        function closeExpenseModal() {
             DOM.expenseModal.classList.add('opacity-0');
             setTimeout(() => DOM.expenseModal.classList.add('hidden'), 300);
         }
 
-        async function handleFormSubmit(e) {
+        async function handleExpenseFormSubmit(e) {
             e.preventDefault();
             const id = DOM.expenseId.value;
             const expenseData = {
@@ -418,30 +429,23 @@
 
             try {
                 if (id) {
-                    // Update existing expense
-                    const expenseRef = doc(db, "trips", tripId, "expenses", id);
-                    await updateDoc(expenseRef, expenseData);
+                    await updateDoc(doc(db, "trips", tripId, "expenses", id), expenseData);
                 } else {
-                    // Add new expense
                     expenseData.createdAt = serverTimestamp();
-                    const expensesColRef = collection(db, "trips", tripId, "expenses");
-                    await addDoc(expensesColRef, expenseData);
+                    await addDoc(collection(db, "trips", tripId, "expenses"), expenseData);
                 }
-                closeModal();
+                closeExpenseModal();
             } catch (error) {
                 console.error("Error saving expense:", error);
-                alert("שגיאה בשמירת ההוצאה.");
             }
         }
 
         async function handleDelete(id) {
             if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
                 try {
-                    const expenseRef = doc(db, "trips", tripId, "expenses", id);
-                    await deleteDoc(expenseRef);
+                    await deleteDoc(doc(db, "trips", tripId, "expenses", id));
                 } catch (error) {
                     console.error("Error deleting expense:", error);
-                    alert("שגיאה במחיקת ההוצאה.");
                 }
             }
         }
@@ -449,23 +453,77 @@
         function handleTableClick(e) {
             const target = e.target.closest('button');
             if (!target) return;
-            
             const id = target.dataset.id;
+            if (target.classList.contains('delete-btn')) handleDelete(id);
+            else if (target.classList.contains('edit-btn')) openExpenseModal({ id: id });
+        }
+
+        // --- NEW: Settings Modal Logic ---
+        async function openSettingsModal() {
+            if (!currentUser) return;
+            // Set the current trip ID in the input
+            DOM.tripIdInput.value = tripId;
+
+            // Fetch the user's API key
+            const userDocRef = doc(db, "users", currentUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            const apiKey = userDocSnap.exists() ? userDocSnap.data().settings?.apiKey : null;
+            DOM.apiKeyInput.value = apiKey || 'עדיין לא נוצר מפתח...';
             
-            if (target.classList.contains('delete-btn')) {
-                handleDelete(id);
-            } else if (target.classList.contains('edit-btn')) {
-                openModal({ id: id });
+            DOM.settingsModal.classList.remove('hidden');
+            setTimeout(() => DOM.settingsModal.classList.remove('opacity-0'), 10);
+        }
+
+        function closeSettingsModal() {
+            DOM.settingsModal.classList.add('opacity-0');
+            setTimeout(() => DOM.settingsModal.classList.add('hidden'), 300);
+        }
+
+        async function generateAndSaveApiKey() {
+            if (!currentUser) return;
+            const newKey = `sk_${crypto.randomUUID()}`;
+            DOM.apiKeyInput.value = newKey;
+            
+            const userDocRef = doc(db, "users", currentUser.uid);
+            try {
+                await setDoc(userDocRef, { settings: { apiKey: newKey } }, { merge: true });
+                alert('מפתח חדש נוצר ונשמר!');
+            } catch (error) {
+                console.error("Error saving API key:", error);
+                alert('שגיאה בשמירת המפתח.');
+            }
+        }
+
+        function copyToClipboard(inputElement, buttonElement) {
+            if (!inputElement.value || inputElement.value.startsWith('עדיין')) return;
+            inputElement.select();
+            inputElement.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                const originalText = buttonElement.innerHTML;
+                buttonElement.innerHTML = 'הועתק!';
+                setTimeout(() => {
+                    buttonElement.innerHTML = originalText;
+                }, 1500);
+            } catch (err) {
+                alert('שגיאה בהעתקה.');
             }
         }
 
         // --- Event Listeners Setup ---
         function setupEventListeners() {
-            DOM.addExpenseBtn.addEventListener('click', () => openModal());
-            DOM.modalCloseBtn.addEventListener('click', closeModal);
-            DOM.modalCancelBtn.addEventListener('click', closeModal);
-            DOM.expenseForm.addEventListener('submit', handleFormSubmit);
+            DOM.addExpenseBtn.addEventListener('click', () => openExpenseModal());
+            DOM.modalCloseBtn.addEventListener('click', closeExpenseModal);
+            DOM.modalCancelBtn.addEventListener('click', closeExpenseModal);
+            DOM.expenseForm.addEventListener('submit', handleExpenseFormSubmit);
             DOM.expensesTableBody.addEventListener('click', handleTableClick);
+            
+            // New Settings Listeners
+            DOM.settingsBtn.addEventListener('click', openSettingsModal);
+            DOM.settingsModalCloseBtn.addEventListener('click', closeSettingsModal);
+            DOM.generateApiKeyBtn.addEventListener('click', generateAndSaveApiKey);
+            DOM.copyApiKeyBtn.addEventListener('click', () => copyToClipboard(DOM.apiKeyInput, DOM.copyApiKeyBtn));
+            DOM.copyTripIdBtn.addEventListener('click', () => copyToClipboard(DOM.tripIdInput, DOM.copyTripIdBtn));
         }
 
         // --- Start the page ---
