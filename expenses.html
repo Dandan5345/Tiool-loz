@@ -38,7 +38,6 @@
             color: white;
         }
         
-        /* Small spinner for currency conversion */
         .loader {
             width: 12px;
             height: 12px;
@@ -62,6 +61,34 @@
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
         <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
+    </div>
+
+    <!-- Settings Modal (ADDED BACK) -->
+    <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-2xl font-bold">הגדרות קיצור דרך</h3>
+                <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <div class="space-y-6">
+                <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">1. מזהה הטיול הנוכחי</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="trip-id-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr">
+                        <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מזהה טיול"><i class="fas fa-copy"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">2. המפתח הסודי האישי שלך</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="api-key-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr" placeholder="לחץ על הכפתור כדי ליצור מפתח...">
+                        <button id="copy-api-key-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מפתח סודי"><i class="fas fa-copy"></i></button>
+                    </div>
+                     <button id="generate-api-key-btn" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">צור/החלף מפתח סודי (פעולה זו תבטל מפתח קודם)</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Add/Edit Expense Modal -->
@@ -131,9 +158,14 @@
                         <i class="fas fa-arrow-right"></i>
                     </a>
                     <h1 id="trip-title" class="text-xl font-bold text-slate-800 truncate">ניהול הוצאות</h1>
-                    <button id="add-expense-btn-header" class="bg-blue-600 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md">
-                        <i class="fas fa-plus"></i>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                        <button id="add-expense-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -206,6 +238,7 @@
             loadingOverlay: document.getElementById('loading-overlay'),
             tripTitle: document.getElementById('trip-title'),
             expenseModal: document.getElementById('expense-modal'),
+            settingsModal: document.getElementById('settings-modal'), // Added
             modalTitle: document.getElementById('modal-title'),
             expenseForm: document.getElementById('expense-form'),
             expenseId: document.getElementById('expense-id'),
@@ -220,9 +253,16 @@
             expenseNotes: document.getElementById('expense-notes'),
             backToDashboardLink: document.getElementById('back-to-dashboard'),
             addExpenseBtnHeader: document.getElementById('add-expense-btn-header'),
+            settingsBtn: document.getElementById('settings-btn'), // Added
             tabs: document.querySelectorAll('.tab-btn'),
             tabContents: document.querySelectorAll('.tab-content'),
             filters: document.querySelectorAll('.filter-btn'),
+            // Settings Modal Inputs (Added)
+            tripIdInput: document.getElementById('trip-id-input'),
+            copyTripIdBtn: document.getElementById('copy-trip-id-btn'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            copyApiKeyBtn: document.getElementById('copy-api-key-btn'),
+            generateApiKeyBtn: document.getElementById('generate-api-key-btn'),
         };
 
         // --- Global State ---
@@ -235,11 +275,10 @@
         let expensesChart = null;
         let activeTab = 'today';
         let activeFilter = 'all';
-        let rateCache = {}; // Cache for currency rates
+        let rateCache = {};
         
         const defaultCategories = ['🍔 אוכל ושתיה', '🚗 תחבורה', '🏨 לינה', '🎢 אטרקציות', '🛍️ קניות', '📎 אחר'];
         
-        // --- Currency Data ---
         const currencies = {
             "ILS": "Israeli New Sheqel (₪)", "USD": "United States Dollar ($)", "EUR": "Euro (€)", "GBP": "British Pound (£)",
             "AUD": "Australian Dollar (A$)", "BGN": "Bulgarian Lev (лв)", "BRL": "Brazilian Real (R$)", "CAD": "Canadian Dollar (C$)",
@@ -383,7 +422,6 @@
                 `;
                 listContainer.appendChild(card);
                 
-                // Trigger conversion display
                 if (exp.currency !== 'ILS') {
                     displayConvertedAmount(uniqueId, exp.amount, exp.currency);
                 }
@@ -414,13 +452,14 @@
 
         async function updateChart(expenses) {
             if (expenses.length === 0) {
-                if (expensesChart) expensesChart.destroy();
+                if(expensesChart) expensesChart.destroy();
                 expensesChart = null;
+                document.getElementById('expenses-chart').style.display = 'none';
                 return;
             }
+            document.getElementById('expenses-chart').style.display = 'block';
 
             const categoryData = {};
-            // Convert all amounts to ILS for a unified chart
             for (const exp of expenses) {
                 let amountInILS = exp.amount;
                 if (exp.currency !== 'ILS') {
@@ -459,12 +498,12 @@
                 if (!res.ok) throw new Error('API error');
                 const data = await res.json();
                 const rate = data.rates[to];
-                if (typeof rate !== 'number') return 1; // Fallback
+                if (typeof rate !== 'number') return 1;
                 rateCache[cacheKey] = rate;
                 return rate;
             } catch (error) {
                 console.error('Failed to fetch currency rate:', error);
-                return 1; // Fallback on error
+                return 1;
             }
         }
 
@@ -507,8 +546,8 @@
         }
 
         // --- Modal & Form Logic ---
-        function openModal(modalId) { document.getElementById(modalId).classList.remove('modal-hidden'); }
-        function closeModal(modalId) { document.getElementById(modalId).classList.add('modal-hidden'); }
+        function openModal(modalId) { document.getElementById(modalId)?.classList.remove('modal-hidden'); }
+        function closeModal(modalId) { document.getElementById(modalId)?.classList.add('modal-hidden'); }
 
         function openExpenseModal(expense = null) {
             DOM.expenseForm.reset();
@@ -537,6 +576,48 @@
                 DOM.expenseDate.valueAsDate = new Date();
             }
             openModal('expense-modal');
+        }
+
+        // --- Settings Modal Logic (ADDED BACK) ---
+        async function openSettingsModal() {
+            if (!currentUserProfile) return;
+            DOM.tripIdInput.value = tripId;
+            const userDocRef = doc(db, "users", currentUserProfile.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            const apiKey = userDocSnap.exists() ? userDocSnap.data().settings?.apiKey : null;
+            DOM.apiKeyInput.value = apiKey || 'לחץ על הכפתור ליצירה...';
+            openModal('settings-modal');
+        }
+
+        async function generateAndSaveApiKey() {
+            if (!currentUserProfile) return;
+            const newKey = `sk_${crypto.randomUUID()}`;
+            DOM.apiKeyInput.value = newKey;
+            
+            const userDocRef = doc(db, "users", currentUserProfile.uid);
+            try {
+                await setDoc(userDocRef, { settings: { apiKey: newKey } }, { merge: true });
+                alert('מפתח חדש נוצר ונשמר!');
+            } catch (error) {
+                console.error("Error saving API key:", error);
+                alert('שגיאה בשמירת המפתח.');
+            }
+        }
+
+        function copyToClipboard(inputElement, buttonElement) {
+            if (!inputElement.value || inputElement.value.startsWith('לחץ')) return;
+            inputElement.select();
+            inputElement.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                const originalIcon = buttonElement.innerHTML;
+                buttonElement.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+                setTimeout(() => {
+                    buttonElement.innerHTML = originalIcon;
+                }, 1500);
+            } catch (err) {
+                alert('שגיאה בהעתקה.');
+            }
         }
 
         async function handleExpenseFormSubmit(e) {
@@ -600,6 +681,7 @@
         // --- Event Listeners ---
         function setupEventListeners() {
             DOM.addExpenseBtnHeader.addEventListener('click', () => openExpenseModal());
+            DOM.settingsBtn.addEventListener('click', openSettingsModal); // Added
             DOM.expenseForm.addEventListener('submit', handleExpenseFormSubmit);
             
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -642,6 +724,11 @@
             });
             
             DOM.deleteCategoryBtn.addEventListener('click', handleDeleteCategory);
+
+            // Settings Listeners (Added)
+            DOM.generateApiKeyBtn.addEventListener('click', generateAndSaveApiKey);
+            DOM.copyApiKeyBtn.addEventListener('click', () => copyToClipboard(DOM.apiKeyInput, DOM.copyApiKeyBtn));
+            DOM.copyTripIdBtn.addEventListener('click', () => copyToClipboard(DOM.tripIdInput, DOM.copyTripIdBtn));
         }
 
         // --- Start ---
