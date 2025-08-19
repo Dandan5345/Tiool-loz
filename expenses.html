@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מעקב הוצאות</title>
+    <title>ניהול הוצאות</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -16,69 +16,67 @@
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Assistant', sans-serif; }
-        .modal { transition: opacity 0.3s ease; }
+        body { 
+            font-family: 'Assistant', sans-serif; 
+            overscroll-behavior-y: none;
+        }
+        .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+        .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
+        .modal-visible { opacity: 1; transform: scale(1); }
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        
+        .tab-btn.active {
+            border-color: #2563eb; /* blue-600 */
+            color: #2563eb;
+            background-color: #dbeafe; /* blue-100 */
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .filter-btn.active {
+            background-color: #1e40af; /* blue-800 */
+            color: white;
+        }
+        
+        /* Small spinner for currency conversion */
+        .loader {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #d1d5db; /* gray-300 */
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-slate-100">
 
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
-        <i class="fas fa-dollar-sign text-5xl text-green-600 animate-spin"></i>
-        <p class="text-xl font-bold text-slate-700">טוען נתוני הוצאות...</p>
+        <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
+        <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
     </div>
-
-    <!-- Settings Modal (NEW) -->
-    <div id="settings-modal" class="modal hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4 opacity-0">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h3 class="text-2xl font-bold">הגדרות קיצור דרך</h3>
-                <button id="settings-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
-            </div>
-            <div class="space-y-6">
-                <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
-                
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">1. מזהה הטיול הנוכחי</label>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="trip-id-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr">
-                        <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מזהה טיול">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">2. המפתח הסודי האישי שלך</label>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="api-key-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr" placeholder="לחץ על הכפתור כדי ליצור מפתח...">
-                        <button id="copy-api-key-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מפתח סודי">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </div>
-                     <button id="generate-api-key-btn" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                        צור/החלף מפתח סודי (פעולה זו תבטל מפתח קודם)
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
 
     <!-- Add/Edit Expense Modal -->
-    <div id="expense-modal" class="modal hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 opacity-0">
+    <div id="expense-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
                 <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת הוצאה חדשה</h3>
-                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                <button data-close-modal="expense-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
             <form id="expense-form" class="space-y-4">
                 <input type="hidden" id="expense-id">
                 
                 <div>
-                    <label for="expense-description" class="block text-sm font-medium text-slate-700 mb-1">תיאור ההוצאה</label>
-                    <input type="text" id="expense-description" class="w-full p-2 border rounded-md" placeholder="לדוגמה: ארוחת ערב במסעדה" required>
+                    <label for="expense-owner-name" class="block text-sm font-medium text-slate-700 mb-1">שם המוסיף</label>
+                    <input type="text" id="expense-owner-name" class="w-full p-2 border rounded-md bg-slate-50" required>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -88,110 +86,98 @@
                     </div>
                     <div>
                         <label for="expense-currency" class="block text-sm font-medium text-slate-700 mb-1">מטבע</label>
-                        <select id="expense-currency" class="w-full p-2 border rounded-md bg-white">
-                            <option>USD</option>
-                            <option>EUR</option>
-                            <option>GBP</option>
-                            <option>ILS</option>
-                            <option>JPY</option>
-                            <option>CHF</option>
-                        </select>
+                        <select id="expense-currency" class="w-full p-2 border rounded-md bg-white"></select>
                     </div>
+                </div>
+
+                <div>
+                    <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
+                    <div class="flex items-center gap-2">
+                        <select id="expense-category" class="w-full p-2 border rounded-md bg-white"></select>
+                        <button type="button" id="delete-category-btn" class="text-slate-400 hover:text-red-500 p-2 hidden" title="מחק קטגוריה זו"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+
+                <div id="new-category-wrapper" class="hidden">
+                    <label for="new-category-name" class="block text-sm font-medium text-slate-700 mb-1">שם הקטגוריה החדשה</label>
+                    <input type="text" id="new-category-name" class="w-full p-2 border rounded-md" placeholder="לדוגמה: בילויים">
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
-                        <select id="expense-category" class="w-full p-2 border rounded-md bg-white">
-                            <option value="אוכל ושתיה">🍔 אוכל ושתיה</option>
-                            <option value="תחבורה">🚗 תחבורה</option>
-                            <option value="לינה">🏨 לינה</option>
-                            <option value="אטרקציות">🎢 אטרקציות</option>
-                            <option value="קניות">🛍️ קניות</option>
-                            <option value="אחר">📎 אחר</option>
-                        </select>
-                    </div>
-                    <div>
                         <label for="expense-date" class="block text-sm font-medium text-slate-700 mb-1">תאריך</label>
                         <input type="date" id="expense-date" class="w-full p-2 border rounded-md" required>
                     </div>
-                </div>
-                
-                <div>
-                    <label for="expense-notes" class="block text-sm font-medium text-slate-700 mb-1">הערות (אופציונלי)</label>
-                    <textarea id="expense-notes" rows="2" class="w-full p-2 border rounded-md" placeholder="פרטים נוספים על ההוצאה..."></textarea>
+                    <div>
+                        <label for="expense-notes" class="block text-sm font-medium text-slate-700 mb-1">פירוט (אופציונלי)</label>
+                        <input type="text" id="expense-notes" class="w-full p-2 border rounded-md" placeholder="פרטים נוספים...">
+                    </div>
                 </div>
 
                 <div class="flex justify-end gap-4 pt-4">
-                    <button type="button" id="modal-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור הוצאה</button>
+                    <button type="button" data-close-modal="expense-modal" class="bg-gray-200 hover:bg-gray-300 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- Main Content -->
-    <div id="main-content">
+    <div id="main-content" class="pb-24">
         <header class="bg-white shadow-sm sticky top-0 z-30">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
-                    <a id="back-to-dashboard" href="#" class="text-slate-700 font-bold hover:text-blue-600">
-                        <i class="fas fa-arrow-right ml-2"></i> חזרה למרכז הבקרה
+                    <a id="back-to-dashboard" href="#" class="text-slate-700 font-bold hover:text-blue-600 flex items-center gap-2">
+                        <i class="fas fa-arrow-right"></i>
                     </a>
-                    <h1 class="text-xl font-bold text-slate-800">מעקב הוצאות</h1>
-                    <!-- NEW: Settings Button -->
-                    <button id="settings-btn" class="text-slate-600 hover:text-blue-600 p-2" title="הגדרות קיצור דרך">
-                        <i class="fas fa-cog fa-lg"></i>
+                    <h1 id="trip-title" class="text-xl font-bold text-slate-800 truncate">ניהול הוצאות</h1>
+                    <button id="add-expense-btn-header" class="bg-blue-600 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md">
+                        <i class="fas fa-plus"></i>
                     </button>
                 </div>
             </div>
         </header>
 
-        <main>
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-            
-                <!-- Summary Section -->
-                <section id="summary-section" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <!-- Cards will be generated here -->
-                </section>
+        <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="mb-6 bg-slate-200 p-1 rounded-full grid grid-cols-2 gap-1">
+                <button class="tab-btn active font-bold py-2 px-4 rounded-full transition" data-tab="today">היום</button>
+                <button class="tab-btn font-bold py-2 px-4 rounded-full transition" data-tab="all">כל ההוצאות</button>
+            </div>
 
-                <!-- Chart Section -->
-                <section class="bg-white p-6 rounded-2xl shadow-lg">
-                    <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות לפי קטגוריה</h3>
-                    <div class="max-h-80 flex justify-center">
-                        <canvas id="expenses-chart"></canvas>
-                    </div>
-                </section>
-
-                <!-- Expenses Table Section -->
+            <div id="tab-today" class="tab-content active space-y-6">
                 <section>
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-2xl font-bold text-slate-800">רשימת הוצאות</h3>
-                        <button id="add-expense-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition">
-                            <i class="fas fa-plus ml-2"></i>הוסף הוצאה
-                        </button>
-                    </div>
-                    <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-right">
-                                <thead class="bg-slate-50 border-b">
-                                    <tr>
-                                        <th class="p-4 font-semibold text-slate-600">תיאור</th>
-                                        <th class="p-4 font-semibold text-slate-600">קטגוריה</th>
-                                        <th class="p-4 font-semibold text-slate-600">תאריך</th>
-                                        <th class="p-4 font-semibold text-slate-600">סכום</th>
-                                        <th class="p-4 font-semibold text-slate-600">פעולות</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="expenses-table-body">
-                                    <!-- Rows will be injected here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div id="no-expenses-message" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
+                    <div id="summary-section-today" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                    <div id="expenses-list-today" class="space-y-4 mt-6"></div>
+                    <div id="no-expenses-message-today" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
                         <i class="fas fa-receipt text-4xl text-slate-300 mb-4"></i>
-                        <p class="text-slate-500">עדיין לא נוספו הוצאות. <br> לחץ על "הוסף הוצאה" כדי להתחיל.</p>
+                        <p class="text-slate-500">אין הוצאות להיום.</p>
+                    </div>
+                </section>
+            </div>
+
+            <div id="tab-all" class="tab-content space-y-6">
+                <section class="bg-white p-3 rounded-2xl shadow-lg">
+                    <div id="filters" class="flex items-center justify-center gap-2 bg-blue-700 p-1 rounded-full">
+                        <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="week">שבוע</button>
+                        <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="month">חודש</button>
+                        <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="2months">חודשיים</button>
+                        <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="6months">חצי שנה</button>
+                        <button class="filter-btn active text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="all">הכל</button>
+                    </div>
+                </section>
+                
+                <section id="summary-section-all" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
+                
+                <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות לפי קטגוריה (בשקלים)</h3>
+                    <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart"></canvas></div>
+                </section>
+
+                <section>
+                    <div id="expenses-list-all" class="space-y-4"></div>
+                    <div id="no-expenses-message-all" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
+                        <i class="fas fa-search-dollar text-4xl text-slate-300 mb-4"></i>
+                        <p class="text-slate-500">לא נמצאו הוצאות התואמות לסינון.</p>
                     </div>
                 </section>
             </div>
@@ -199,11 +185,10 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, doc, getDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // --- Firebase Init ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -219,41 +204,55 @@
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
-            addExpenseBtn: document.getElementById('add-expense-btn'),
+            tripTitle: document.getElementById('trip-title'),
             expenseModal: document.getElementById('expense-modal'),
-            modalCloseBtn: document.getElementById('modal-close-btn'),
-            modalCancelBtn: document.getElementById('modal-cancel-btn'),
             modalTitle: document.getElementById('modal-title'),
             expenseForm: document.getElementById('expense-form'),
             expenseId: document.getElementById('expense-id'),
-            expenseDescription: document.getElementById('expense-description'),
+            expenseOwnerName: document.getElementById('expense-owner-name'),
             expenseAmount: document.getElementById('expense-amount'),
             expenseCurrency: document.getElementById('expense-currency'),
             expenseCategory: document.getElementById('expense-category'),
+            newCategoryWrapper: document.getElementById('new-category-wrapper'),
+            newCategoryName: document.getElementById('new-category-name'),
+            deleteCategoryBtn: document.getElementById('delete-category-btn'),
             expenseDate: document.getElementById('expense-date'),
             expenseNotes: document.getElementById('expense-notes'),
-            expensesTableBody: document.getElementById('expenses-table-body'),
-            noExpensesMessage: document.getElementById('no-expenses-message'),
-            summarySection: document.getElementById('summary-section'),
             backToDashboardLink: document.getElementById('back-to-dashboard'),
-            chartCanvas: document.getElementById('expenses-chart'),
-            // New Settings Elements
-            settingsBtn: document.getElementById('settings-btn'),
-            settingsModal: document.getElementById('settings-modal'),
-            settingsModalCloseBtn: document.getElementById('settings-modal-close-btn'),
-            tripIdInput: document.getElementById('trip-id-input'),
-            copyTripIdBtn: document.getElementById('copy-trip-id-btn'),
-            apiKeyInput: document.getElementById('api-key-input'),
-            copyApiKeyBtn: document.getElementById('copy-api-key-btn'),
-            generateApiKeyBtn: document.getElementById('generate-api-key-btn'),
+            addExpenseBtnHeader: document.getElementById('add-expense-btn-header'),
+            tabs: document.querySelectorAll('.tab-btn'),
+            tabContents: document.querySelectorAll('.tab-content'),
+            filters: document.querySelectorAll('.filter-btn'),
         };
 
-        let currentUser = null;
+        // --- Global State ---
+        let currentUserProfile = null;
         let tripId = null;
+        let allExpenses = [];
+        let tripCategories = [];
         let expensesUnsubscribe = null;
+        let categoriesUnsubscribe = null;
         let expensesChart = null;
+        let activeTab = 'today';
+        let activeFilter = 'all';
+        let rateCache = {}; // Cache for currency rates
+        
+        const defaultCategories = ['🍔 אוכל ושתיה', '🚗 תחבורה', '🏨 לינה', '🎢 אטרקציות', '🛍️ קניות', '📎 אחר'];
+        
+        // --- Currency Data ---
+        const currencies = {
+            "ILS": "Israeli New Sheqel (₪)", "USD": "United States Dollar ($)", "EUR": "Euro (€)", "GBP": "British Pound (£)",
+            "AUD": "Australian Dollar (A$)", "BGN": "Bulgarian Lev (лв)", "BRL": "Brazilian Real (R$)", "CAD": "Canadian Dollar (C$)",
+            "CHF": "Swiss Franc (CHF)", "CNY": "Chinese Renminbi Yuan (¥)", "CZK": "Czech Koruna (Kč)", "DKK": "Danish Krone (kr)",
+            "HKD": "Hong Kong Dollar (HK$)", "HUF": "Hungarian Forint (Ft)", "IDR": "Indonesian Rupiah (Rp)",
+            "INR": "Indian Rupee (₹)", "ISK": "Icelandic Króna (kr)", "JPY": "Japanese Yen (¥)", "KRW": "South Korean Won (₩)",
+            "MXN": "Mexican Peso (MX$)", "MYR": "Malaysian Ringgit (RM)", "NOK": "Norwegian Krone (kr)", "NZD": "New Zealand Dollar (NZ$)",
+            "PHP": "Philippine Peso (₱)", "PLN": "Polish Złoty (zł)", "RON": "Romanian Leu (lei)", "SEK": "Swedish Krona (kr)",
+            "SGD": "Singapore Dollar (S$)", "THB": "Thai Baht (฿)", "TRY": "Turkish Lira (₺)", "ZAR": "South African Rand (R)"
+        };
+        const prioritizedCurrencies = ['ILS', 'USD', 'EUR', 'GBP'];
 
-        // --- Page Initialization ---
+        // --- Initialization ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
@@ -263,10 +262,13 @@
                 return;
             }
             DOM.backToDashboardLink.href = `trip.html?id=${tripId}`;
+            populateCurrencyDropdown();
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    currentUser = user;
+                    await fetchUserProfile(user.uid);
+                    fetchTripDetails();
+                    listenForCategories();
                     listenForExpenses();
                 } else {
                     window.location.href = 'login.html';
@@ -275,124 +277,252 @@
             setupEventListeners();
         }
 
-        // --- Data Fetching & Rendering ---
+        // --- Data Fetching & Realtime Listeners ---
+        async function fetchUserProfile(uid) {
+            const userDocRef = doc(db, "users", uid);
+            const docSnap = await getDoc(userDocRef);
+            currentUserProfile = docSnap.exists() ? { uid, ...docSnap.data() } : { uid, displayName: "משתמש" };
+        }
+
+        async function fetchTripDetails() {
+            const tripDocRef = doc(db, "trips", tripId);
+            const docSnap = await getDoc(tripDocRef);
+            if (docSnap.exists()) DOM.tripTitle.textContent = docSnap.data().name || 'ניהול הוצאות';
+        }
+
+        function listenForCategories() {
+            if (categoriesUnsubscribe) categoriesUnsubscribe();
+            const categoriesDocRef = doc(db, "trips", tripId, "settings", "categories");
+            categoriesUnsubscribe = onSnapshot(categoriesDocRef, (docSnap) => {
+                tripCategories = docSnap.exists() ? (docSnap.data().list || []) : [...defaultCategories];
+                if (!docSnap.exists()) {
+                    setDoc(categoriesDocRef, { list: defaultCategories });
+                }
+                populateCategoryDropdown();
+            });
+        }
+
         function listenForExpenses() {
             if (expensesUnsubscribe) expensesUnsubscribe();
-            
             const expensesColRef = collection(db, "trips", tripId, "expenses");
             expensesUnsubscribe = onSnapshot(expensesColRef, (snapshot) => {
-                const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-                renderExpenses(expenses);
-                updateSummary(expenses);
-                updateChart(expenses);
-                DOM.loadingOverlay.style.display = 'none';
-            }, (error) => {
-                console.error("Error fetching expenses:", error);
-                DOM.loadingOverlay.style.display = 'none';
+                allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+                render();
+                if (!DOM.loadingOverlay.classList.contains('opacity-0')) {
+                    DOM.loadingOverlay.classList.add('opacity-0');
+                    setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
+                }
             });
         }
 
-        function renderExpenses(expenses) {
-            DOM.expensesTableBody.innerHTML = '';
-            DOM.noExpensesMessage.classList.toggle('hidden', expenses.length > 0);
-            document.querySelector('.overflow-x-auto').classList.toggle('hidden', expenses.length === 0);
+        // --- Central Render Function ---
+        function render() {
+            let filteredExpenses = getFilteredExpenses();
+            if (activeTab === 'today') {
+                renderExpenseList(filteredExpenses, 'today');
+                renderSummary(filteredExpenses, 'today');
+            } else {
+                renderExpenseList(filteredExpenses, 'all');
+                renderSummary(filteredExpenses, 'all');
+                updateChart(filteredExpenses);
+            }
+        }
 
-            expenses.forEach(exp => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b hover:bg-slate-50';
-                tr.innerHTML = `
-                    <td class="p-4">
-                        <p class="font-bold text-slate-800">${exp.description}</p>
-                        <p class="text-sm text-slate-500">${exp.notes || ''}</p>
-                    </td>
-                    <td class="p-4 text-slate-600">${exp.category}</td>
-                    <td class="p-4 text-slate-600">${new Date(exp.date).toLocaleDateString('he-IL')}</td>
-                    <td class="p-4 font-bold text-lg text-red-600">
-                        ${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${exp.currency}
-                    </td>
-                    <td class="p-4 text-slate-500">
-                        <button class="edit-btn p-2 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
-                        <button class="delete-btn p-2 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
-                    </td>
+        // --- Filtering Logic ---
+        function getFilteredExpenses() {
+            const now = new Date();
+            const todayString = now.toISOString().split('T')[0];
+            
+            if (activeTab === 'today') {
+                return allExpenses.filter(exp => exp.date === todayString);
+            }
+
+            let startDate = new Date(0);
+            switch (activeFilter) {
+                case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
+                case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
+                case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
+                case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
+            }
+            return allExpenses.filter(exp => new Date(exp.date) >= startDate);
+        }
+
+        // --- UI Rendering ---
+        function renderExpenseList(expenses, containerId) {
+            const listContainer = document.getElementById(`expenses-list-${containerId}`);
+            const noItemsMsg = document.getElementById(`no-expenses-message-${containerId}`);
+            listContainer.innerHTML = '';
+            
+            const hasExpenses = expenses.length > 0;
+            noItemsMsg.classList.toggle('hidden', hasExpenses);
+            listContainer.classList.toggle('hidden', !hasExpenses);
+
+            expenses.forEach((exp, index) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-2xl shadow-md flex items-center gap-4';
+                const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
+                const uniqueId = `conv-${containerId}-${index}`;
+                
+                card.innerHTML = `
+                    <div class="flex-shrink-0 h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">${exp.category.match(/(\p{Emoji})/u)?.[0] || '📎'}</div>
+                    <div class="flex-grow">
+                        <p class="font-bold text-slate-800">${exp.notes || 'הוצאה'}</p>
+                        <p class="text-sm text-slate-500"><span class="font-semibold">${exp.ownerName || 'לא ידוע'}</span> • ${new Date(exp.date).toLocaleDateString('he-IL')}</p>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-bold text-lg text-red-600 whitespace-nowrap">
+                            ${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${exp.currency}
+                            <span id="${uniqueId}" class="text-slate-500 font-normal text-sm ml-1"></span>
+                        </p>
+                        ${isOwner ? `<div class="flex justify-end gap-2 mt-1">
+                            <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                            <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                        </div>` : ''}
+                    </div>
                 `;
-                DOM.expensesTableBody.appendChild(tr);
+                listContainer.appendChild(card);
+                
+                // Trigger conversion display
+                if (exp.currency !== 'ILS') {
+                    displayConvertedAmount(uniqueId, exp.amount, exp.currency);
+                }
             });
         }
-        
-        function updateSummary(expenses) {
+
+        function renderSummary(expenses, containerId) {
+            const summaryContainer = document.getElementById(`summary-section-${containerId}`);
             const summary = expenses.reduce((acc, exp) => {
                 acc[exp.currency] = (acc[exp.currency] || 0) + Number(exp.amount);
                 return acc;
             }, {});
-
-            DOM.summarySection.innerHTML = '';
-            
+            summaryContainer.innerHTML = '';
             if (Object.keys(summary).length === 0) {
-                 DOM.summarySection.innerHTML = `<div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
+                summaryContainer.innerHTML = `<div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
+                return;
+            }
+            for (const currency in summary) {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-2xl shadow-lg text-center';
+                card.innerHTML = `
+                    <h3 class="text-slate-500 font-semibold text-sm">סה"כ (${currency})</h3>
+                    <p class="text-2xl font-bold text-blue-600 mt-1">${summary[currency].toLocaleString('he-IL', { minimumFractionDigits: 2 })}</p>
+                `;
+                summaryContainer.appendChild(card);
+            }
+        }
+
+        async function updateChart(expenses) {
+            if (expenses.length === 0) {
+                if (expensesChart) expensesChart.destroy();
+                expensesChart = null;
                 return;
             }
 
-            for (const currency in summary) {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-6 rounded-2xl shadow-lg text-center';
-                card.innerHTML = `
-                    <h3 class="text-slate-500 font-semibold">סה"כ הוצאות (${currency})</h3>
-                    <p class="text-3xl font-bold text-blue-600 mt-2">${summary[currency].toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                `;
-                DOM.summarySection.appendChild(card);
+            const categoryData = {};
+            // Convert all amounts to ILS for a unified chart
+            for (const exp of expenses) {
+                let amountInILS = exp.amount;
+                if (exp.currency !== 'ILS') {
+                    const rate = await getRate(exp.currency, 'ILS');
+                    amountInILS = exp.amount * rate;
+                }
+                categoryData[exp.category] = (categoryData[exp.category] || 0) + amountInILS;
             }
-        }
-        
-        function updateChart(expenses) {
-            const categoryData = expenses.reduce((acc, exp) => {
-                const amountInUSD = convertToUSD(exp.amount, exp.currency);
-                acc[exp.category] = (acc[exp.category] || 0) + amountInUSD;
-                return acc;
-            }, {});
 
             const labels = Object.keys(categoryData);
             const data = Object.values(categoryData);
+            const chartCanvas = document.getElementById('expenses-chart');
 
             const chartConfig = {
                 type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'הוצאות ב-USD',
-                        data: data,
-                        backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308'],
-                        hoverOffset: 4
-                    }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                data: { labels, datasets: [{ data, backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#64748b'], borderColor: '#fff', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" } } } } }
             };
-            
             if (expensesChart) {
                 expensesChart.data.labels = labels;
                 expensesChart.data.datasets[0].data = data;
                 expensesChart.update();
             } else {
-                expensesChart = new Chart(DOM.chartCanvas, chartConfig);
+                expensesChart = new Chart(chartCanvas, chartConfig);
             }
         }
 
-        function convertToUSD(amount, currency) {
-            const rates = { USD: 1, EUR: 1.08, GBP: 1.25, ILS: 0.27, JPY: 0.0064, CHF: 1.10 };
-            return amount * (rates[currency] || 1);
+        // --- Currency Conversion API ---
+        async function getRate(from, to) {
+            if (from === to) return 1;
+            const cacheKey = `${from}-${to}`;
+            if (rateCache[cacheKey]) return rateCache[cacheKey];
+
+            try {
+                const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                const rate = data.rates[to];
+                if (typeof rate !== 'number') return 1; // Fallback
+                rateCache[cacheKey] = rate;
+                return rate;
+            } catch (error) {
+                console.error('Failed to fetch currency rate:', error);
+                return 1; // Fallback on error
+            }
         }
 
-        // --- Expense Modal & Form Logic ---
+        async function displayConvertedAmount(elementId, amount, from) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.innerHTML = `<span class="loader"></span>`;
+            const rate = await getRate(from, 'ILS');
+            const convertedAmount = amount * rate;
+            el.textContent = `(₪${convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+        }
+
+        // --- Dropdown Population ---
+        function populateCurrencyDropdown() {
+            const fragment = document.createDocumentFragment();
+            prioritizedCurrencies.forEach(code => {
+                const opt = document.createElement('option');
+                opt.value = code;
+                opt.textContent = `${code} — ${currencies[code]}`;
+                fragment.appendChild(opt);
+            });
+
+            const otherCurrencies = Object.keys(currencies)
+                .filter(c => !prioritizedCurrencies.includes(c))
+                .sort();
+            
+            otherCurrencies.forEach(code => {
+                const opt = document.createElement('option');
+                opt.value = code;
+                opt.textContent = `${code} — ${currencies[code]}`;
+                fragment.appendChild(opt);
+            });
+            DOM.expenseCurrency.appendChild(fragment);
+        }
+
+        function populateCategoryDropdown() {
+            DOM.expenseCategory.innerHTML = tripCategories
+                .map(cat => `<option value="${cat}">${cat}</option>`)
+                .join('') + '<option value="add_new_category">➕ הוסף חדשה...</option>';
+        }
+
+        // --- Modal & Form Logic ---
+        function openModal(modalId) { document.getElementById(modalId).classList.remove('modal-hidden'); }
+        function closeModal(modalId) { document.getElementById(modalId).classList.add('modal-hidden'); }
+
         function openExpenseModal(expense = null) {
             DOM.expenseForm.reset();
+            DOM.newCategoryWrapper.classList.add('hidden');
+            DOM.deleteCategoryBtn.classList.add('hidden');
+
             if (expense) {
+                DOM.modalTitle.textContent = 'עריכת הוצאה';
                 const expenseDocRef = doc(db, "trips", tripId, "expenses", expense.id);
                 getDoc(expenseDocRef).then(docSnap => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        DOM.modalTitle.textContent = 'עריכת הוצאה';
                         DOM.expenseId.value = expense.id;
-                        DOM.expenseDescription.value = data.description;
+                        DOM.expenseOwnerName.value = data.ownerName || '';
                         DOM.expenseAmount.value = data.amount;
                         DOM.expenseCurrency.value = data.currency;
                         DOM.expenseCategory.value = data.category;
@@ -403,130 +533,118 @@
             } else {
                 DOM.modalTitle.textContent = 'הוספת הוצאה חדשה';
                 DOM.expenseId.value = '';
+                DOM.expenseOwnerName.value = currentUserProfile.displayName;
                 DOM.expenseDate.valueAsDate = new Date();
             }
-            DOM.expenseModal.classList.remove('hidden');
-            setTimeout(() => DOM.expenseModal.classList.remove('opacity-0'), 10);
-        }
-
-        function closeExpenseModal() {
-            DOM.expenseModal.classList.add('opacity-0');
-            setTimeout(() => DOM.expenseModal.classList.add('hidden'), 300);
+            openModal('expense-modal');
         }
 
         async function handleExpenseFormSubmit(e) {
             e.preventDefault();
-            const id = DOM.expenseId.value;
+            let category = DOM.expenseCategory.value;
+
+            if (category === 'add_new_category') {
+                const newCategoryName = DOM.newCategoryName.value.trim();
+                if (newCategoryName && !tripCategories.includes(newCategoryName)) {
+                    const updatedCategories = [...tripCategories, newCategoryName];
+                    await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
+                    category = newCategoryName;
+                } else {
+                    alert("שם הקטגוריה אינו תקין או שכבר קיים.");
+                    return;
+                }
+            }
+
             const expenseData = {
-                description: DOM.expenseDescription.value,
+                ownerName: DOM.expenseOwnerName.value,
                 amount: parseFloat(DOM.expenseAmount.value),
                 currency: DOM.expenseCurrency.value,
-                category: DOM.expenseCategory.value,
+                category: category,
                 date: DOM.expenseDate.value,
                 notes: DOM.expenseNotes.value,
-                ownerId: currentUser.uid,
+                ownerId: currentUserProfile.uid,
             };
 
             try {
+                const id = DOM.expenseId.value;
                 if (id) {
                     await updateDoc(doc(db, "trips", tripId, "expenses", id), expenseData);
                 } else {
                     expenseData.createdAt = serverTimestamp();
                     await addDoc(collection(db, "trips", tripId, "expenses"), expenseData);
                 }
-                closeExpenseModal();
+                closeModal('expense-modal');
             } catch (error) {
                 console.error("Error saving expense:", error);
             }
         }
-
-        async function handleDelete(id) {
-            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
-                try {
-                    await deleteDoc(doc(db, "trips", tripId, "expenses", id));
-                } catch (error) {
-                    console.error("Error deleting expense:", error);
-                }
+        
+        async function handleDeleteCategory() {
+            const categoryToDelete = DOM.expenseCategory.value;
+            if (!categoryToDelete || defaultCategories.includes(categoryToDelete)) {
+                alert("לא ניתן למחוק קטגוריית ברירת מחדל.");
+                return;
+            }
+            if (confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
+                const updatedCategories = tripCategories.filter(c => c !== categoryToDelete);
+                await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
             }
         }
         
-        function handleTableClick(e) {
-            const target = e.target.closest('button');
-            if (!target) return;
-            const id = target.dataset.id;
-            if (target.classList.contains('delete-btn')) handleDelete(id);
-            else if (target.classList.contains('edit-btn')) openExpenseModal({ id: id });
-        }
-
-        // --- NEW: Settings Modal Logic ---
-        async function openSettingsModal() {
-            if (!currentUser) return;
-            // Set the current trip ID in the input
-            DOM.tripIdInput.value = tripId;
-
-            // Fetch the user's API key
-            const userDocRef = doc(db, "users", currentUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            const apiKey = userDocSnap.exists() ? userDocSnap.data().settings?.apiKey : null;
-            DOM.apiKeyInput.value = apiKey || 'עדיין לא נוצר מפתח...';
-            
-            DOM.settingsModal.classList.remove('hidden');
-            setTimeout(() => DOM.settingsModal.classList.remove('opacity-0'), 10);
-        }
-
-        function closeSettingsModal() {
-            DOM.settingsModal.classList.add('opacity-0');
-            setTimeout(() => DOM.settingsModal.classList.add('hidden'), 300);
-        }
-
-        async function generateAndSaveApiKey() {
-            if (!currentUser) return;
-            const newKey = `sk_${crypto.randomUUID()}`;
-            DOM.apiKeyInput.value = newKey;
-            
-            const userDocRef = doc(db, "users", currentUser.uid);
-            try {
-                await setDoc(userDocRef, { settings: { apiKey: newKey } }, { merge: true });
-                alert('מפתח חדש נוצר ונשמר!');
-            } catch (error) {
-                console.error("Error saving API key:", error);
-                alert('שגיאה בשמירת המפתח.');
+        async function handleDeleteExpense(id) {
+            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+                await deleteDoc(doc(db, "trips", tripId, "expenses", id));
             }
         }
 
-        function copyToClipboard(inputElement, buttonElement) {
-            if (!inputElement.value || inputElement.value.startsWith('עדיין')) return;
-            inputElement.select();
-            inputElement.setSelectionRange(0, 99999);
-            try {
-                document.execCommand('copy');
-                const originalText = buttonElement.innerHTML;
-                buttonElement.innerHTML = 'הועתק!';
-                setTimeout(() => {
-                    buttonElement.innerHTML = originalText;
-                }, 1500);
-            } catch (err) {
-                alert('שגיאה בהעתקה.');
-            }
-        }
-
-        // --- Event Listeners Setup ---
+        // --- Event Listeners ---
         function setupEventListeners() {
-            DOM.addExpenseBtn.addEventListener('click', () => openExpenseModal());
-            DOM.modalCloseBtn.addEventListener('click', closeExpenseModal);
-            DOM.modalCancelBtn.addEventListener('click', closeExpenseModal);
+            DOM.addExpenseBtnHeader.addEventListener('click', () => openExpenseModal());
             DOM.expenseForm.addEventListener('submit', handleExpenseFormSubmit);
-            DOM.expensesTableBody.addEventListener('click', handleTableClick);
             
-            // New Settings Listeners
-            DOM.settingsBtn.addEventListener('click', openSettingsModal);
-            DOM.settingsModalCloseBtn.addEventListener('click', closeSettingsModal);
-            DOM.generateApiKeyBtn.addEventListener('click', generateAndSaveApiKey);
-            DOM.copyApiKeyBtn.addEventListener('click', () => copyToClipboard(DOM.apiKeyInput, DOM.copyApiKeyBtn));
-            DOM.copyTripIdBtn.addEventListener('click', () => copyToClipboard(DOM.tripIdInput, DOM.copyTripIdBtn));
+            document.querySelectorAll('[data-close-modal]').forEach(btn => {
+                btn.addEventListener('click', () => closeModal(btn.dataset.closeModal));
+            });
+
+            DOM.tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    activeTab = tab.dataset.tab;
+                    DOM.tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    DOM.tabContents.forEach(c => c.classList.remove('active'));
+                    document.getElementById(`tab-${activeTab}`).classList.add('active');
+                    render();
+                });
+            });
+
+            DOM.filters.forEach(filter => {
+                filter.addEventListener('click', () => {
+                    activeFilter = filter.dataset.filter;
+                    DOM.filters.forEach(f => f.classList.remove('active'));
+                    filter.classList.add('active');
+                    render();
+                });
+            });
+
+            document.getElementById('main-content').addEventListener('click', (e) => {
+                const editBtn = e.target.closest('.edit-btn');
+                const deleteBtn = e.target.closest('.delete-btn');
+                if (editBtn) openExpenseModal({ id: editBtn.dataset.id });
+                if (deleteBtn) handleDeleteExpense(deleteBtn.dataset.id);
+            });
+
+            DOM.expenseCategory.addEventListener('change', () => {
+                const isAddNew = DOM.expenseCategory.value === 'add_new_category';
+                DOM.newCategoryWrapper.classList.toggle('hidden', !isAddNew);
+                
+                const isCustom = !defaultCategories.includes(DOM.expenseCategory.value) && !isAddNew;
+                DOM.deleteCategoryBtn.classList.toggle('hidden', !isCustom);
+            });
+            
+            DOM.deleteCategoryBtn.addEventListener('click', handleDeleteCategory);
         }
 
-        // --- Start the page ---
+        // --- Start ---
         initPage();
     </script>
 </body>
