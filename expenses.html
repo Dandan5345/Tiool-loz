@@ -11,6 +11,9 @@
     <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- Google API Client Library -->
+    <script src="https://apis.google.com/js/api.js"></script>
+
     <!-- Icons + Font -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -27,7 +30,6 @@
             font-family: 'Assistant', sans-serif; 
             background-color: var(--bg-color);
             color: var(--text-color);
-            overflow-y: auto; /* Fix for scroll jump */
         }
         .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
         .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
@@ -129,15 +131,10 @@
         .layout-cards .expense-table-view { display: none; }
         .layout-table .expense-cards-view { display: none; }
 
-        /* NEW: Styles for settings modal scroll and active theme */
-        .settings-modal-content {
-            max-height: 70vh;
-            overflow-y: auto;
-            padding-right: 1rem; /* for scrollbar */
-        }
-        .theme-preset-btn.active {
-            outline: 2px solid #22c55e; /* green-500 */
-            outline-offset: 2px;
+        /* Selected theme style */
+        .theme-preset-btn.selected-theme {
+            border-color: #22c55e; /* green-500 */
+            box-shadow: 0 0 0 2px #22c55e;
         }
 
     </style>
@@ -209,26 +206,27 @@
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-bold">הגדרות</h3>
-                <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800 max-h-[80vh] flex flex-col">
+            <div class="flex-shrink-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-bold">הגדרות</h3>
+                    <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+
+                <!-- Settings Tabs -->
+                <div class="mb-4 border-b border-gray-200">
+                    <nav class="flex -mb-px" aria-label="Tabs">
+                        <button class="settings-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm" data-tab="shortcuts">
+                            <i class="fas fa-bolt mr-2"></i>קיצור דרך
+                        </button>
+                        <button class="settings-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="theme">
+                            <i class="fas fa-palette mr-2"></i>ערכת נושא
+                        </button>
+                    </nav>
+                </div>
             </div>
 
-            <!-- Settings Tabs -->
-            <div class="mb-4 border-b border-gray-200">
-                <nav class="flex -mb-px" aria-label="Tabs">
-                    <button class="settings-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm" data-tab="shortcuts">
-                        <i class="fas fa-bolt mr-2"></i>קיצור דרך
-                    </button>
-                    <button class="settings-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="theme">
-                        <i class="fas fa-palette mr-2"></i>ערכת נושא
-                    </button>
-                </nav>
-            </div>
-
-            <!-- Scrollable content area -->
-            <div class="settings-modal-content">
+            <div class="overflow-y-auto flex-grow pr-2">
                 <!-- Shortcuts Tab Content -->
                 <div id="settings-tab-shortcuts" class="settings-tab-content active">
                     <div class="space-y-6">
@@ -272,8 +270,25 @@
                         <!-- Preset Themes -->
                         <div>
                             <h4 class="text-lg font-semibold mb-2">ערכות נושא מוכנות</h4>
-                            <div id="theme-presets-container" class="grid grid-cols-3 gap-3">
-                                <!-- Themes will be injected by JS -->
+                            <div class="grid grid-cols-3 gap-3">
+                                <button class="theme-preset-btn p-2 rounded-lg border-2 text-xs" data-theme='{"bgColor":"#f1f5f9","cardBgColor":"#ffffff","textColor":"#334155"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #f1f5f9 50%, #ffffff 50%);"></span>בהיר</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#1e293b","cardBgColor":"#334155","textColor":"#f1f5f9"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #1e293b 50%, #334155 50%);"></span>כהה</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#fefce8","cardBgColor":"#fef3c7","textColor":"#92400e"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #fefce8 50%, #fef3c7 50%);"></span>חמים</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#0B1C26","cardBgColor":"rgba(34, 197, 94, 0.1)","textColor":"#f0fdf4"}' style="--tw-border-opacity: 0.2;"><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #0B1C26 50%, rgba(34, 197, 94, 0.1) 50%);"></span>יער</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#1a1a1a","cardBgColor":"#2a2a2a","textColor":"#e5e5e5"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #1a1a1a 50%, #2a2a2a 50%);"></span>פחם</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#f5f3ff","cardBgColor":"#ede9fe","textColor":"#5b21b6"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #f5f3ff 50%, #ede9fe 50%);"></span>לבנדר</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#fff7ed","cardBgColor":"#ffedd5","textColor":"#9a3412"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #fff7ed 50%, #ffedd5 50%);"></span>אפרסק</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#f0f9ff","cardBgColor":"#e0f2fe","textColor":"#0369a1"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #f0f9ff 50%, #e0f2fe 50%);"></span>שמיים</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#030712","cardBgColor":"rgba(255, 255, 255, 0.05)","textColor":"#f9fafb"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #030712 50%, rgba(255, 255, 255, 0.05) 50%);"></span>גלקסיה</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#111827","cardBgColor":"rgba(59, 130, 246, 0.1)","textColor":"#dbeafe"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #111827 50%, rgba(59, 130, 246, 0.1) 50%);"></span>בועת סבון</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#134e4a","cardBgColor":"#ccfbf1","textColor":"#115e59"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #134e4a 50%, #ccfbf1 50%);"></span>ים ירוק</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#fdf2f8","cardBgColor":"#fce7f3","textColor":"#9d174d"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #fdf2f8 50%, #fce7f3 50%);"></span>ורוד פסטל</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#fafaf9","cardBgColor":"#e7e5e4","textColor":"#44403c"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #fafaf9 50%, #e7e5e4 50%);"></span>אבן</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#1c1917","cardBgColor":"#44403c","textColor":"#d6d3d1"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #1c1917 50%, #44403c 50%);"></span>אבן כהה</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#0c4a6e","cardBgColor":"rgba(14, 165, 233, 0.15)","textColor":"#f0f9ff"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #0c4a6e 50%, rgba(14, 165, 233, 0.15) 50%);"></span>אוקיינוס</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#4c0519","cardBgColor":"rgba(251, 113, 133, 0.1)","textColor":"#fecdd3"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #4c0519 50%, rgba(251, 113, 133, 0.1) 50%);"></span>יין</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#f7fee7","cardBgColor":"#ecfccb","textColor":"#3f6212"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #f7fee7 50%, #ecfccb 50%);"></span>ליים</button>
+                                <button class="theme-preset-btn p-2 rounded-lg border text-xs" data-theme='{"bgColor":"#1f2937","cardBgColor":"rgba(249, 115, 22, 0.1)","textColor":"#ffedd5"}'><span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, #1f2937 50%, rgba(249, 115, 22, 0.1) 50%);"></span>שקיעה</button>
                             </div>
                         </div>
                         
@@ -363,7 +378,7 @@
                     </a>
                     <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
                     <div class="flex items-center gap-2">
-                        <button id="export-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצוא ל-Excel/CSV">
+                        <button id="export-sheets-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצא לגליון נתונים">
                             <i class="fas fa-file-excel"></i>
                         </button>
                         <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
@@ -474,22 +489,33 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, getDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // --- Firebase setup ---
-        // These variables are expected to be injected by the environment.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "AIzaSy...", authDomain: "...", projectId: "..." };
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // --- Google API Config ---
+        const GOOGLE_API_KEY = "YOUR_GOOGLE_API_KEY"; // החלף במפתח ה-API שלך
+        const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"; // החלף ב-Client ID שלך
+        const DISCOVERY_DOCS = ["https://sheets.googleapis.com/$discovery/rest?version=v4"];
+        const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+
+        let tokenClient;
+
         // --- Global State ---
         let currentUserProfile = null;
         let tripId = null;
+        let tripName = 'הטיול שלי';
         let allExpenses = [];
         let tripCategories = [];
         let expensesUnsubscribe = null;
@@ -521,16 +547,13 @@
             tripId = urlParams.get('tripId');
             if (!tripId) {
                 console.error("Error: Trip ID not found.");
-                // Fallback for local testing
-                const mainContent = document.getElementById('main-content');
-                if (mainContent) mainContent.innerHTML = '<div class="text-center p-8"><h1 class="text-2xl font-bold text-red-600">שגיאה: מזהה טיול חסר.</h1><p>יש לגשת לדף דרך הקישור הנכון.</p></div>';
-                document.getElementById('loading-overlay').style.display = 'none';
+                window.location.href = 'index.html';
                 return;
             }
             document.getElementById('back-to-dashboard').href = `trip.html?id=${tripId}`;
             populateCurrencyDropdown();
-            renderThemePresets();
             loadTheme();
+            initializeGapiClient();
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -539,20 +562,149 @@
                     listenForCategories();
                     listenForExpenses();
                 } else {
-                    // Try to sign in with the provided token or anonymously
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Authentication failed:", error);
-                    }
+                    window.location.href = 'login.html';
                 }
             });
             setupEventListeners();
         }
+
+        // --- Google Sheets API ---
+        async function initializeGapiClient() {
+            await new Promise((resolve) => gapi.load('client', resolve));
+            await gapi.client.init({
+                apiKey: GOOGLE_API_KEY,
+                discoveryDocs: DISCOVERY_DOCS,
+            });
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: SCOPES,
+                callback: '', // defined later
+            });
+        }
+
+        async function exportToGoogleSheets() {
+            const exportBtn = document.getElementById('export-sheets-btn');
+            const originalIcon = exportBtn.innerHTML;
+            exportBtn.innerHTML = '<div class="loader"></div>';
+            exportBtn.disabled = true;
+
+            try {
+                // Get access token
+                await new Promise((resolve, reject) => {
+                    tokenClient.callback = (resp) => {
+                        if (resp.error !== undefined) reject(resp);
+                        resolve(resp);
+                    };
+                    if (gapi.client.getToken() === null) {
+                        tokenClient.requestAccessToken({ prompt: 'consent' });
+                    } else {
+                        tokenClient.requestAccessToken({ prompt: '' });
+                    }
+                });
+
+                // Create spreadsheet
+                const spreadsheet = await gapi.client.sheets.spreadsheets.create({
+                    properties: {
+                        title: `פירוט הוצאות - ${tripName}`,
+                    },
+                });
+                const spreadsheetId = spreadsheet.result.spreadsheetId;
+
+                const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+                
+                if (uniqueOwners.length > 1) {
+                    // Create a sheet for each owner + a summary sheet
+                    await createSheetData(spreadsheetId, allExpenses, 'סיכום כללי', 0);
+                    for (let i = 0; i < uniqueOwners.length; i++) {
+                        const owner = uniqueOwners[i];
+                        const ownerExpenses = allExpenses.filter(exp => exp.ownerName === owner);
+                        await createSheetData(spreadsheetId, ownerExpenses, owner, i + 1);
+                    }
+                    // Delete the default "Sheet1"
+                    await gapi.client.sheets.spreadsheets.batchUpdate({
+                        spreadsheetId,
+                        requests: [{ deleteSheet: { sheetId: 0 } }]
+                    });
+
+                } else {
+                    // Just one sheet with all data
+                    await createSheetData(spreadsheetId, allExpenses, 'כל ההוצאות', 0);
+                }
+
+                exportBtn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+                window.open(spreadsheet.result.spreadsheetUrl, '_blank');
+
+            } catch (err) {
+                console.error("Error exporting to Google Sheets:", err);
+                exportBtn.innerHTML = '<i class="fas fa-times text-red-500"></i>';
+            } finally {
+                setTimeout(() => {
+                    exportBtn.innerHTML = originalIcon;
+                    exportBtn.disabled = false;
+                }, 3000);
+            }
+        }
+
+        async function createSheetData(spreadsheetId, expenses, sheetName, sheetIndex) {
+            const headerRow = ["תאריך", "שעה", "פירוט", "קטגוריה", "סכום", "מטבע", "סכום בשקל (אם רלוונטי)"];
+            const rows = [headerRow];
+
+            for (const exp of expenses) {
+                const date = new Date(exp.date);
+                const time = exp.createdAt?.toDate() ? exp.createdAt.toDate().toLocaleTimeString('he-IL') : 'N/A';
+                const convertedAmount = exp.currency !== 'ILS' ? await convertToILS(exp.amount, exp.currency) : exp.amount;
+                rows.push([
+                    date.toLocaleDateString('he-IL'),
+                    time,
+                    exp.notes || '',
+                    exp.category,
+                    exp.amount,
+                    exp.currency,
+                    convertedAmount.toFixed(2)
+                ]);
+            }
+
+            // Add summary
+            rows.push([], ["--- סיכום ---"]);
+            
+            // Summary by category
+            rows.push([], ["סיכום לפי קטגוריה (בשקלים):"]);
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+            }
+            for (const [category, total] of Object.entries(categoryTotals)) {
+                rows.push([category, total.toFixed(2)]);
+            }
+
+            // Summary by currency
+            rows.push([], ["סיכום לפי מטבע:"]);
+            const currencyTotals = expenses.reduce((acc, exp) => {
+                acc[exp.currency] = (acc[exp.currency] || 0) + Number(exp.amount);
+                return acc;
+            }, {});
+            for (const [currency, total] of Object.entries(currencyTotals)) {
+                rows.push([currency, total.toFixed(2)]);
+            }
+
+            const requests = [];
+            if (sheetIndex > 0) {
+                 requests.push({ addSheet: { properties: { title: sheetName } } });
+            } else {
+                 requests.push({ updateSheetProperties: { properties: { sheetId: 0, title: sheetName }, fields: 'title' } });
+            }
+
+            await gapi.client.sheets.spreadsheets.batchUpdate({ spreadsheetId, requests });
+
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `${sheetName}!A1`,
+                valueInputOption: 'USER_ENTERED',
+                resource: { values: rows },
+            });
+        }
+
 
         // --- Data Fetching & Realtime Listeners ---
         async function fetchUserProfile(uid) {
@@ -564,7 +716,10 @@
         async function fetchTripDetails() {
             const tripDocRef = doc(db, "trips", tripId);
             const docSnap = await getDoc(tripDocRef);
-            if (docSnap.exists()) document.getElementById('trip-title').textContent = docSnap.data().name || 'ניהול הוצאות';
+            if (docSnap.exists()) {
+                tripName = docSnap.data().name || 'ניהול הוצאות';
+                document.getElementById('trip-title').textContent = tripName;
+            }
         }
 
         function listenForCategories() {
@@ -592,15 +747,7 @@
                 } else {
                     document.getElementById('main-content').classList.remove('hidden');
                     document.getElementById('onboarding-screen').classList.add('hidden');
-                    allExpenses.sort((a, b) => {
-                        const dateA = new Date(a.date);
-                        const dateB = new Date(b.date);
-                        if (dateB - dateA !== 0) return dateB - dateA;
-                        // If dates are same, sort by creation time
-                        const timeA = a.createdAt?.toMillis() || 0;
-                        const timeB = b.createdAt?.toMillis() || 0;
-                        return timeB - timeA;
-                    });
+                    allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
                     await render();
                 }
 
@@ -649,13 +796,13 @@
              populateComparisonCategoryFilter(expenses, tabId);
              let categoryFilteredExpenses = expenses;
              if(activeComparisonCategory !== 'all') {
-                  categoryFilteredExpenses = expenses.filter(exp => exp.category === activeComparisonCategory);
+                 categoryFilteredExpenses = expenses.filter(exp => exp.category === activeComparisonCategory);
              }
 
              if (tabId === 'today') {
-                  ownerComparisonChartToday = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-today', ownerComparisonChartToday);
+                 ownerComparisonChartToday = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-today', ownerComparisonChartToday);
              } else {
-                  ownerComparisonChartAll = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-all', ownerComparisonChartAll);
+                 ownerComparisonChartAll = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-all', ownerComparisonChartAll);
              }
         }
 
@@ -707,7 +854,7 @@
 
             // Create containers for both views
             listContainer.innerHTML = `
-                <div class="expense-cards-view space-y-3"></div>
+                <div class="expense-cards-view"></div>
                 <div class="expense-table-view"></div>
             `;
             
@@ -1285,54 +1432,19 @@
         async function handleDeleteCategory() {
             const categoryToDelete = document.getElementById('expense-category').value;
             if (!categoryToDelete || defaultCategories.includes(categoryToDelete)) return;
-            // Using a custom modal for confirm is better, but for simplicity:
-            if (window.confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
+            if (confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
                 const updatedCategories = tripCategories.filter(c => c !== categoryToDelete);
                 await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
             }
         }
         
         async function handleDeleteExpense(id) {
-            if (window.confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
                 await deleteDoc(doc(db, "trips", tripId, "expenses", id));
             }
         }
 
         // --- Theme Logic ---
-        const themePresets = [
-            { name: 'בהיר', theme: { bgColor: '#f1f5f9', cardBgColor: '#ffffff', textColor: '#334155' } },
-            { name: 'כהה', theme: { bgColor: '#1e293b', cardBgColor: '#334155', textColor: '#f1f5f9' } },
-            { name: 'חמים', theme: { bgColor: '#fefce8', cardBgColor: '#fef3c7', textColor: '#92400e' } },
-            { name: 'אוקיינוס', theme: { bgColor: '#0c4a6e', cardBgColor: '#075985', textColor: '#e0f2fe' } },
-            { name: 'שקיעה', theme: { bgColor: '#581c87', cardBgColor: '#7e22ce', textColor: '#f5d0fe' } },
-            { name: 'יער', theme: { bgColor: '#14532d', cardBgColor: '#166534', textColor: '#dcfce7' } },
-            { name: 'מטריקס', theme: { bgColor: '#000000', cardBgColor: '#0a0a0a', textColor: '#34d399' } },
-            { name: 'סאקורה', theme: { bgColor: '#fdf2f8', cardBgColor: '#ffe4e6', textColor: '#9d174d' } },
-            { name: 'מנטה', theme: { bgColor: '#d1fae5', cardBgColor: '#a7f3d0', textColor: '#065f46' } },
-            { name: 'גרפיט', theme: { bgColor: '#171717', cardBgColor: '#262626', textColor: '#a3a3a3' } },
-            { name: 'אלמוג', theme: { bgColor: '#fff1f2', cardBgColor: '#ffdde1', textColor: '#be123c' } },
-            { name: 'עיתון', theme: { bgColor: '#f5f5f4', cardBgColor: '#e7e5e4', textColor: '#1c1917' } },
-            { name: 'מלכותי', theme: { bgColor: '#4c1d95', cardBgColor: '#5b21b6', textColor: '#facc15' } },
-            { name: 'טרופי', theme: { bgColor: '#a7f3d0', cardBgColor: '#6ee7b7', textColor: '#047857' } },
-            { name: 'ספיה', theme: { bgColor: '#f0e9e0', cardBgColor: '#e4d9c8', textColor: '#5d4037' } },
-            { name: 'בועות', theme: { bgColor: '#020617', cardBgColor: 'rgba(14, 116, 144, 0.2)', textColor: '#e0f2fe', special: 'backdrop-blur-md border border-cyan-500/20' } },
-        ];
-
-        function renderThemePresets() {
-            const container = document.getElementById('theme-presets-container');
-            container.innerHTML = '';
-            themePresets.forEach(preset => {
-                const btn = document.createElement('button');
-                btn.className = 'theme-preset-btn p-2 rounded-lg border text-sm';
-                btn.dataset.theme = JSON.stringify(preset.theme);
-                btn.innerHTML = `
-                    <span class="block w-full h-8 rounded" style="background: linear-gradient(45deg, ${preset.theme.bgColor} 50%, ${preset.theme.cardBgColor} 50%);"></span>
-                    ${preset.name}
-                `;
-                container.appendChild(btn);
-            });
-        }
-
         function applyTheme(theme) {
             document.documentElement.style.setProperty('--bg-color', theme.bgColor);
             document.documentElement.style.setProperty('--card-bg-color', theme.cardBgColor);
@@ -1343,26 +1455,29 @@
 
             document.getElementById('main-content').className = `layout-${theme.layout}`;
             
-            // Update color picker values
             document.getElementById('bg-color-picker').value = theme.bgColor;
             document.getElementById('card-bg-color-picker').value = theme.cardBgColor;
             document.getElementById('text-color-picker').value = theme.textColor;
             
-            // Update layout radio button
             document.querySelector(`input[name="layout-style"][value="${theme.layout}"]`).checked = true;
 
-            // Update active theme button
+            // Mark selected theme
             document.querySelectorAll('.theme-preset-btn').forEach(btn => {
-                const btnTheme = JSON.parse(btn.dataset.theme);
-                if (btnTheme.bgColor === theme.bgColor && btnTheme.cardBgColor === theme.cardBgColor) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
+                btn.classList.remove('selected-theme');
+                try {
+                    const btnTheme = JSON.stringify(JSON.parse(btn.dataset.theme));
+                    const currentThemeSimple = JSON.stringify({
+                        bgColor: theme.bgColor,
+                        cardBgColor: theme.cardBgColor,
+                        textColor: theme.textColor
+                    });
+                    if (btnTheme === currentThemeSimple) {
+                        btn.classList.add('selected-theme');
+                    }
+                } catch(e) { console.error("Error parsing theme data", e); }
             });
 
             currentTheme = theme;
-            // Re-render charts with new colors
             if (expensesChartToday) { expensesChartToday.destroy(); expensesChartToday = null; }
             if (expensesChartAll) { expensesChartAll.destroy(); expensesChartAll = null; }
             if (ownerComparisonChartToday) { ownerComparisonChartToday.destroy(); ownerComparisonChartToday = null; }
@@ -1370,109 +1485,27 @@
             render();
         }
 
-        function saveTheme(themeToSave) {
-            localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(themeToSave));
-            applyTheme(themeToSave);
+        function saveTheme() {
+            const theme = {
+                layout: document.querySelector('input[name="layout-style"]:checked').value,
+                bgColor: document.getElementById('bg-color-picker').value,
+                cardBgColor: document.getElementById('card-bg-color-picker').value,
+                textColor: document.getElementById('text-color-picker').value
+            };
+            localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(theme));
+            applyTheme(theme);
         }
 
         function loadTheme() {
             const savedTheme = localStorage.getItem(`tripTheme_${tripId}`);
             const defaultTheme = {
                 layout: 'cards',
-                ...themePresets[0].theme
+                bgColor: '#f1f5f9',
+                cardBgColor: '#ffffff',
+                textColor: '#334155'
             };
             const theme = savedTheme ? JSON.parse(savedTheme) : defaultTheme;
             applyTheme(theme);
-        }
-
-        // --- CSV Export ---
-        async function exportToCSV() {
-            const expenses = getFilteredExpenses();
-            if (expenses.length === 0) {
-                alert("אין הוצאות לייצא.");
-                return;
-            }
-
-            const headers = ["תאריך", "שעה", "שם", "קטגוריה", "פירוט", "סכום", "מטבע", "סכום בשקלים"];
-            let csvContent = "\uFEFF"; // BOM for Excel UTF-8 support
-
-            const uniqueOwners = [...new Set(expenses.map(exp => exp.ownerName).filter(Boolean))];
-
-            // Section for all combined expenses
-            csvContent += "סיכום כללי\n";
-            csvContent += headers.join(",") + "\n";
-            for (const exp of expenses) {
-                const row = await createCsvRow(exp);
-                csvContent += row.join(",") + "\n";
-            }
-
-            // Add summary tables
-            csvContent += "\n\n";
-            csvContent += await createSummaryTables(expenses);
-
-            // Add individual sections if more than one owner
-            if (uniqueOwners.length > 1) {
-                for (const owner of uniqueOwners) {
-                    csvContent += `\n\n---\nפירוט עבור: ${owner}\n---\n`;
-                    csvContent += headers.join(",") + "\n";
-                    const ownerExpenses = expenses.filter(exp => exp.ownerName === owner);
-                    for (const exp of ownerExpenses) {
-                        const row = await createCsvRow(exp);
-                        csvContent += row.join(",") + "\n";
-                    }
-                }
-            }
-
-            // Create and download the file
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            if (link.download !== undefined) {
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", `trip_expenses_${new Date().toISOString().split('T')[0]}.csv`);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-        }
-
-        async function createCsvRow(exp) {
-            const date = new Date(exp.date).toLocaleDateString('he-IL');
-            const time = exp.createdAt?.toDate() ? exp.createdAt.toDate().toLocaleTimeString('he-IL') : 'N/A';
-            const owner = `"${exp.ownerName || ''}"`;
-            const category = `"${exp.category}"`;
-            const notes = `"${(exp.notes || '').replace(/"/g, '""')}"`;
-            const amount = exp.amount;
-            const currency = exp.currency;
-            const amountILS = exp.currency === 'ILS' ? exp.amount : await convertToILS(exp.amount, exp.currency);
-
-            return [date, time, owner, category, notes, amount, currency, amountILS.toFixed(2)];
-        }
-
-        async function createSummaryTables(expenses) {
-            let summaryContent = "סיכום לפי קטגוריה\n";
-            summaryContent += "קטגוריה,סכום בשקלים\n";
-            const categoryTotals = {};
-            for (const exp of expenses) {
-                const amountInILS = await convertToILS(exp.amount, exp.currency);
-                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
-            }
-            for (const [cat, total] of Object.entries(categoryTotals)) {
-                summaryContent += `"${cat}",${total.toFixed(2)}\n`;
-            }
-
-            summaryContent += "\n\nסיכום לפי מטבע\n";
-            summaryContent += "מטבע,סכום\n";
-            const currencyTotals = {};
-            for (const exp of expenses) {
-                currencyTotals[exp.currency] = (currencyTotals[exp.currency] || 0) + exp.amount;
-            }
-            for (const [curr, total] of Object.entries(currencyTotals)) {
-                summaryContent += `${curr},${total.toFixed(2)}\n`;
-            }
-
-            return summaryContent;
         }
 
 
@@ -1481,7 +1514,7 @@
             document.getElementById('add-expense-btn-header').addEventListener('click', () => openExpenseModal());
             document.getElementById('add-first-expense-btn').addEventListener('click', () => openExpenseModal());
             document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
-            document.getElementById('export-btn').addEventListener('click', exportToCSV);
+            document.getElementById('export-sheets-btn').addEventListener('click', exportToGoogleSheets);
             document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
             
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -1577,7 +1610,7 @@
             document.querySelectorAll('.settings-tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const tabId = btn.dataset.tab;
-                    document.querySelectorAll('.settings-tab-btn').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.settings-tab-btn').forEach(t => t.classList.remove('active', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300'));
                     btn.classList.add('active');
                     document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
                     document.getElementById(`settings-tab-${tabId}`).classList.add('active');
@@ -1585,29 +1618,17 @@
             });
 
             // Theme controls
-            const layoutRadios = document.querySelectorAll('input[name="layout-style"]');
-            const colorPickers = ['bg-color-picker', 'card-bg-color-picker', 'text-color-picker'];
-            
-            function handleThemeChange() {
-                 const theme = {
-                    layout: document.querySelector('input[name="layout-style"]:checked').value,
-                    bgColor: document.getElementById('bg-color-picker').value,
-                    cardBgColor: document.getElementById('card-bg-color-picker').value,
-                    textColor: document.getElementById('text-color-picker').value
-                };
-                saveTheme(theme);
-            }
-
-            layoutRadios.forEach(radio => radio.addEventListener('change', handleThemeChange));
-            colorPickers.forEach(id => document.getElementById(id).addEventListener('input', handleThemeChange));
-
-            document.getElementById('theme-presets-container').addEventListener('click', (e) => {
-                const btn = e.target.closest('.theme-preset-btn');
-                if (btn) {
+            document.querySelectorAll('input[name="layout-style"]').forEach(radio => radio.addEventListener('change', saveTheme));
+            document.getElementById('bg-color-picker').addEventListener('input', saveTheme);
+            document.getElementById('card-bg-color-picker').addEventListener('input', saveTheme);
+            document.getElementById('text-color-picker').addEventListener('input', saveTheme);
+            document.querySelectorAll('.theme-preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
                     const theme = JSON.parse(btn.dataset.theme);
                     const fullTheme = { ...theme, layout: document.querySelector('input[name="layout-style"]:checked').value };
-                    saveTheme(fullTheme);
-                }
+                    localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(fullTheme));
+                    applyTheme(fullTheme);
+                });
             });
         }
 
