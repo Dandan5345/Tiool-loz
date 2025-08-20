@@ -38,6 +38,13 @@
             color: white;
         }
         
+        /* NEW: Styles for owner filter buttons */
+        .owner-filter-btn.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+        
         .loader {
             width: 12px;
             height: 12px;
@@ -63,7 +70,7 @@
         <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
     </div>
 
-    <!-- Settings Modal (ADDED BACK) -->
+    <!-- Settings Modal -->
     <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
@@ -177,17 +184,31 @@
             </div>
 
             <div id="tab-today" class="tab-content active space-y-6">
+                <section id="owner-filters-today" class="mb-6 hidden"></section>
                 <section>
                     <div id="summary-section-today" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
-                    <div id="expenses-list-today" class="space-y-4 mt-6"></div>
+                </section>
+                <!-- NEW: Chart for today's expenses -->
+                <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות יומית (בשקלים)</h3>
+                    <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart-today"></canvas></div>
+                </section>
+                <section>
+                    <div id="expenses-list-today" class="space-y-4"></div>
                     <div id="no-expenses-message-today" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
                         <i class="fas fa-receipt text-4xl text-slate-300 mb-4"></i>
                         <p class="text-slate-500">אין הוצאות להיום.</p>
                     </div>
                 </section>
+                <!-- NEW: Summary table for today's expenses -->
+                <section id="summary-table-section-today" class="bg-white p-4 md:p-6 rounded-2xl shadow-lg hidden">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">סיכום הוצאות יומי</h3>
+                    <div id="summary-table-today"></div>
+                </section>
             </div>
 
             <div id="tab-all" class="tab-content space-y-6">
+                <section id="owner-filters-all" class="mb-6 hidden"></section>
                 <section class="bg-white p-3 rounded-2xl shadow-lg">
                     <div id="filters" class="flex items-center justify-center gap-2 bg-blue-700 p-1 rounded-full">
                         <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="week">שבוע</button>
@@ -238,7 +259,7 @@
             loadingOverlay: document.getElementById('loading-overlay'),
             tripTitle: document.getElementById('trip-title'),
             expenseModal: document.getElementById('expense-modal'),
-            settingsModal: document.getElementById('settings-modal'), // Added
+            settingsModal: document.getElementById('settings-modal'),
             modalTitle: document.getElementById('modal-title'),
             expenseForm: document.getElementById('expense-form'),
             expenseId: document.getElementById('expense-id'),
@@ -253,16 +274,20 @@
             expenseNotes: document.getElementById('expense-notes'),
             backToDashboardLink: document.getElementById('back-to-dashboard'),
             addExpenseBtnHeader: document.getElementById('add-expense-btn-header'),
-            settingsBtn: document.getElementById('settings-btn'), // Added
+            settingsBtn: document.getElementById('settings-btn'),
             tabs: document.querySelectorAll('.tab-btn'),
             tabContents: document.querySelectorAll('.tab-content'),
             filters: document.querySelectorAll('.filter-btn'),
-            // Settings Modal Inputs (Added)
             tripIdInput: document.getElementById('trip-id-input'),
             copyTripIdBtn: document.getElementById('copy-trip-id-btn'),
             apiKeyInput: document.getElementById('api-key-input'),
             copyApiKeyBtn: document.getElementById('copy-api-key-btn'),
             generateApiKeyBtn: document.getElementById('generate-api-key-btn'),
+            // NEW Elements
+            ownerFiltersToday: document.getElementById('owner-filters-today'),
+            ownerFiltersAll: document.getElementById('owner-filters-all'),
+            summaryTableToday: document.getElementById('summary-table-today'),
+            summaryTableSectionToday: document.getElementById('summary-table-section-today'),
         };
 
         // --- Global State ---
@@ -273,8 +298,10 @@
         let expensesUnsubscribe = null;
         let categoriesUnsubscribe = null;
         let expensesChart = null;
+        let expensesChartToday = null; // NEW: Chart for today tab
         let activeTab = 'today';
         let activeFilter = 'all';
+        let activeOwner = 'all'; // NEW: 'all' or a specific ownerName
         let rateCache = {};
         
         const defaultCategories = ['🍔 אוכל ושתיה', '🚗 תחבורה', '🏨 לינה', '🎢 אטרקציות', '🛍️ קניות', '📎 אחר'];
@@ -296,7 +323,8 @@
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
+                // In a real app, show a user-friendly error message instead of alert
+                console.error("Error: Trip ID not found.");
                 window.location.href = 'index.html';
                 return;
             }
@@ -344,10 +372,10 @@
         function listenForExpenses() {
             if (expensesUnsubscribe) expensesUnsubscribe();
             const expensesColRef = collection(db, "trips", tripId, "expenses");
-            expensesUnsubscribe = onSnapshot(expensesColRef, (snapshot) => {
+            expensesUnsubscribe = onSnapshot(expensesColRef, async (snapshot) => {
                 allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-                render();
+                await render();
                 if (!DOM.loadingOverlay.classList.contains('opacity-0')) {
                     DOM.loadingOverlay.classList.add('opacity-0');
                     setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
@@ -356,15 +384,19 @@
         }
 
         // --- Central Render Function ---
-        function render() {
+        async function render() {
+            renderOwnerFilters();
             let filteredExpenses = getFilteredExpenses();
+            
             if (activeTab === 'today') {
                 renderExpenseList(filteredExpenses, 'today');
                 renderSummary(filteredExpenses, 'today');
+                expensesChartToday = await updateChartGeneric(filteredExpenses, 'expenses-chart-today', expensesChartToday);
+                await renderSummaryTable(filteredExpenses, 'today');
             } else {
                 renderExpenseList(filteredExpenses, 'all');
                 renderSummary(filteredExpenses, 'all');
-                updateChart(filteredExpenses);
+                expensesChart = await updateChartGeneric(filteredExpenses, 'expenses-chart', expensesChart);
             }
         }
 
@@ -373,18 +405,26 @@
             const now = new Date();
             const todayString = now.toISOString().split('T')[0];
             
+            let dateFilteredExpenses;
             if (activeTab === 'today') {
-                return allExpenses.filter(exp => exp.date === todayString);
+                dateFilteredExpenses = allExpenses.filter(exp => exp.date === todayString);
+            } else {
+                let startDate = new Date(0);
+                switch (activeFilter) {
+                    case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
+                    case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
+                    case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
+                    case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
+                }
+                dateFilteredExpenses = allExpenses.filter(exp => new Date(exp.date) >= startDate);
             }
 
-            let startDate = new Date(0);
-            switch (activeFilter) {
-                case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
-                case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
-                case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
-                case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
+            // NEW: Apply owner filter on top of date filter
+            if (activeOwner === 'all') {
+                return dateFilteredExpenses;
+            } else {
+                return dateFilteredExpenses.filter(exp => exp.ownerName === activeOwner);
             }
-            return allExpenses.filter(exp => new Date(exp.date) >= startDate);
         }
 
         // --- UI Rendering ---
@@ -394,7 +434,7 @@
             listContainer.innerHTML = '';
             
             const hasExpenses = expenses.length > 0;
-            noItemsMsg.classList.toggle('hidden', hasExpenses);
+            noItemsMsg.classList.toggle('hidden', !hasExpenses);
             listContainer.classList.toggle('hidden', !hasExpenses);
 
             expenses.forEach((exp, index) => {
@@ -450,14 +490,18 @@
             }
         }
 
-        async function updateChart(expenses) {
+        // NEW: Generic chart update function
+        async function updateChartGeneric(expenses, canvasId, chartInstance) {
+            const chartCanvas = document.getElementById(canvasId);
+            if (!chartCanvas) return chartInstance;
+            const parentSection = chartCanvas.closest('section');
+
             if (expenses.length === 0) {
-                if(expensesChart) expensesChart.destroy();
-                expensesChart = null;
-                document.getElementById('expenses-chart').style.display = 'none';
-                return;
+                if (chartInstance) chartInstance.destroy();
+                parentSection.style.display = 'none';
+                return null;
             }
-            document.getElementById('expenses-chart').style.display = 'block';
+            parentSection.style.display = 'block';
 
             const categoryData = {};
             for (const exp of expenses) {
@@ -471,21 +515,93 @@
 
             const labels = Object.keys(categoryData);
             const data = Object.values(categoryData);
-            const chartCanvas = document.getElementById('expenses-chart');
+            const chartColors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#64748b', '#ec4899', '#10b981', '#f59e0b'];
 
             const chartConfig = {
                 type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#64748b'], borderColor: '#fff', borderWidth: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" } } } } }
+                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: '#fff', borderWidth: 4 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '60%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, boxWidth: 20, padding: 20 } },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => ` ${context.label}: ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(context.parsed)}`
+                            }
+                        }
+                    }
+                }
             };
-            if (expensesChart) {
-                expensesChart.data.labels = labels;
-                expensesChart.data.datasets[0].data = data;
-                expensesChart.update();
+
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = data;
+                chartInstance.update();
+                return chartInstance;
             } else {
-                expensesChart = new Chart(chartCanvas, chartConfig);
+                return new Chart(chartCanvas, chartConfig);
             }
         }
+
+        // NEW: Render owner filter buttons
+        function renderOwnerFilters() {
+            const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+            const containers = [DOM.ownerFiltersToday, DOM.ownerFiltersAll];
+            
+            containers.forEach(container => {
+                if (uniqueOwners.length <= 1) {
+                    container.innerHTML = '';
+                    container.classList.add('hidden');
+                    return;
+                }
+                container.classList.remove('hidden');
+                let buttonsHTML = `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === 'all' ? 'active' : 'bg-white'}" data-owner="all">הכל</button>`;
+                uniqueOwners.forEach(owner => {
+                    buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === owner ? 'active' : 'bg-white'}" data-owner="${owner}">${owner}</button>`;
+                });
+                container.innerHTML = `<div class="flex items-center justify-center gap-2 flex-wrap p-1 bg-slate-200 rounded-full">${buttonsHTML}</div>`;
+            });
+        }
+
+        // NEW: Render summary table for today
+        async function renderSummaryTable(expenses, containerId) {
+            const tableContainer = document.getElementById(`summary-table-${containerId}`);
+            const sectionContainer = document.getElementById(`summary-table-section-${containerId}`);
+
+            if (expenses.length === 0) {
+                sectionContainer.classList.add('hidden');
+                return;
+            }
+            sectionContainer.classList.remove('hidden');
+
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                let amountInILS = exp.amount;
+                if (exp.currency !== 'ILS') {
+                    const rate = await getRate(exp.currency, 'ILS');
+                    amountInILS = exp.amount * rate;
+                }
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+            }
+
+            const sortedCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a);
+            
+            let tableHTML = `<div class="flow-root"><div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><table class="min-w-full divide-y divide-slate-200">`;
+            tableHTML += `<thead><tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-right text-sm font-semibold text-slate-900 sm:pl-0">קטגוריה</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">סכום (₪)</th>
+            </tr></thead>`;
+            tableHTML += `<tbody class="divide-y divide-slate-100">`;
+            for (const [category, total] of sortedCategories) {
+                tableHTML += `<tr>
+                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-0">${category}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500 text-left font-mono">${total.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>`;
+            }
+            tableHTML += `</tbody></table></div></div></div>`;
+            tableContainer.innerHTML = tableHTML;
+        }
+
 
         // --- Currency Conversion API ---
         async function getRate(from, to) {
@@ -578,7 +694,7 @@
             openModal('expense-modal');
         }
 
-        // --- Settings Modal Logic (ADDED BACK) ---
+        // --- Settings Modal Logic ---
         async function openSettingsModal() {
             if (!currentUserProfile) return;
             DOM.tripIdInput.value = tripId;
@@ -597,10 +713,10 @@
             const userDocRef = doc(db, "users", currentUserProfile.uid);
             try {
                 await setDoc(userDocRef, { settings: { apiKey: newKey } }, { merge: true });
-                alert('מפתח חדש נוצר ונשמר!');
+                // Use a custom modal/toast instead of alert in a real app
+                console.log('New key created and saved!');
             } catch (error) {
                 console.error("Error saving API key:", error);
-                alert('שגיאה בשמירת המפתח.');
             }
         }
 
@@ -616,7 +732,7 @@
                     buttonElement.innerHTML = originalIcon;
                 }, 1500);
             } catch (err) {
-                alert('שגיאה בהעתקה.');
+                console.error('Failed to copy to clipboard');
             }
         }
 
@@ -631,18 +747,18 @@
                     await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
                     category = newCategoryName;
                 } else {
-                    alert("שם הקטגוריה אינו תקין או שכבר קיים.");
+                    console.error("Invalid or duplicate category name.");
                     return;
                 }
             }
 
             const expenseData = {
-                ownerName: DOM.expenseOwnerName.value,
+                ownerName: DOM.expenseOwnerName.value.trim(),
                 amount: parseFloat(DOM.expenseAmount.value),
                 currency: DOM.expenseCurrency.value,
                 category: category,
                 date: DOM.expenseDate.value,
-                notes: DOM.expenseNotes.value,
+                notes: DOM.expenseNotes.value.trim(),
                 ownerId: currentUserProfile.uid,
             };
 
@@ -663,17 +779,19 @@
         async function handleDeleteCategory() {
             const categoryToDelete = DOM.expenseCategory.value;
             if (!categoryToDelete || defaultCategories.includes(categoryToDelete)) {
-                alert("לא ניתן למחוק קטגוריית ברירת מחדל.");
+                // Use custom modal instead of alert
                 return;
             }
-            if (confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
+            // Use custom confirm modal instead of confirm
+            if (window.confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
                 const updatedCategories = tripCategories.filter(c => c !== categoryToDelete);
                 await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
             }
         }
         
         async function handleDeleteExpense(id) {
-            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+            // Use custom confirm modal instead of confirm
+            if (window.confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
                 await deleteDoc(doc(db, "trips", tripId, "expenses", id));
             }
         }
@@ -681,7 +799,7 @@
         // --- Event Listeners ---
         function setupEventListeners() {
             DOM.addExpenseBtnHeader.addEventListener('click', () => openExpenseModal());
-            DOM.settingsBtn.addEventListener('click', openSettingsModal); // Added
+            DOM.settingsBtn.addEventListener('click', openSettingsModal);
             DOM.expenseForm.addEventListener('submit', handleExpenseFormSubmit);
             
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -689,30 +807,38 @@
             });
 
             DOM.tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
+                tab.addEventListener('click', async () => {
                     activeTab = tab.dataset.tab;
                     DOM.tabs.forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
                     DOM.tabContents.forEach(c => c.classList.remove('active'));
                     document.getElementById(`tab-${activeTab}`).classList.add('active');
-                    render();
+                    await render();
                 });
             });
 
             DOM.filters.forEach(filter => {
-                filter.addEventListener('click', () => {
+                filter.addEventListener('click', async () => {
                     activeFilter = filter.dataset.filter;
                     DOM.filters.forEach(f => f.classList.remove('active'));
                     filter.classList.add('active');
-                    render();
+                    await render();
                 });
             });
 
-            document.getElementById('main-content').addEventListener('click', (e) => {
+            document.body.addEventListener('click', async (e) => {
                 const editBtn = e.target.closest('.edit-btn');
-                const deleteBtn = e.target.closest('.delete-btn');
                 if (editBtn) openExpenseModal({ id: editBtn.dataset.id });
+
+                const deleteBtn = e.target.closest('.delete-btn');
                 if (deleteBtn) handleDeleteExpense(deleteBtn.dataset.id);
+
+                // NEW: Handle owner filter clicks
+                const ownerBtn = e.target.closest('.owner-filter-btn');
+                if (ownerBtn) {
+                    activeOwner = ownerBtn.dataset.owner;
+                    await render();
+                }
             });
 
             DOM.expenseCategory.addEventListener('change', () => {
@@ -725,7 +851,6 @@
             
             DOM.deleteCategoryBtn.addEventListener('click', handleDeleteCategory);
 
-            // Settings Listeners (Added)
             DOM.generateApiKeyBtn.addEventListener('click', generateAndSaveApiKey);
             DOM.copyApiKeyBtn.addEventListener('click', () => copyToClipboard(DOM.apiKeyInput, DOM.copyApiKeyBtn));
             DOM.copyTripIdBtn.addEventListener('click', () => copyToClipboard(DOM.tripIdInput, DOM.copyTripIdBtn));
