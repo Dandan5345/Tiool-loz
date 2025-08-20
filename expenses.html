@@ -18,7 +18,6 @@
     <style>
         body { 
             font-family: 'Assistant', sans-serif; 
-            overscroll-behavior-y: none;
         }
         .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
         .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
@@ -43,11 +42,19 @@
             color: white;
             box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
-        /* NEW: Style for comparison button */
         .owner-filter-btn[data-owner="compare"].active {
             background-color: #16a34a; /* green-600 */
         }
         
+        .expense-card-clickable {
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .expense-card-clickable:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
         .loader {
             width: 12px;
             height: 12px;
@@ -72,6 +79,20 @@
         <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
         <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
     </div>
+
+    <!-- NEW: Expense Details Modal -->
+    <div id="expense-details-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[102] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-2xl font-bold">פרטי הוצאה</h3>
+                <button data-close-modal="expense-details-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <div id="expense-details-content" class="space-y-3">
+                <!-- Content will be populated by JS -->
+            </div>
+        </div>
+    </div>
+
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
@@ -458,47 +479,52 @@
         function renderExpenseList(expenses, containerId) {
             const listContainer = document.getElementById(`expenses-list-${containerId}`);
             const noItemsMsg = document.getElementById(`no-expenses-message-${containerId}`);
-            listContainer.innerHTML = '';
+            listContainer.innerHTML = ''; // Clear previous list
             
-            const hasExpenses = expenses.length > 0;
-            noItemsMsg.classList.toggle('hidden', !hasExpenses);
-            listContainer.classList.toggle('hidden', hasExpenses);
-
-            if (!hasExpenses) return;
-
-            expenses.forEach((exp, index) => {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-4 rounded-2xl shadow-md flex items-center gap-4';
-                const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
-                const uniqueId = `conv-${containerId}-${index}`;
+            if (expenses.length > 0) {
+                noItemsMsg.classList.add('hidden');
+                listContainer.classList.remove('hidden');
                 
-                card.innerHTML = `
-                    <div class="flex-shrink-0 h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">${exp.category.match(/(\p{Emoji})/u)?.[0] || '📎'}</div>
-                    <div class="flex-grow min-w-0">
-                        <p class="font-bold text-slate-800 truncate">${exp.notes || 'הוצאה'}</p>
-                        <p class="text-sm text-slate-500"><span class="font-semibold">${exp.ownerName || 'לא ידוע'}</span> • ${new Date(exp.date).toLocaleDateString('he-IL')}</p>
-                    </div>
-                    <div class="text-left flex-shrink-0">
-                        <p class="font-bold text-lg text-red-600 whitespace-nowrap">
-                            ${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${exp.currency}
-                        </p>
-                        <p id="${uniqueId}" class="text-slate-500 font-normal text-sm text-right"></p>
-                        ${isOwner ? `<div class="flex justify-end gap-2 mt-1">
-                            <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
-                            <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
-                        </div>` : ''}
-                    </div>
-                `;
-                listContainer.appendChild(card);
-                
-                if (exp.currency !== 'ILS') {
-                    displayConvertedAmount(uniqueId, exp.amount, exp.currency);
-                } else {
-                    const el = document.getElementById(uniqueId);
-                    if (el) el.style.display = 'none';
-                }
-            });
+                expenses.forEach((exp, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-2xl shadow-md flex items-center gap-4 expense-card-clickable';
+                    card.dataset.id = exp.id; // Set data-id for click listener
+
+                    const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
+                    const uniqueId = `conv-${containerId}-${index}`;
+                    
+                    card.innerHTML = `
+                        <div class="flex-shrink-0 h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">${exp.category.match(/(\p{Emoji})/u)?.[0] || '📎'}</div>
+                        <div class="flex-grow min-w-0">
+                            <p class="font-bold text-slate-800 truncate">${exp.notes || 'הוצאה'}</p>
+                            <p class="text-sm text-slate-500"><span class="font-semibold">${exp.ownerName || 'לא ידוע'}</span> • ${new Date(exp.date).toLocaleDateString('he-IL')}</p>
+                        </div>
+                        <div class="text-left flex-shrink-0">
+                            <p class="font-bold text-lg text-red-600 whitespace-nowrap">
+                                ${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${exp.currency}
+                            </p>
+                            <p id="${uniqueId}" class="text-slate-500 font-normal text-sm text-right"></p>
+                            ${isOwner ? `<div class="flex justify-end gap-2 mt-1">
+                                <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                                <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                            </div>` : ''}
+                        </div>
+                    `;
+                    listContainer.appendChild(card);
+                    
+                    if (exp.currency !== 'ILS') {
+                        displayConvertedAmount(uniqueId, exp.amount, exp.currency);
+                    } else {
+                        const el = document.getElementById(uniqueId);
+                        if (el) el.style.display = 'none';
+                    }
+                });
+            } else {
+                noItemsMsg.classList.remove('hidden');
+                listContainer.classList.add('hidden');
+            }
         }
+
 
         function renderSummary(expenses, containerId) {
             const summaryContainer = document.getElementById(`summary-section-${containerId}`);
@@ -659,7 +685,7 @@
                                 label: (context) => {
                                     const label = context.label || '';
                                     const value = context.parsed || 0;
-                                    const percentage = ((value / grandTotal) * 100).toFixed(1);
+                                    const percentage = grandTotal > 0 ? ((value / grandTotal) * 100).toFixed(1) : 0;
                                     return ` ${label}: ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(value)} (${percentage}%)`;
                                 }
                             }
@@ -780,6 +806,55 @@
             }
             openModal('expense-modal');
         }
+        
+        // NEW: Function to open the details modal
+        async function openExpenseDetailsModal(expenseId) {
+            const expense = allExpenses.find(exp => exp.id === expenseId);
+            if (!expense) return;
+
+            const contentEl = document.getElementById('expense-details-content');
+            
+            const detailsHTML = `
+                <div class="grid grid-cols-3 gap-x-4 gap-y-3">
+                    <p class="text-sm text-slate-500 col-span-1">מוציא:</p>
+                    <p class="font-semibold col-span-2">${expense.ownerName || 'לא ידוע'}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">קטגוריה:</p>
+                    <p class="font-semibold col-span-2">${expense.category}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">פירוט:</p>
+                    <p class="font-semibold col-span-2">${expense.notes || '---'}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">תאריך:</p>
+                    <p class="font-semibold col-span-2">${new Date(expense.date).toLocaleDateString('he-IL')}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">שעת הוספה:</p>
+                    <p class="font-semibold col-span-2">${expense.createdAt && expense.createdAt.toDate ? expense.createdAt.toDate().toLocaleTimeString('he-IL') : 'לא ידוע'}</p>
+                </div>
+                <div class="pt-3 border-t mt-3 space-y-3">
+                    <div class="grid grid-cols-3 gap-x-4">
+                        <p class="text-sm text-slate-500 col-span-1">סכום מקורי:</p>
+                        <p class="font-bold text-red-600 col-span-2">${expense.amount.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${expense.currency}</p>
+                    </div>
+                    <div id="details-conversion-row" class="grid grid-cols-3 gap-x-4">
+                        <p class="text-sm text-slate-500 col-span-1">סכום בשקלים:</p>
+                        <p class="font-bold text-blue-600 col-span-2" id="details-converted-amount"><span class="loader"></span></p>
+                    </div>
+                </div>
+            `;
+            contentEl.innerHTML = detailsHTML;
+
+            if (expense.currency === 'ILS') {
+                document.getElementById('details-conversion-row').style.display = 'none';
+            } else {
+                document.getElementById('details-conversion-row').style.display = 'grid';
+                const convertedAmount = await convertToILS(expense.amount, expense.currency);
+                document.getElementById('details-converted-amount').textContent = `₪${convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+
+            openModal('expense-details-modal');
+        }
+
 
         // --- Settings Modal Logic ---
         async function openSettingsModal() {
@@ -897,19 +972,20 @@
                 });
             });
             
-            document.querySelectorAll('.comparison-category-filter').forEach(select => {
-                 select.addEventListener('change', async (e) => {
-                    activeComparisonCategory = e.target.value;
-                    await render();
-                });
-            });
-
             document.body.addEventListener('click', async (e) => {
                 const editBtn = e.target.closest('.edit-btn');
-                if (editBtn) openExpenseModal({ id: editBtn.dataset.id });
+                if (editBtn) {
+                    e.stopPropagation(); // Prevent card click
+                    openExpenseModal({ id: editBtn.dataset.id });
+                    return;
+                }
 
                 const deleteBtn = e.target.closest('.delete-btn');
-                if (deleteBtn) handleDeleteExpense(deleteBtn.dataset.id);
+                if (deleteBtn) {
+                    e.stopPropagation(); // Prevent card click
+                    handleDeleteExpense(deleteBtn.dataset.id);
+                    return;
+                }
 
                 const ownerBtn = e.target.closest('.owner-filter-btn');
                 if (ownerBtn) {
@@ -921,6 +997,13 @@
                         activeOwner = owner;
                     }
                     await render();
+                    return;
+                }
+                
+                // NEW: Handle card click for details modal
+                const card = e.target.closest('.expense-card-clickable');
+                if (card) {
+                    openExpenseDetailsModal(card.dataset.id);
                 }
             });
 
