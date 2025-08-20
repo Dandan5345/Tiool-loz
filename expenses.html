@@ -16,8 +16,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            --bg-color: #f1f5f9; /* slate-100 */
+            --card-bg-color: #ffffff; /* white */
+            --text-color: #334155; /* slate-700 */
+            --header-bg-color: #ffffff;
+        }
+
         body { 
             font-family: 'Assistant', sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
         .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
         .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
@@ -83,6 +92,42 @@
              padding: 1rem; /* p-4 */
         }
 
+        /* Styles for Settings Modal Tabs */
+        .settings-tab-btn.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+        }
+        .settings-tab-content { display: none; }
+        .settings-tab-content.active { display: block; }
+
+        /* Styles for Table Layout */
+        .expense-table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .expense-table {
+            width: 100%;
+            min-width: 700px; /* Ensure horizontal scroll on small screens */
+            border-collapse: collapse;
+        }
+        .expense-table th, .expense-table td {
+            padding: 12px 16px;
+            text-align: right;
+            border-bottom: 1px solid #e5e7eb; /* gray-200 */
+            white-space: nowrap;
+        }
+        .expense-table th {
+            background-color: #f9fafb; /* gray-50 */
+            font-weight: 600;
+        }
+        .expense-table tbody tr:hover {
+            background-color: #f9fafb; /* gray-50 */
+        }
+        
+        /* Layout Switching Logic */
+        .layout-cards .expense-table-view { display: none; }
+        .layout-table .expense-cards-view { display: none; }
+
     </style>
 </head>
 <body class="bg-slate-100">
@@ -105,8 +150,8 @@
                     <h2 class="text-xl font-bold text-slate-800 mb-3">איך מוסיפים הוצאה?</h2>
                     <p class="text-slate-600 mb-4">הדרך הקלה ביותר להוסיף הוצאה היא באמצעות הכפתור <span class="inline-flex items-center justify-center bg-blue-600 text-white rounded-full h-6 w-6 mx-1"><i class="fas fa-plus text-xs"></i></span> שנמצא בפינה השמאלית העליונה של המסך. לחצו עליו, מלאו את הפרטים, וזהו!</p>
                      <button id="add-first-expense-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105">
-                        <i class="fas fa-plus-circle mr-2"></i>הוסף הוצאה ראשונה
-                    </button>
+                         <i class="fas fa-plus-circle mr-2"></i>הוסף הוצאה ראשונה
+                     </button>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-lg">
@@ -138,7 +183,7 @@
 
     <!-- Expense Details Modal -->
     <div id="expense-details-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[102] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800" style="background-color: var(--card-bg-color); color: var(--text-color);">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
                 <h3 class="text-2xl font-bold">פרטי הוצאה</h3>
                 <button data-close-modal="expense-details-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
@@ -153,26 +198,91 @@
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h3 class="text-2xl font-bold">הגדרות קיצור דרך</h3>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold">הגדרות</h3>
                 <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
-            <div class="space-y-6">
-                 <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">1. מזהה הטיול הנוכחי</label>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="trip-id-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr">
-                        <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מזהה טיול"><i class="fas fa-copy"></i></button>
+
+            <!-- Settings Tabs -->
+            <div class="mb-4 border-b border-gray-200">
+                <nav class="flex -mb-px" aria-label="Tabs">
+                    <button class="settings-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm" data-tab="shortcuts">
+                        <i class="fas fa-bolt mr-2"></i>קיצור דרך
+                    </button>
+                    <button class="settings-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="theme">
+                        <i class="fas fa-palette mr-2"></i>ערכת נושא
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Shortcuts Tab Content -->
+            <div id="settings-tab-shortcuts" class="settings-tab-content active">
+                <div class="space-y-6">
+                     <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">1. מזהה הטיול הנוכחי</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="trip-id-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr">
+                            <button id="copy-trip-id-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מזהה טיול"><i class="fas fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">2. המפתח הסודי האישי שלך</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="api-key-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr" placeholder="לחץ על הכפתור כדי ליצור מפתח...">
+                            <button id="copy-api-key-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מפתח סודי"><i class="fas fa-copy"></i></button>
+                        </div>
+                         <button id="generate-api-key-btn" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">צור/החלף מפתח סודי (פעולה זו תבטל מפתח קודם)</button>
                     </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">2. המפתח הסודי האישי שלך</label>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="api-key-input" readonly class="w-full p-2 rounded-md bg-slate-100 text-slate-500 font-mono text-sm text-left" dir="ltr" placeholder="לחץ על הכפתור כדי ליצור מפתח...">
-                        <button id="copy-api-key-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg transition whitespace-nowrap" title="העתק מפתח סודי"><i class="fas fa-copy"></i></button>
+            </div>
+
+            <!-- Theme Tab Content -->
+            <div id="settings-tab-theme" class="settings-tab-content">
+                <div class="space-y-6">
+                    <!-- Layout Style -->
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">סגנון תצוגה</h4>
+                        <div class="flex gap-4 rounded-lg bg-slate-100 p-1">
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="layout-style" value="cards" class="sr-only peer" checked>
+                                <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">כרטיסיות</div>
+                            </label>
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="layout-style" value="table" class="sr-only peer">
+                                <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">טבלה</div>
+                            </label>
+                        </div>
                     </div>
-                     <button id="generate-api-key-btn" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">צור/החלף מפתח סודי (פעולה זו תבטל מפתח קודם)</button>
+
+                    <!-- Preset Themes -->
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">ערכות נושא מוכנות</h4>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="theme-preset-btn p-2 rounded-lg border-2" data-theme='{"bgColor":"#f1f5f9","cardBgColor":"#ffffff","textColor":"#334155"}'><span class="block w-full h-8 rounded" style="background: linear-gradient(45deg, #f1f5f9 50%, #ffffff 50%);"></span>בהיר</button>
+                            <button class="theme-preset-btn p-2 rounded-lg border" data-theme='{"bgColor":"#1e293b","cardBgColor":"#334155","textColor":"#f1f5f9"}'><span class="block w-full h-8 rounded" style="background: linear-gradient(45deg, #1e293b 50%, #334155 50%);"></span>כהה</button>
+                            <button class="theme-preset-btn p-2 rounded-lg border" data-theme='{"bgColor":"#fefce8","cardBgColor":"#fef3c7","textColor":"#92400e"}'><span class="block w-full h-8 rounded" style="background: linear-gradient(45deg, #fefce8 50%, #fef3c7 50%);"></span>חמים</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Colors -->
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">צבעים מותאמים</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="flex flex-col items-center">
+                                <label for="bg-color-picker" class="text-sm mb-1">צבע רקע</label>
+                                <input type="color" id="bg-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <label for="card-bg-color-picker" class="text-sm mb-1">רקע כרטיסיה</label>
+                                <input type="color" id="card-bg-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                             <div class="flex flex-col items-center">
+                                <label for="text-color-picker" class="text-sm mb-1">צבע טקסט</label>
+                                <input type="color" id="text-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -231,14 +341,14 @@
     </div>
 
     <!-- Main Content -->
-    <div id="main-content" class="pb-24 hidden">
-        <header class="bg-white shadow-sm sticky top-0 z-30">
+    <div id="main-content" class="hidden">
+        <header class="shadow-sm sticky top-0 z-30" style="background-color: var(--header-bg-color);">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
-                    <a id="back-to-dashboard" href="#" class="text-slate-700 font-bold hover:text-blue-600 flex items-center gap-2">
+                    <a id="back-to-dashboard" href="#" class="font-bold hover:text-blue-600 flex items-center gap-2" style="color: var(--text-color);">
                         <i class="fas fa-arrow-right"></i>
                     </a>
-                    <h1 id="trip-title" class="text-xl font-bold text-slate-800 truncate">ניהול הוצאות</h1>
+                    <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
                     <div class="flex items-center gap-2">
                         <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
                             <i class="fas fa-cog"></i>
@@ -265,19 +375,19 @@
                 <div id="normal-view-today">
                     <div class="space-y-6">
                         <section id="summary-section-today" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
-                        <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות יומית (בשקלים)</h3>
+                        <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                            <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">התפלגות יומית (בשקלים)</h3>
                             <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart-today"></canvas></div>
                         </section>
                         <section>
-                            <div id="expenses-list-today" class="space-y-4"></div>
-                            <div id="no-expenses-message-today" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
+                            <div id="expenses-list-today"></div>
+                            <div id="no-expenses-message-today" class="text-center p-10 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
                                 <i class="fas fa-receipt text-4xl text-slate-300 mb-4"></i>
                                 <p class="text-slate-500">אין הוצאות להיום.</p>
                             </div>
                         </section>
-                        <section id="summary-table-section-today" class="bg-white p-4 md:p-6 rounded-2xl shadow-lg hidden">
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">סיכום הוצאות יומי</h3>
+                        <section id="summary-table-section-today" class="p-4 md:p-6 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                            <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">סיכום הוצאות יומי</h3>
                             <div id="summary-table-today"></div>
                         </section>
                     </div>
@@ -285,13 +395,13 @@
 
                 <!-- Comparison View Today -->
                 <div id="comparison-view-today" class="hidden space-y-6">
-                    <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
+                    <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                         <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                            <h3 class="text-xl font-bold text-slate-800">השוואת הוצאות</h3>
+                            <h3 class="text-xl font-bold" style="color: var(--text-color);">השוואת הוצאות</h3>
                             <select id="comparison-category-filter-today" class="w-full sm:w-auto p-2 border rounded-md bg-slate-50"></select>
                         </div>
                         <div class="h-64 md:h-80 flex justify-center"><canvas id="owner-comparison-chart-today"></canvas></div>
-                        <div id="comparison-total-today" class="text-center mt-4 text-lg font-bold text-slate-700"></div>
+                        <div id="comparison-total-today" class="text-center mt-4 text-lg font-bold"></div>
                     </section>
                 </div>
             </div>
@@ -303,7 +413,7 @@
                 <!-- Normal View All -->
                 <div id="normal-view-all">
                     <div class="space-y-6">
-                        <section class="bg-white p-3 rounded-2xl shadow-lg">
+                        <section class="p-3 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                             <div id="filters" class="flex items-center justify-center gap-2 bg-blue-700 p-1 rounded-full flex-wrap">
                                 <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="week">שבוע</button>
                                 <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="month">חודש</button>
@@ -313,19 +423,19 @@
                             </div>
                         </section>
                         <section id="summary-section-all" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
-                        <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">התפלגות לפי קטגוריה (בשקלים)</h3>
+                        <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                            <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">התפלגות לפי קטגוריה (בשקלים)</h3>
                             <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart-all"></canvas></div>
                         </section>
                         <section>
-                            <div id="expenses-list-all" class="space-y-4"></div>
-                            <div id="no-expenses-message-all" class="text-center p-10 bg-white rounded-2xl shadow-lg hidden">
+                            <div id="expenses-list-all"></div>
+                            <div id="no-expenses-message-all" class="text-center p-10 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
                                 <i class="fas fa-search-dollar text-4xl text-slate-300 mb-4"></i>
                                 <p class="text-slate-500">לא נמצאו הוצאות התואמות לסינון.</p>
                             </div>
                         </section>
-                        <section id="summary-table-section-all" class="bg-white p-4 md:p-6 rounded-2xl shadow-lg hidden">
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">סיכום הוצאות כללי</h3>
+                        <section id="summary-table-section-all" class="p-4 md:p-6 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                            <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">סיכום הוצאות כללי</h3>
                             <div id="summary-table-all"></div>
                         </section>
                     </div>
@@ -333,13 +443,13 @@
                 
                 <!-- Comparison View All -->
                 <div id="comparison-view-all" class="hidden space-y-6">
-                    <section class="bg-white p-4 md:p-6 rounded-2xl shadow-lg">
+                    <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                         <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                            <h3 class="text-xl font-bold text-slate-800">השוואת הוצאות</h3>
+                            <h3 class="text-xl font-bold" style="color: var(--text-color);">השוואת הוצאות</h3>
                             <select id="comparison-category-filter-all" class="w-full sm:w-auto p-2 border rounded-md bg-slate-50"></select>
                         </div>
                         <div class="h-64 md:h-80 flex justify-center"><canvas id="owner-comparison-chart-all"></canvas></div>
-                        <div id="comparison-total-all" class="text-center mt-4 text-lg font-bold text-slate-700"></div>
+                        <div id="comparison-total-all" class="text-center mt-4 text-lg font-bold"></div>
                     </section>
                 </div>
             </div>
@@ -381,6 +491,7 @@
         let activeOwner = 'all'; 
         let comparisonViewActive = false;
         let activeComparisonCategory = 'all';
+        let currentTheme = {};
 
         let rateCache = {};
         
@@ -401,6 +512,7 @@
             }
             document.getElementById('back-to-dashboard').href = `trip.html?id=${tripId}`;
             populateCurrencyDropdown();
+            loadTheme();
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -446,7 +558,7 @@
             expensesUnsubscribe = onSnapshot(expensesColRef, async (snapshot) => {
                 allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
-                // NEW: Onboarding logic
+                // Onboarding logic
                 if (allExpenses.length === 0) {
                     document.getElementById('main-content').classList.add('hidden');
                     document.getElementById('onboarding-screen').classList.remove('hidden');
@@ -506,9 +618,9 @@
              }
 
              if (tabId === 'today') {
-                ownerComparisonChartToday = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-today', ownerComparisonChartToday);
+                 ownerComparisonChartToday = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-today', ownerComparisonChartToday);
              } else {
-                ownerComparisonChartAll = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-all', ownerComparisonChartAll);
+                 ownerComparisonChartAll = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-all', ownerComparisonChartAll);
              }
         }
 
@@ -544,25 +656,35 @@
         }
 
         // --- UI Rendering ---
-        function renderExpenseList(expenses, containerId) {
-            const listContainer = document.getElementById(`expenses-list-${containerId}`);
-            const noItemsMsg = document.getElementById(`no-expenses-message-${containerId}`);
+        function renderExpenseList(expenses, tabId) {
+            const listContainer = document.getElementById(`expenses-list-${tabId}`);
+            const noItemsMsg = document.getElementById(`no-expenses-message-${tabId}`);
             listContainer.innerHTML = '';
 
             if (expenses.length === 0) {
                 noItemsMsg.classList.remove('hidden');
-                listContainer.classList.add('hidden');
+                listContainer.parentElement.classList.add('hidden');
                 return;
             }
 
             noItemsMsg.classList.add('hidden');
-            listContainer.classList.remove('hidden');
+            listContainer.parentElement.classList.remove('hidden');
 
-            // NEW: Collapsible categories for 'all' tab
-            if (containerId === 'all') {
-                renderCollapsibleCategories(expenses, listContainer);
-            } else { // 'today' tab remains the same
-                renderSimpleExpenseList(expenses, listContainer);
+            // Create containers for both views
+            listContainer.innerHTML = `
+                <div class="expense-cards-view"></div>
+                <div class="expense-table-view"></div>
+            `;
+            
+            const cardsContainer = listContainer.querySelector('.expense-cards-view');
+            const tableContainer = listContainer.querySelector('.expense-table-view');
+
+            // Render both views, CSS will handle visibility
+            renderExpenseTable(expenses, tableContainer, tabId);
+            if (tabId === 'all') {
+                renderCollapsibleCategories(expenses, cardsContainer);
+            } else {
+                renderSimpleExpenseList(expenses, cardsContainer);
             }
         }
 
@@ -587,15 +709,14 @@
 
             Object.entries(groupedExpenses).forEach(([category, items]) => {
                 const categoryWrapper = document.createElement('div');
-                categoryWrapper.className = 'bg-white rounded-2xl shadow-lg overflow-hidden';
-
-                const totalInCategory = items.reduce((sum, item) => sum + item.amount, 0);
+                categoryWrapper.className = 'rounded-2xl shadow-lg overflow-hidden';
+                categoryWrapper.style.backgroundColor = 'var(--card-bg-color)';
 
                 const header = document.createElement('button');
-                header.className = 'category-header w-full text-right p-4 flex justify-between items-center hover:bg-slate-50 transition';
+                header.className = 'category-header w-full text-right p-4 flex justify-between items-center hover:bg-slate-50/50 transition';
                 header.innerHTML = `
                     <div class="flex items-center gap-3">
-                        <span class="font-bold text-lg text-slate-800">${category}</span>
+                        <span class="font-bold text-lg" style="color: var(--text-color);">${category}</span>
                         <span class="text-sm text-slate-500">(${items.length} הוצאות)</span>
                     </div>
                     <i class="fas fa-chevron-down text-slate-400 transition-transform"></i>
@@ -611,8 +732,9 @@
                 items.forEach((exp, index) => {
                     const uniqueId = `conv-all-${category.replace(/\s/g, '')}-${index}`;
                     const card = createExpenseCard(exp, uniqueId);
-                    card.classList.remove('shadow-md'); // Remove shadow for inner cards
+                    card.classList.remove('shadow-md');
                     card.classList.add('shadow-none', 'border-b', 'last:border-b-0', 'rounded-none', 'p-3');
+                    card.style.backgroundColor = 'transparent';
                     innerList.appendChild(card);
                     if (exp.currency !== 'ILS') {
                         displayConvertedAmount(uniqueId, exp.amount, exp.currency);
@@ -627,17 +749,78 @@
                 container.appendChild(categoryWrapper);
             });
         }
+        
+        function renderExpenseTable(expenses, container, tabId) {
+            container.innerHTML = '';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'expense-table-wrapper rounded-2xl shadow-lg';
+            wrapper.style.backgroundColor = 'var(--card-bg-color)';
+
+            const table = document.createElement('table');
+            table.className = 'expense-table';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>תאריך</th>
+                        <th>שם</th>
+                        <th>קטגוריה</th>
+                        <th>פירוט</th>
+                        <th>סכום</th>
+                        <th>סכום (₪)</th>
+                        <th>פעולות</th>
+                    </tr>
+                </thead>
+            `;
+            const tbody = document.createElement('tbody');
+            
+            expenses.forEach((exp, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'expense-card-clickable';
+                tr.dataset.id = exp.id;
+                const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
+                const uniqueId = `conv-table-${tabId}-${index}`;
+
+                tr.innerHTML = `
+                    <td>${new Date(exp.date).toLocaleDateString('he-IL')}</td>
+                    <td>${exp.ownerName || 'לא ידוע'}</td>
+                    <td>${exp.category}</td>
+                    <td>${exp.notes || '---'}</td>
+                    <td class="font-mono">${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2 })} ${exp.currency}</td>
+                    <td id="${uniqueId}" class="font-mono"></td>
+                    <td>
+                        ${isOwner ? `<div class="flex justify-end gap-3">
+                            <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                            <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                        </div>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                if (exp.currency !== 'ILS') {
+                    displayConvertedAmount(uniqueId, exp.amount, exp.currency, true);
+                } else {
+                    const el = document.getElementById(uniqueId);
+                    if (el) el.textContent = exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2 });
+                }
+            });
+
+            table.appendChild(tbody);
+            wrapper.appendChild(table);
+            container.appendChild(wrapper);
+        }
+
 
         function createExpenseCard(exp, uniqueId) {
             const card = document.createElement('div');
-            card.className = 'bg-white p-4 rounded-2xl shadow-md flex items-center gap-4 expense-card-clickable';
+            card.className = 'p-4 rounded-2xl shadow-md flex items-center gap-4 expense-card-clickable';
+            card.style.backgroundColor = 'var(--card-bg-color)';
             card.dataset.id = exp.id;
             const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
             
             card.innerHTML = `
                 <div class="flex-shrink-0 h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">${exp.category.match(/(\p{Emoji})/u)?.[0] || '📎'}</div>
                 <div class="flex-grow min-w-0">
-                    <p class="font-bold text-slate-800 truncate">${exp.notes || 'הוצאה'}</p>
+                    <p class="font-bold truncate" style="color: var(--text-color);">${exp.notes || 'הוצאה'}</p>
                     <p class="text-sm text-slate-500"><span class="font-semibold">${exp.ownerName || 'לא ידוע'}</span> • ${new Date(exp.date).toLocaleDateString('he-IL')}</p>
                 </div>
                 <div class="text-left flex-shrink-0">
@@ -663,12 +846,13 @@
             }, {});
             summaryContainer.innerHTML = '';
             if (Object.keys(summary).length === 0) {
-                summaryContainer.innerHTML = `<div class="bg-white p-6 rounded-2xl shadow-lg text-center col-span-full"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
+                summaryContainer.innerHTML = `<div class="p-6 rounded-2xl shadow-lg text-center col-span-full" style="background-color: var(--card-bg-color);"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
                 return;
             }
             for (const currency in summary) {
                 const card = document.createElement('div');
-                card.className = 'bg-white p-4 rounded-2xl shadow-lg text-center';
+                card.className = 'p-4 rounded-2xl shadow-lg text-center';
+                card.style.backgroundColor = 'var(--card-bg-color)';
                 card.innerHTML = `
                     <h3 class="text-slate-500 font-semibold text-sm">סה"כ (${currency})</h3>
                     <p class="text-2xl font-bold text-blue-600 mt-1">${summary[currency].toLocaleString('he-IL', { minimumFractionDigits: 2 })}</p>
@@ -701,11 +885,11 @@
 
             const chartConfig = {
                 type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: '#fff', borderWidth: 4 }] },
+                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: currentTheme.cardBgColor || '#fff', borderWidth: 4 }] },
                 options: {
                     responsive: true, maintainAspectRatio: false, cutout: '60%',
                     plugins: {
-                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, boxWidth: 20, padding: 20 } },
+                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, color: currentTheme.textColor || '#334155', boxWidth: 20, padding: 20 } },
                         tooltip: { callbacks: { label: (context) => ` ${context.label}: ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(context.parsed)}` } }
                     }
                 }
@@ -714,6 +898,8 @@
             if (chartInstance) {
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = data;
+                chartInstance.options.plugins.legend.labels.color = currentTheme.textColor;
+                chartInstance.data.datasets[0].borderColor = currentTheme.cardBgColor;
                 chartInstance.update();
                 return chartInstance;
             } else {
@@ -732,11 +918,11 @@
                     return;
                 }
                 container.classList.remove('hidden');
-                let buttonsHTML = `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === 'all' && !comparisonViewActive ? 'active' : 'bg-white'}" data-owner="all">הכל</button>`;
+                let buttonsHTML = `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === 'all' && !comparisonViewActive ? 'active' : ''}" style="background-color: ${activeOwner === 'all' && !comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="all">הכל</button>`;
                 uniqueOwners.forEach(owner => {
-                    buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === owner && !comparisonViewActive ? 'active' : 'bg-white'}" data-owner="${owner}">${owner}</button>`;
+                    buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === owner && !comparisonViewActive ? 'active' : ''}" style="background-color: ${activeOwner === owner && !comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="${owner}">${owner}</button>`;
                 });
-                buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${comparisonViewActive ? 'active' : 'bg-white'}" data-owner="compare"><i class="fas fa-chart-pie mr-2"></i>השווה</button>`;
+                buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${comparisonViewActive ? 'active' : ''}" style="background-color: ${comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="compare"><i class="fas fa-chart-pie mr-2"></i>השווה</button>`;
                 container.innerHTML = `<div class="flex items-center justify-center gap-2 flex-wrap p-1 bg-slate-200 rounded-full">${buttonsHTML}</div>`;
             });
         }
@@ -761,13 +947,13 @@
             
             let tableHTML = `<div class="flow-root"><div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><table class="min-w-full divide-y divide-slate-200">`;
             tableHTML += `<thead><tr>
-                <th scope="col" class="py-3.5 pl-4 pr-3 text-right text-sm font-semibold text-slate-900 sm:pl-0">קטגוריה</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">סכום (₪)</th>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-right text-sm font-semibold sm:pl-0" style="color: var(--text-color);">קטגוריה</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold" style="color: var(--text-color);">סכום (₪)</th>
             </tr></thead>`;
             tableHTML += `<tbody class="divide-y divide-slate-100">`;
             for (const [category, total] of sortedCategories) {
                 tableHTML += `<tr>
-                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-0">${category}</td>
+                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium sm:pl-0" style="color: var(--text-color);">${category}</td>
                     <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500 text-left font-mono">${total.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 </tr>`;
             }
@@ -804,11 +990,11 @@
             
             const chartConfig = {
                 type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: '#fff', borderWidth: 4 }] },
+                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: currentTheme.cardBgColor || '#fff', borderWidth: 4 }] },
                 options: {
                     responsive: true, maintainAspectRatio: false, cutout: '60%',
                     plugins: {
-                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, boxWidth: 20, padding: 20 } },
+                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, color: currentTheme.textColor || '#334155', boxWidth: 20, padding: 20 } },
                         tooltip: {
                             callbacks: {
                                 label: (context) => {
@@ -826,6 +1012,8 @@
             if (chartInstance) {
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = data;
+                chartInstance.options.plugins.legend.labels.color = currentTheme.textColor;
+                chartInstance.data.datasets[0].borderColor = currentTheme.cardBgColor;
                 chartInstance.update();
                 return chartInstance;
             } else {
@@ -869,12 +1057,13 @@
             return amount * rate;
         }
 
-        async function displayConvertedAmount(elementId, amount, from) {
+        async function displayConvertedAmount(elementId, amount, from, isTable = false) {
             const el = document.getElementById(elementId);
             if (!el) return;
             el.innerHTML = `<span class="loader"></span>`;
             const convertedAmount = await convertToILS(amount, from);
-            el.textContent = `(₪${convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+            const formattedAmount = convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            el.textContent = isTable ? formattedAmount : `(₪${formattedAmount})`;
         }
 
         // --- Dropdown Population ---
@@ -930,7 +1119,6 @@
             } else {
                 document.getElementById('modal-title').textContent = 'הוספת הוצאה חדשה';
                 document.getElementById('expense-id').value = '';
-                // NEW: remember last owner
                 const lastOwner = localStorage.getItem('lastExpenseOwner');
                 document.getElementById('expense-owner-name').value = lastOwner || (currentUserProfile ? currentUserProfile.displayName : '');
                 document.getElementById('expense-date').valueAsDate = new Date();
@@ -1054,7 +1242,6 @@
                     expenseData.createdAt = serverTimestamp();
                     await addDoc(collection(db, "trips", tripId, "expenses"), expenseData);
                 }
-                // NEW: Save last owner name
                 localStorage.setItem('lastExpenseOwner', ownerName);
                 closeModal('expense-modal');
             } catch (error) { console.error("Error saving expense:", error); }
@@ -1074,6 +1261,59 @@
                 await deleteDoc(doc(db, "trips", tripId, "expenses", id));
             }
         }
+
+        // --- Theme Logic ---
+        function applyTheme(theme) {
+            document.documentElement.style.setProperty('--bg-color', theme.bgColor);
+            document.documentElement.style.setProperty('--card-bg-color', theme.cardBgColor);
+            document.documentElement.style.setProperty('--text-color', theme.textColor);
+            
+            // A slightly lighter color for the header
+            const headerBgColor = theme.bgColor === theme.cardBgColor ? theme.bgColor : theme.cardBgColor;
+            document.documentElement.style.setProperty('--header-bg-color', headerBgColor);
+
+            document.getElementById('main-content').className = `layout-${theme.layout}`;
+            
+            // Update color picker values
+            document.getElementById('bg-color-picker').value = theme.bgColor;
+            document.getElementById('card-bg-color-picker').value = theme.cardBgColor;
+            document.getElementById('text-color-picker').value = theme.textColor;
+            
+            // Update layout radio button
+            document.querySelector(`input[name="layout-style"][value="${theme.layout}"]`).checked = true;
+
+            currentTheme = theme;
+            // Re-render charts with new colors
+            if (expensesChartToday) { expensesChartToday.destroy(); expensesChartToday = null; }
+            if (expensesChartAll) { expensesChartAll.destroy(); expensesChartAll = null; }
+            if (ownerComparisonChartToday) { ownerComparisonChartToday.destroy(); ownerComparisonChartToday = null; }
+            if (ownerComparisonChartAll) { ownerComparisonChartAll.destroy(); ownerComparisonChartAll = null; }
+            render();
+        }
+
+        function saveTheme() {
+            const theme = {
+                layout: document.querySelector('input[name="layout-style"]:checked').value,
+                bgColor: document.getElementById('bg-color-picker').value,
+                cardBgColor: document.getElementById('card-bg-color-picker').value,
+                textColor: document.getElementById('text-color-picker').value
+            };
+            localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(theme));
+            applyTheme(theme);
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem(`tripTheme_${tripId}`);
+            const defaultTheme = {
+                layout: 'cards',
+                bgColor: '#f1f5f9',
+                cardBgColor: '#ffffff',
+                textColor: '#334155'
+            };
+            const theme = savedTheme ? JSON.parse(savedTheme) : defaultTheme;
+            applyTheme(theme);
+        }
+
 
         // --- Event Listeners ---
         function setupEventListeners() {
@@ -1139,7 +1379,6 @@
                     openExpenseDetailsModal(card.dataset.id);
                 }
                 
-                // NEW: Collapsible category handler
                 const categoryHeader = e.target.closest('.category-header');
                 if (categoryHeader) {
                     const content = categoryHeader.nextElementSibling;
@@ -1170,6 +1409,31 @@
             document.getElementById('comparison-category-filter-all').addEventListener('change', async (e) => {
                 activeComparisonCategory = e.target.value;
                 await render();
+            });
+
+            // Settings modal tabs
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = btn.dataset.tab;
+                    document.querySelectorAll('.settings-tab-btn').forEach(t => t.classList.remove('active', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300'));
+                    btn.classList.add('active');
+                    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(`settings-tab-${tabId}`).classList.add('active');
+                });
+            });
+
+            // Theme controls
+            document.querySelectorAll('input[name="layout-style"]').forEach(radio => radio.addEventListener('change', saveTheme));
+            document.getElementById('bg-color-picker').addEventListener('input', saveTheme);
+            document.getElementById('card-bg-color-picker').addEventListener('input', saveTheme);
+            document.getElementById('text-color-picker').addEventListener('input', saveTheme);
+            document.querySelectorAll('.theme-preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const theme = JSON.parse(btn.dataset.theme);
+                    const fullTheme = { ...theme, layout: document.querySelector('input[name="layout-style"]:checked').value };
+                    localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(fullTheme));
+                    applyTheme(fullTheme);
+                });
             });
         }
 
