@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ניהול הוצאות</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Icons + Font -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <style>
         :root {
@@ -27,7 +27,6 @@
             font-family: 'Assistant', sans-serif; 
             background-color: var(--bg-color);
             color: var(--text-color);
-            transition: background-color 0.5s ease, color 0.5s ease;
         }
         .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
         .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
@@ -101,10 +100,16 @@
         .settings-tab-content { display: none; }
         .settings-tab-content.active { display: block; }
         
-        /* Make settings modal content scrollable */
-        #settings-modal .modal-content {
+        /* UPDATED: Make settings modal content scrollable */
+        .settings-modal-content {
             max-height: 70vh;
             overflow-y: auto;
+            padding-right: 1rem; /* Add some padding for the scrollbar */
+        }
+        
+        /* UPDATED: Style for selected theme */
+        .theme-preset-btn.selected {
+            box-shadow: 0 0 0 2px #22c55e; /* green-500 */
         }
 
         /* Styles for Table Layout */
@@ -135,23 +140,19 @@
         .layout-cards .expense-table-view { display: none; }
         .layout-table .expense-cards-view { display: none; }
         
-        /* Theme selection highlight */
-        .theme-preset-btn.selected {
-            outline: 2px solid #16a34a; /* green-600 */
-            outline-offset: 2px;
+        /* BUG FIX: Improve sticky header performance */
+        header.sticky {
+            will-change: transform;
         }
-
     </style>
 </head>
 <body class="bg-slate-100">
 
-    <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
         <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
     </div>
 
-    <!-- NEW: Onboarding Screen (shown when no expenses exist) -->
     <div id="onboarding-screen" class="hidden">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
             <i class="fas fa-magic-wand-sparkles text-6xl text-blue-500 mb-6"></i>
@@ -194,7 +195,6 @@
     </div>
 
 
-    <!-- Expense Details Modal -->
     <div id="expense-details-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[102] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800" style="background-color: var(--card-bg-color); color: var(--text-color);">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
@@ -202,36 +202,30 @@
                 <button data-close-modal="expense-details-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
             <div id="expense-details-content" class="space-y-3">
-                <!-- Content will be populated by JS -->
-            </div>
+                </div>
         </div>
     </div>
 
 
-    <!-- Settings Modal -->
     <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl flex flex-col w-full max-w-lg text-slate-800">
-            <div class="p-6 border-b">
-                <div class="flex justify-between items-center">
-                    <h3 class="text-2xl font-bold">הגדרות</h3>
-                    <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
-                </div>
-            </div>
-
-            <!-- Settings Tabs -->
-            <div class="px-6 pt-4 border-b border-gray-200">
-                <nav class="flex -mb-px" aria-label="Tabs">
-                    <button class="settings-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm" data-tab="shortcuts">
-                        <i class="fas fa-bolt mr-2"></i>קיצור דרך
-                    </button>
-                    <button class="settings-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="theme">
-                        <i class="fas fa-palette mr-2"></i>ערכת נושא
-                    </button>
-                </nav>
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold">הגדרות</h3>
+                <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
             
-            <div class="modal-content p-6">
-                <!-- Shortcuts Tab Content -->
+            <div class="settings-modal-content">
+                <div class="mb-4 border-b border-gray-200">
+                    <nav class="flex -mb-px" aria-label="Tabs">
+                        <button class="settings-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm" data-tab="shortcuts">
+                            <i class="fas fa-bolt mr-2"></i>קיצור דרך
+                        </button>
+                        <button class="settings-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="theme">
+                            <i class="fas fa-palette mr-2"></i>ערכת נושא
+                        </button>
+                    </nav>
+                </div>
+
                 <div id="settings-tab-shortcuts" class="settings-tab-content active">
                     <div class="space-y-6">
                          <p class="text-sm text-slate-600">העתק את שני הפרטים הבאים והדבק אותם בשאלות ההתקנה של הקיצור באייפון.</p>
@@ -253,10 +247,8 @@
                     </div>
                 </div>
 
-                <!-- Theme Tab Content -->
                 <div id="settings-tab-theme" class="settings-tab-content">
                     <div class="space-y-6">
-                        <!-- Layout Style -->
                         <div>
                             <h4 class="text-lg font-semibold mb-2">סגנון תצוגה</h4>
                             <div class="flex gap-4 rounded-lg bg-slate-100 p-1">
@@ -271,15 +263,12 @@
                             </div>
                         </div>
 
-                        <!-- Preset Themes -->
                         <div>
                             <h4 class="text-lg font-semibold mb-2">ערכות נושא מוכנות</h4>
-                            <div id="theme-presets-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                <!-- Theme buttons will be injected here by JS -->
-                            </div>
+                            <div id="theme-presets-container" class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                </div>
                         </div>
                         
-                        <!-- Custom Colors -->
                         <div>
                             <h4 class="text-lg font-semibold mb-2">צבעים מותאמים</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -303,7 +292,6 @@
         </div>
     </div>
 
-    <!-- Add/Edit Expense Modal -->
     <div id="expense-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
@@ -355,25 +343,22 @@
         </div>
     </div>
 
-    <!-- Main Content -->
     <div id="main-content" class="hidden">
         <header class="shadow-sm sticky top-0 z-30" style="background-color: var(--header-bg-color);">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
+                    <a id="back-to-dashboard" href="#" class="font-bold hover:text-blue-600 flex items-center gap-2" style="color: var(--text-color);">
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
                     <div class="flex items-center gap-2">
-                         <button id="export-excel-btn" class="text-slate-500 hover:text-green-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצוא ל-Excel">
+                        <button id="export-sheets-btn" title="ייצוא ל-Google Sheets" class="text-slate-500 hover:text-green-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
                             <i class="fas fa-file-excel"></i>
                         </button>
-                        <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="הגדרות">
+                        <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
                             <i class="fas fa-cog"></i>
                         </button>
-                    </div>
-                    <h1 id="trip-title" class="text-xl font-bold truncate text-center" style="color: var(--text-color);">ניהול הוצאות</h1>
-                    <div class="flex items-center gap-2">
-                        <a id="back-to-dashboard" href="#" class="font-bold hover:text-blue-600 flex items-center gap-2" style="color: var(--text-color);">
-                            <i class="fas fa-arrow-left"></i>
-                        </a>
-                        <button id="add-expense-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="הוסף הוצאה">
+                        <button id="add-expense-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
@@ -387,11 +372,9 @@
                 <button class="tab-btn font-bold py-2 px-4 rounded-full transition" data-tab="all">כל ההוצאות</button>
             </div>
 
-            <!-- TODAY TAB -->
             <div id="tab-today" class="tab-content active space-y-6">
                 <section id="owner-filters-today" class="mb-6 hidden"></section>
                 
-                <!-- Normal View Today -->
                 <div id="normal-view-today">
                     <div class="space-y-6">
                         <section id="summary-section-today" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
@@ -413,7 +396,6 @@
                     </div>
                 </div>
 
-                <!-- Comparison View Today -->
                 <div id="comparison-view-today" class="hidden space-y-6">
                     <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                         <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
@@ -426,11 +408,9 @@
                 </div>
             </div>
 
-            <!-- ALL EXPENSES TAB -->
             <div id="tab-all" class="tab-content space-y-6">
                 <section id="owner-filters-all" class="mb-6 hidden"></section>
                 
-                <!-- Normal View All -->
                 <div id="normal-view-all">
                     <div class="space-y-6">
                         <section class="p-3 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
@@ -461,7 +441,6 @@
                     </div>
                 </div>
                 
-                <!-- Comparison View All -->
                 <div id="comparison-view-all" class="hidden space-y-6">
                     <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                         <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
@@ -492,10 +471,21 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        
+        // --- NEW: Google Sheets API Config ---
+        // חשוב: יש להחליף בערכים אמיתיים מ-Google Cloud Console
+        const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'; // <-- החלף אותי
+        const GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY'; // <-- החלף אותי
+        const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
 
         // --- Global State ---
         let currentUserProfile = null;
         let tripId = null;
+        let tripTitle = 'ניהול הוצאות';
         let allExpenses = [];
         let tripCategories = [];
         let expensesUnsubscribe = null;
@@ -520,23 +510,25 @@
             "ILS": "Israeli New Sheqel (₪)", "USD": "United States Dollar ($)", "EUR": "Euro (€)", "GBP": "British Pound (£)", "AUD": "Australian Dollar (A$)", "BGN": "Bulgarian Lev (лв)", "BRL": "Brazilian Real (R$)", "CAD": "Canadian Dollar (C$)", "CHF": "Swiss Franc (CHF)", "CNY": "Chinese Renminbi Yuan (¥)", "CZK": "Czech Koruna (Kč)", "DKK": "Danish Krone (kr)", "HKD": "Hong Kong Dollar (HK$)", "HUF": "Hungarian Forint (Ft)", "IDR": "Indonesian Rupiah (Rp)", "INR": "Indian Rupee (₹)", "ISK": "Icelandic Króna (kr)", "JPY": "Japanese Yen (¥)", "KRW": "South Korean Won (₩)", "MXN": "Mexican Peso (MX$)", "MYR": "Malaysian Ringgit (RM)", "NOK": "Norwegian Krone (kr)", "NZD": "New Zealand Dollar (NZ$)", "PHP": "Philippine Peso (₱)", "PLN": "Polish Złoty (zł)", "RON": "Romanian Leu (lei)", "SEK": "Swedish Krona (kr)", "SGD": "Singapore Dollar (S$)", "THB": "Thai Baht (฿)", "TRY": "Turkish Lira (₺)", "ZAR": "South African Rand (R)"
         };
         const prioritizedCurrencies = ['ILS', 'USD', 'EUR', 'GBP'];
+        
+        // --- NEW: Theme Presets ---
         const themePresets = [
-            { name: 'בהיר', id: 'light', theme: { bgColor: '#f1f5f9', cardBgColor: '#ffffff', textColor: '#334155' } },
-            { name: 'כהה', id: 'dark', theme: { bgColor: '#1e293b', cardBgColor: '#334155', textColor: '#f1f5f9' } },
-            { name: 'חמים', id: 'warm', theme: { bgColor: '#fefce8', cardBgColor: '#fef3c7', textColor: '#92400e' } },
-            { name: 'אוקיינוס', id: 'ocean', theme: { bgColor: '#0c4a6e', cardBgColor: '#075985', textColor: '#e0f2fe' } },
-            { name: 'יער', id: 'forest', theme: { bgColor: '#134e4a', cardBgColor: '#115e59', textColor: '#ccfbf1' } },
-            { name: 'שקיעה', id: 'sunset', theme: { bgColor: '#4a044e', cardBgColor: '#701a75', textColor: '#fae8ff' } },
-            { name: 'ורוד', id: 'rose', theme: { bgColor: '#fdf2f8', cardBgColor: '#fce7f3', textColor: '#9d174d' } },
-            { name: 'מנטה', id: 'mint', theme: { bgColor: '#f0fdfa', cardBgColor: '#ccfbf1', textColor: '#134e4a' } },
-            { name: 'גרפיט', id: 'graphite', theme: { bgColor: '#171717', cardBgColor: '#262626', textColor: '#f5f5f5' } },
-            { name: 'לבנדר', id: 'lavender', theme: { bgColor: '#f5f3ff', cardBgColor: '#ede9fe', textColor: '#5b21b6' } },
-            { name: 'כתום', id: 'orange', theme: { bgColor: '#fff7ed', cardBgColor: '#ffedd5', textColor: '#9a3412' } },
-            { name: 'אבן', id: 'stone', theme: { bgColor: '#f5f5f4', cardBgColor: '#e7e5e4', textColor: '#3f3f46' } },
-            { name: 'בועות', id: 'bubbles', theme: { bgColor: '#020617', cardBgColor: 'rgba(30, 64, 175, 0.3)', textColor: '#e0f2fe' } },
-            { name: 'ניאון', id: 'neon', theme: { bgColor: '#0f172a', cardBgColor: '#1e293b', textColor: '#67e8f9' } },
-            { name: 'קפה', id: 'coffee', theme: { bgColor: '#432818', cardBgColor: '#744210', textColor: '#fdf4e3' } },
-            { name: 'קיץ', id: 'summer', theme: { bgColor: '#eff6ff', cardBgColor: '#dbeafe', textColor: '#1e40af' } }
+            { name: 'בהיר', bgColor: '#f1f5f9', cardBgColor: '#ffffff', textColor: '#334155' },
+            { name: 'כהה', bgColor: '#1e293b', cardBgColor: '#334155', textColor: '#f1f5f9' },
+            { name: 'חמים', bgColor: '#fefce8', cardBgColor: '#fef3c7', textColor: '#92400e' },
+            { name: 'אוקיינוס', bgColor: '#0c4a6e', cardBgColor: '#075985', textColor: '#e0f2fe' },
+            { name: 'יער', bgColor: '#f0fdf4', cardBgColor: '#ffffff', textColor: '#14532d' },
+            { name: 'שקיעה', bgColor: '#581c87', cardBgColor: '#7e22ce', textColor: '#f3e8ff' },
+            { name: 'מנטה', bgColor: '#f0fdfa', cardBgColor: '#ccfbf1', textColor: '#134e4a' },
+            { name: 'ורד', bgColor: '#fff1f2', cardBgColor: '#ffe4e6', textColor: '#9f1239' },
+            { name: 'לוח', bgColor: '#111827', cardBgColor: '#1f2937', textColor: '#d1d5db' },
+            { name: 'נייר', bgColor: '#fdfbf6', cardBgColor: '#fffefb', textColor: '#57534e' },
+            { name: 'סייבר', bgColor: '#000000', cardBgColor: '#1a1a1a', textColor: '#00ff00' },
+            { name: 'אפרסק', bgColor: '#fff7ed', cardBgColor: '#ffedd5', textColor: '#c2410c' },
+            { name: 'קפה', bgColor: '#4f46e5', cardBgColor: '#6366f1', textColor: '#e0e7ff' },
+            { name: 'חורף', bgColor: '#e2e8f0', cardBgColor: '#f1f5f9', textColor: '#334155' },
+            { name: 'בועות', bgColor: '#020617', cardBgColor: 'rgba(51, 65, 85, 0.5)', textColor: '#e2e8f0', previewStyle: 'background-image: linear-gradient(45deg, #020617 50%, rgba(51, 65, 85, 0.5) 50%); backdrop-filter: blur(4px);' },
+            { name: 'זכוכית', bgColor: '#dbeafe', cardBgColor: 'rgba(255, 255, 255, 0.6)', textColor: '#1e3a8a', previewStyle: 'background-image: linear-gradient(45deg, #dbeafe 50%, rgba(255, 255, 255, 0.6) 50%); backdrop-filter: blur(4px);' },
         ];
 
 
@@ -577,7 +569,10 @@
         async function fetchTripDetails() {
             const tripDocRef = doc(db, "trips", tripId);
             const docSnap = await getDoc(tripDocRef);
-            if (docSnap.exists()) document.getElementById('trip-title').textContent = docSnap.data().name || 'ניהול הוצאות';
+            if (docSnap.exists()) {
+                 tripTitle = docSnap.data().name || 'ניהול הוצאות';
+                 document.getElementById('trip-title').textContent = tripTitle;
+            }
         }
 
         function listenForCategories() {
@@ -598,6 +593,7 @@
             expensesUnsubscribe = onSnapshot(expensesColRef, async (snapshot) => {
                 allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
+                // Onboarding logic
                 if (allExpenses.length === 0) {
                     document.getElementById('main-content').classList.add('hidden');
                     document.getElementById('onboarding-screen').classList.remove('hidden');
@@ -618,7 +614,7 @@
 
         // --- Central Render Function ---
         async function render() {
-            if (allExpenses.length === 0) return;
+            if (allExpenses.length === 0) return; // Don't render if no expenses
             
             renderOwnerFilters();
             let filteredExpenses = getFilteredExpenses();
@@ -709,6 +705,7 @@
             noItemsMsg.classList.add('hidden');
             listContainer.parentElement.classList.remove('hidden');
 
+            // Create containers for both views
             listContainer.innerHTML = `
                 <div class="expense-cards-view"></div>
                 <div class="expense-table-view"></div>
@@ -717,6 +714,7 @@
             const cardsContainer = listContainer.querySelector('.expense-cards-view');
             const tableContainer = listContainer.querySelector('.expense-table-view');
 
+            // Render both views, CSS will handle visibility
             renderExpenseTable(expenses, tableContainer, tabId);
             if (tabId === 'all') {
                 renderCollapsibleCategories(expenses, cardsContainer);
@@ -1301,20 +1299,29 @@
 
         // --- Theme Logic ---
         function populateThemePresets() {
-            const grid = document.getElementById('theme-presets-grid');
-            grid.innerHTML = '';
-            themePresets.forEach(preset => {
+            const container = document.getElementById('theme-presets-container');
+            container.innerHTML = '';
+            themePresets.forEach(theme => {
                 const button = document.createElement('button');
-                button.className = 'theme-preset-btn p-2 rounded-lg border-2 text-sm';
-                button.dataset.themeId = preset.id;
+                button.className = 'theme-preset-btn p-2 rounded-lg border text-sm';
+                button.dataset.theme = JSON.stringify({ bgColor: theme.bgColor, cardBgColor: theme.cardBgColor, textColor: theme.textColor });
+                
+                const previewStyle = theme.previewStyle || `background: linear-gradient(45deg, ${theme.bgColor} 50%, ${theme.cardBgColor} 50%)`;
+
                 button.innerHTML = `
-                    <span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, ${preset.theme.bgColor} 50%, ${preset.theme.cardBgColor} 50%); border: 1px solid #e5e7eb;"></span>
-                    ${preset.name}
+                    <span class="block w-full h-8 rounded mb-1" style="${previewStyle}"></span>
+                    ${theme.name}
                 `;
-                grid.appendChild(button);
+                button.addEventListener('click', () => {
+                    const themeData = JSON.parse(button.dataset.theme);
+                    const fullTheme = { ...themeData, layout: document.querySelector('input[name="layout-style"]:checked').value };
+                    localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(fullTheme));
+                    applyTheme(fullTheme);
+                });
+                container.appendChild(button);
             });
         }
-
+        
         function applyTheme(theme) {
             document.documentElement.style.setProperty('--bg-color', theme.bgColor);
             document.documentElement.style.setProperty('--card-bg-color', theme.cardBgColor);
@@ -1328,15 +1335,20 @@
             document.getElementById('bg-color-picker').value = theme.bgColor;
             document.getElementById('card-bg-color-picker').value = theme.cardBgColor;
             document.getElementById('text-color-picker').value = theme.textColor;
-            
             document.querySelector(`input[name="layout-style"][value="${theme.layout}"]`).checked = true;
 
-            // Update theme selection highlight
+            currentTheme = theme;
+            
+            // Highlight selected preset
             document.querySelectorAll('.theme-preset-btn').forEach(btn => {
-                btn.classList.toggle('selected', btn.dataset.themeId === theme.id);
+                const btnTheme = JSON.parse(btn.dataset.theme);
+                if (btnTheme.bgColor === theme.bgColor && btnTheme.cardBgColor === theme.cardBgColor && btnTheme.textColor === theme.textColor) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
             });
 
-            currentTheme = theme;
             if (expensesChartToday) { expensesChartToday.destroy(); expensesChartToday = null; }
             if (expensesChartAll) { expensesChartAll.destroy(); expensesChartAll = null; }
             if (ownerComparisonChartToday) { ownerComparisonChartToday.destroy(); ownerComparisonChartToday = null; }
@@ -1345,9 +1357,7 @@
         }
 
         function saveTheme() {
-            const selectedPreset = document.querySelector('.theme-preset-btn.selected');
             const theme = {
-                id: selectedPreset ? selectedPreset.dataset.themeId : 'custom',
                 layout: document.querySelector('input[name="layout-style"]:checked').value,
                 bgColor: document.getElementById('bg-color-picker').value,
                 cardBgColor: document.getElementById('card-bg-color-picker').value,
@@ -1359,84 +1369,221 @@
 
         function loadTheme() {
             const savedTheme = localStorage.getItem(`tripTheme_${tripId}`);
-            const defaultTheme = { id: 'light', layout: 'cards', ...themePresets.find(p => p.id === 'light').theme };
+            const defaultTheme = {
+                layout: 'cards',
+                bgColor: '#f1f5f9',
+                cardBgColor: '#ffffff',
+                textColor: '#334155'
+            };
             const theme = savedTheme ? JSON.parse(savedTheme) : defaultTheme;
             applyTheme(theme);
         }
-        
-        // --- Excel Export ---
-        async function exportToExcel() {
-            const button = document.getElementById('export-excel-btn');
-            const originalIcon = button.innerHTML;
-            button.innerHTML = '<span class="loader"></span>';
 
-            const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
-            let csvContent = "";
+        // --- NEW: Google Sheets Export Logic ---
+        window.gapiLoaded = () => {
+            gapi.load('client', initializeGapiClient);
+        };
 
-            if (uniqueOwners.length > 1) {
-                // Multiple sheets logic (simulated with concatenated CSV data)
-                for (const owner of uniqueOwners) {
-                    const ownerExpenses = allExpenses.filter(exp => exp.ownerName === owner);
-                    csvContent += await generateCsvForUser(owner, ownerExpenses);
-                    csvContent += "\n\n"; // Separator for different sheets
-                }
-            } else {
-                // Single sheet for all expenses
-                csvContent += await generateCsvForUser("כל ההוצאות", allExpenses);
-            }
-
-            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            const tripName = document.getElementById('trip-title').textContent.replace(/\s+/g, '_');
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Expenses_${tripName}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            button.innerHTML = originalIcon;
+        async function initializeGapiClient() {
+            await gapi.client.init({
+                apiKey: GOOGLE_API_KEY,
+                discoveryDocs: [DISCOVERY_DOC],
+            });
+            gapiInited = true;
         }
 
-        async function generateCsvForUser(sheetName, expenses) {
-            let csv = `גיליון: ${sheetName}\n`;
-            const headers = ["תאריך", "שעה", "פירוט", "קטגוריה", "סכום", "מטבע", "סכום בשקלים"];
-            csv += headers.join(",") + "\n";
-
-            const categoryTotals = {};
-            const currencyTotals = {};
+        window.gisLoaded = () => {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: SCOPES,
+                callback: '', // Callback is handled by the promise
+            });
+            gisInited = true;
+        };
+        
+        async function handleExportClick() {
+            if (!gapiInited || !gisInited) {
+                alert('Google API is not ready yet. Please try again in a moment.');
+                return;
+            }
             
-            for (const exp of expenses) {
+            const exportBtn = document.getElementById('export-sheets-btn');
+            const originalIcon = exportBtn.innerHTML;
+            exportBtn.innerHTML = '<span class="loader"></span>';
+            
+            // Get token
+            const tokenPromise = new Promise((resolve, reject) => {
+                try {
+                    tokenClient.callback = (resp) => {
+                        if (resp.error !== undefined) {
+                            reject(resp);
+                        }
+                        resolve(resp);
+                    };
+                    
+                    if (gapi.client.getToken() === null) {
+                         tokenClient.requestAccessToken({prompt: 'consent'});
+                    } else {
+                         tokenClient.requestAccessToken({prompt: ''});
+                    }
+                } catch(err) {
+                    reject(err);
+                }
+            });
+
+            tokenPromise.then(async (tokenResponse) => {
+                await exportToSheets();
+                exportBtn.innerHTML = originalIcon;
+            }).catch((error) => {
+                console.error("Google Auth Error:", error);
+                alert('An error occurred during Google authentication.');
+                exportBtn.innerHTML = originalIcon;
+            });
+        }
+        
+        async function exportToSheets() {
+            if (allExpenses.length === 0) {
+                alert('אין הוצאות לייצא.');
+                return;
+            }
+
+            try {
+                // 1. Create Spreadsheet
+                const createResponse = await gapi.client.sheets.spreadsheets.create({
+                    properties: { title: `הוצאות טיול - ${tripTitle}` }
+                });
+                const spreadsheetId = createResponse.result.spreadsheetId;
+                const spreadsheetUrl = createResponse.result.spreadsheetUrl;
+                
+                let requests = [];
+
+                // 2. Prepare sheets for each owner
+                const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+                requests.push({
+                    updateSheetProperties: {
+                        properties: { sheetId: 0, title: "סיכום כללי" },
+                        fields: "title"
+                    }
+                });
+                if (uniqueOwners.length > 1) {
+                    uniqueOwners.forEach(owner => {
+                        requests.push({ addSheet: { properties: { title: owner } } });
+                    });
+                }
+                
+                const batchUpdateResponse = await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId,
+                    requests,
+                });
+
+                const sheetMap = {};
+                batchUpdateResponse.result.replies.forEach(reply => {
+                    if (reply.addSheet) {
+                        sheetMap[reply.addSheet.properties.title] = reply.addSheet.properties.sheetId;
+                    }
+                });
+                sheetMap["סיכום כללי"] = 0;
+
+                // 3. Populate each sheet with data and summaries
+                let dataToUpdate = [];
+                
+                // Populate "סיכום כללי"
+                dataToUpdate.push(await prepareSheetData("סיכום כללי", allExpenses));
+                
+                // Populate owner sheets
+                if (uniqueOwners.length > 1) {
+                    for (const owner of uniqueOwners) {
+                        const ownerExpenses = allExpenses.filter(exp => exp.ownerName === owner);
+                        dataToUpdate.push(await prepareSheetData(owner, ownerExpenses));
+                    }
+                }
+
+                await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId,
+                    valueInputOption: 'USER_ENTERED',
+                    data: dataToUpdate,
+                });
+                
+                // 4. (Optional but recommended) Add formatting
+                let formatRequests = [];
+                Object.values(sheetMap).forEach(sheetId => {
+                    formatRequests.push(...getFormattingRequestsForSheet(sheetId));
+                });
+                 await gapi.client.sheets.spreadsheets.batchUpdate({ spreadsheetId, requests: formatRequests });
+
+                // 5. Success!
+                alert('הייצוא הושלם בהצלחה!');
+                window.open(spreadsheetUrl, '_blank');
+
+            } catch (error) {
+                console.error("Error exporting to sheets:", error);
+                alert(`אירעה שגיאה בייצוא: ${error.result?.error?.message || error.message}`);
+            }
+        }
+        
+        async function prepareSheetData(sheetName, expenses) {
+            const headers = ['תאריך', 'שעה', 'פירוט', 'קטגוריה', 'סכום', 'מטבע', 'סכום (₪)'];
+            let rows = [];
+            
+            for(const exp of expenses) {
                 const date = new Date(exp.date).toLocaleDateString('he-IL');
-                const time = exp.createdAt?.toDate() ? exp.createdAt.toDate().toLocaleTimeString('he-IL') : 'N/A';
-                const notes = `"${(exp.notes || '').replace(/"/g, '""')}"`;
-                const category = exp.category;
-                const amount = exp.amount;
-                const currency = exp.currency;
-                const ilsAmount = await convertToILS(amount, currency);
-
-                const row = [date, time, notes, category, amount, currency, ilsAmount.toFixed(2)];
-                csv += row.join(",") + "\n";
-
-                categoryTotals[category] = (categoryTotals[category] || 0) + ilsAmount;
-                currencyTotals[currency] = (currencyTotals[currency] || 0) + amount;
-            }
-
-            csv += "\n\nטבלת סיכום\n";
-            csv += "סיכום לפי קטגוריה (בשקלים)\n";
-            csv += "קטגוריה,סכום\n";
-            for (const [cat, total] of Object.entries(categoryTotals)) {
-                csv += `${cat},${total.toFixed(2)}\n`;
-            }
-
-            csv += "\nסיכום לפי מטבע\n";
-            csv += "מטבע,סכום\n";
-            for (const [curr, total] of Object.entries(currencyTotals)) {
-                csv += `${curr},${total.toFixed(2)}\n`;
+                const time = exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                const ilsAmount = await convertToILS(exp.amount, exp.currency);
+                rows.push([
+                    date,
+                    time,
+                    exp.notes || '-',
+                    exp.category,
+                    exp.amount,
+                    exp.currency,
+                    ilsAmount.toFixed(2)
+                ]);
             }
             
-            return csv;
+            // Add summaries
+            const summaryStartRow = rows.length + 3;
+            rows.push([], []); // Spacer rows
+            
+            // Category Summary
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                const ilsAmount = await convertToILS(exp.amount, exp.currency);
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + ilsAmount;
+            }
+            rows.push(['סיכום לפי קטגוריה', 'סכום (₪)']);
+            Object.entries(categoryTotals).forEach(([cat, total]) => rows.push([cat, total.toFixed(2)]));
+            rows.push(['סה"כ', `=SUM(B${summaryStartRow + 1}:B${rows.length})`]);
+            
+            const currencySummaryStartCol = 4; // Column D
+            const currencySummaryStartRow = summaryStartRow -1;
+            
+            // Currency Summary
+            const currencyTotals = {};
+            expenses.forEach(exp => {
+                currencyTotals[exp.currency] = (currencyTotals[exp.currency] || 0) + exp.amount;
+            });
+            rows[currencySummaryStartRow-1][currencySummaryStartCol-1] = 'סיכום לפי מטבע';
+            rows[currencySummaryStartRow-1][currencySummaryStartCol] = 'סכום';
+            Object.entries(currencyTotals).forEach(([curr, total], index) => {
+                 if(!rows[currencySummaryStartRow+index]) rows[currencySummaryStartRow+index] = [];
+                 rows[currencySummaryStartRow+index][currencySummaryStartCol-1] = curr;
+                 rows[currencySummaryStartRow+index][currencySummaryStartCol] = total.toFixed(2);
+            });
+            
+            return {
+                range: `${sheetName}!A1`,
+                values: [headers, ...rows]
+            };
+        }
+        
+        function getFormattingRequestsForSheet(sheetId) {
+            return [
+                 // Bold and freeze header row
+                { repeatCell: { range: { sheetId: sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } },
+                { updateSheetProperties: { properties: { sheetId: sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } },
+                // Auto-resize columns
+                { autoResizeDimensions: { dimensions: { sheetId: sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 7 } } }
+            ];
         }
 
 
@@ -1445,8 +1592,8 @@
             document.getElementById('add-expense-btn-header').addEventListener('click', () => openExpenseModal());
             document.getElementById('add-first-expense-btn').addEventListener('click', () => openExpenseModal());
             document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
-            document.getElementById('export-excel-btn').addEventListener('click', exportToExcel);
             document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
+            document.getElementById('export-sheets-btn').addEventListener('click', handleExportClick);
             
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
                 btn.addEventListener('click', () => closeModal(btn.dataset.closeModal));
@@ -1541,7 +1688,7 @@
             document.querySelectorAll('.settings-tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const tabId = btn.dataset.tab;
-                    document.querySelectorAll('.settings-tab-btn').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.settings-tab-btn').forEach(t => t.classList.remove('active', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300'));
                     btn.classList.add('active');
                     document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
                     document.getElementById(`settings-tab-${tabId}`).classList.add('active');
@@ -1553,21 +1700,6 @@
             document.getElementById('bg-color-picker').addEventListener('input', saveTheme);
             document.getElementById('card-bg-color-picker').addEventListener('input', saveTheme);
             document.getElementById('text-color-picker').addEventListener('input', saveTheme);
-            document.getElementById('theme-presets-grid').addEventListener('click', (e) => {
-                const btn = e.target.closest('.theme-preset-btn');
-                if (btn) {
-                    const preset = themePresets.find(p => p.id === btn.dataset.themeId);
-                    if (preset) {
-                        const fullTheme = { 
-                            id: preset.id, 
-                            layout: document.querySelector('input[name="layout-style"]:checked').value,
-                            ...preset.theme 
-                        };
-                        localStorage.setItem(`tripTheme_${tripId}`, JSON.stringify(fullTheme));
-                        applyTheme(fullTheme);
-                    }
-                }
-            });
         }
 
         // --- Start ---
