@@ -31,6 +31,7 @@
         .submenu.open { max-height: 1200px; }
         #trip-map-container { height: 450px; border-radius: 1rem; z-index: 0; }
         .modal { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
         .no-scrollbar::-webkit-scrollbar{display:none}
         .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
         .edit-dest-card { border-inline-start: 4px solid #38bdf8; }
@@ -48,9 +49,9 @@
             border: 1px solid rgba(226,232,240,0.7);
             transition: box-shadow .2s ease, transform .2s ease;
             will-change: transform;
+            cursor: pointer;
         }
         .card:hover{
-            /* בלי translateY כדי לא ליצור "קפיצה" בתחתית הדף */
             box-shadow: 0 12px 28px rgba(0,0,0,0.14);
         }
         .badge{
@@ -164,6 +165,19 @@
                 </footer>
             </div>
         </div>
+        
+        <!-- *** NEW: Details Modal *** -->
+        <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-[102] hidden items-center justify-center p-4 opacity-0">
+            <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col transform scale-95">
+                <header class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl sticky top-0">
+                    <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי הפריט</h3>
+                    <button id="details-modal-close" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </header>
+                <div id="details-modal-body" class="flex-grow overflow-y-auto p-6 space-y-4">
+                    <!-- Content will be injected here -->
+                </div>
+            </div>
+        </div>
 
         <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
             <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
@@ -232,9 +246,9 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -297,11 +311,17 @@
             tripDatesEdit: document.getElementById('trip-dates-edit'),
             destinationsList: document.getElementById('destinations-list'),
             addDestBtn: document.getElementById('add-dest-btn'),
+            // Details Modal
+            detailsModal: document.getElementById('details-modal'),
+            detailsModalTitle: document.getElementById('details-modal-title'),
+            detailsModalBody: document.getElementById('details-modal-body'),
+            detailsModalClose: document.getElementById('details-modal-close'),
         };
 
         let currentUser = null;
         let tripId = null;
         let tripData = null;
+        let allLogisticsItems = []; // Store all items for details modal
         let logisticsUnsubscribe = null;
 
         // Keep refs for per-destination map instances inside edit modal
@@ -358,8 +378,8 @@
             const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
             const q = query(logisticsCollectionRef);
             logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
-                const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                populateSummaries(allItems);
+                allLogisticsItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                populateSummaries(allLogisticsItems);
             }, (error) => {
                 console.error("Logistics snapshot error:", error);
             });
@@ -407,15 +427,45 @@
             buildNavButtons();
         }
         
+        // --- NEW: Sorting and Summary Population ---
         function populateSummaries(items) {
             const hotels = items.filter(item => item.type === 'hotel');
             const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
+
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+
+            const sorter = (a, b) => {
+                const dateA = getStartDate(a);
+                const dateB = getStartDate(b);
+
+                if (!dateA && !dateB) return 0;
+                if (!dateA) return 1; // items without dates go to the end
+                if (!dateB) return -1;
+
+                const isAPast = dateA < now;
+                const isBPast = dateB < now;
+
+                if (isAPast && !isBPast) return 1; // a is past, b is future -> b comes first
+                if (!isAPast && isBPast) return -1; // a is future, b is past -> a comes first
+                
+                // If both are past, sort descending (most recent past first)
+                if (isAPast && isBPast) {
+                     return dateB - dateA;
+                }
+
+                // If both are future, sort ascending (closest future first)
+                return dateA - dateB;
+            };
+
+            hotels.sort(sorter);
+            transports.sort(sorter);
+
             renderHotelSummary(hotels);
             renderTransportSummary(transports);
             renderCostsSummary(items);
         }
 
-        // --- New pretty hotel cards ---
         function renderHotelSummary(hotels) {
             const container = DOM.hotelSummaryContainer;
             if (hotels.length === 0) {
@@ -430,7 +480,7 @@
                 const price = hotel.price || 0;
 
                 return `
-                <div class="card p-4">
+                <div class="card p-4" data-id="${hotel.id}">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                       <h4 class="text-lg font-extrabold text-slate-800 truncate">${title}</h4>
@@ -448,7 +498,6 @@
             }).join('');
         }
 
-        // --- New pretty transport cards ---
         function renderTransportSummary(transports) {
             const container = DOM.transportSummaryContainer;
             if (transports.length === 0) {
@@ -476,10 +525,10 @@
                 const date = item.dates || item.date || '';
 
                 return `
-                <div class="card p-4">
+                <div class="card p-4" data-id="${item.id}">
                   <div class="flex items-center gap-4">
                     <div class="shrink-0 w-12 h-12 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center">
-                      <i class="fas ${getIcon(item.type)} text-sky-600"></i>
+                      <i class="fas ${getIcon(item.type)} fa-lg text-sky-600"></i>
                     </div>
                     <div class="min-w-0">
                       <h4 class="font-bold text-slate-800 truncate">${title || 'מעבר'}</h4>
@@ -643,6 +692,21 @@
             return dates;
         }
 
+        // --- NEW: Date parsing for sorting ---
+        function getStartDate(item) {
+            let dateStr = item.dates || item.date;
+            if (!dateStr || typeof dateStr !== 'string') return null;
+
+            if (dateStr.includes(' - ')) {
+                dateStr = dateStr.split(' - ')[0].trim();
+            }
+
+            const parts = dateStr.split('/');
+            if (parts.length !== 3) return null;
+            // new Date(year, monthIndex, day)
+            return new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+
         function toggleSidebar() {
             DOM.sidebar.classList.toggle('translate-x-full');
             DOM.overlay.classList.toggle('hidden');
@@ -665,6 +729,104 @@
             }
             DOM.navModal.classList.remove('hidden');
             setTimeout(() => DOM.navModal.classList.remove('opacity-0'), 10);
+        }
+
+        // --- NEW: Details Modal Logic ---
+        function openDetailsModal(item) {
+            if (!item) return;
+            DOM.detailsModalTitle.textContent = item.name || `פרטי ${item.type}`;
+            DOM.detailsModalBody.innerHTML = generateDetailsHtml(item);
+
+            DOM.detailsModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.detailsModal.classList.remove('opacity-0');
+                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeDetailsModal() {
+            DOM.detailsModal.classList.add('opacity-0');
+            DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => DOM.detailsModal.classList.add('hidden'), 300);
+        }
+
+        function generateDetailsHtml(item) {
+            let html = '';
+            const detail = (icon, label, value, extraClass = '') => {
+                if (!value && typeof value !== 'number') return '';
+                return `<div class="flex items-start gap-4 ${extraClass}">
+                    <i class="fas ${icon} fa-fw text-slate-400 mt-1"></i>
+                    <div class="flex-1">
+                        <p class="text-sm text-slate-500">${label}</p>
+                        <p class="font-semibold text-slate-800 whitespace-pre-wrap">${value}</p>
+                    </div>
+                </div>`;
+            };
+
+            switch (item.type) {
+                case 'hotel':
+                    html += detail('fa-hotel', 'שם המלון', item.name);
+                    html += detail('fa-calendar-days', 'תאריכים', item.dates);
+                    html += detail('fa-map-marker-alt', 'יעד', item.destination);
+                    html += detail('fa-location-dot', 'כתובת', item.address);
+                    html += detail('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '');
+                    html += detail('fa-building-user', 'הוזמן דרך', item.booked_via);
+                    html += detail('fa-info-circle', 'פרטים נוספים', item.additional_details);
+                    if (item.link || item.address) {
+                        html += `<div class="mt-6 pt-4 border-t grid grid-cols-2 gap-4">
+                            ${item.link ? `<a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>` : '<div class="opacity-50 text-center bg-blue-200 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed">אין קישור</div>'}
+                            ${item.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition">ניווט למלון <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>` : '<div class="opacity-50 text-center bg-slate-300 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed">אין כתובת</div>'}
+                        </div>`;
+                    }
+                    break;
+                case 'flight':
+                    const from = item.from || {};
+                    const to = item.to || {};
+                    html += detail('fa-plane-departure', 'ממריאים מ', `${from.destination || ''} (${from.airport_name || ''})`);
+                    html += detail('fa-plane-arrival', 'נוחתים ב', `${to.destination || ''} (${to.airport_name || ''})`);
+                    html += detail('fa-calendar-day', 'תאריך', item.dates);
+                    html += detail('fa-clock', 'שעת המראה', item.departure_time);
+                    html += detail('fa-clock', 'שעת נחיתה', item.arrival_time);
+                    html += detail('fa-building', 'חברת תעופה', item.airline);
+                    html += detail('fa-hashtag', 'מספר טיסה', item.flight_number);
+                    html += detail('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '');
+                    html += detail('fa-chair', 'מקומות ישיבה', item.seats?.join(', '));
+                    html += detail('fa-suitcase', 'כבודה', `תיקי יד: ${item.hand_bag_count || 0}, טרולי: ${item.trolley_count || 0}, מזוודות: ${item.checked_bags_count || 0}`);
+                    html += detail('fa-info-circle', 'פרטים נוספים', item.additional_details);
+                    break;
+                case 'car_rental':
+                    html += detail('fa-car', 'השכרת רכב', item.destination);
+                    html += detail('fa-calendar-days', 'תאריכים', item.dates);
+                    html += detail('fa-clock', 'שעת איסוף', item.pickup_time);
+                    html += detail('fa-clock', 'שעת החזרה', item.return_time);
+                    html += detail('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location);
+                    html += detail('fa-car-side', 'סוג רכב', item.car_type);
+                    html += detail('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '');
+                    html += detail('fa-building-user', 'הוזמן דרך', item.booked_via);
+                    html += detail('fa-link', 'קישור להזמנה', item.booking_link ? `<a href="${item.booking_link}" target="_blank" class="text-blue-600 hover:underline">פתח קישור</a>` : '');
+                    html += detail('fa-info-circle', 'פרטים נוספים', item.additional_details);
+                    break;
+                case 'ferry':
+                case 'train':
+                    const isFerry = item.type === 'ferry';
+                    const icon = isFerry ? 'fa-ship' : 'fa-train';
+                    const fromLabel = isFerry ? 'נמל יציאה' : 'תחנת יציאה';
+                    const toLabel = isFerry ? 'נמל הגעה' : 'תחנת הגעה';
+                    const fromVal = item.from_destination || item.from_station;
+                    const toVal = item.to_destination || item.to_station;
+                    html += detail(icon, 'סוג', isFerry ? 'מעבורת' : 'רכבת');
+                    html += detail('fa-building', 'חברה', item.company);
+                    html += detail('fa-map-pin', fromLabel, fromVal);
+                    html += detail('fa-map-pin', toLabel, toVal);
+                    html += detail('fa-calendar-day', 'תאריך', item.date);
+                    html += detail('fa-clock', 'שעת יציאה', item.departure_time);
+                    html += detail('fa-clock', 'שעת הגעה', item.arrival_time);
+                    html += detail('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '');
+                    html += detail('fa-link', 'קישור להזמנה', item.booking_link ? `<a href="${item.booking_link}" target="_blank" class="text-blue-600 hover:underline">פתח קישור</a>` : '');
+                    html += detail('fa-info-circle', 'פרטים נוספים', item.additional_details);
+                    break;
+            }
+            return html;
         }
 
         // --- Edit Destinations Modal Logic ---
@@ -847,6 +1009,17 @@
         DOM.editDestCancel.addEventListener('click', closeEditDestinationsModal);
         DOM.addDestBtn.addEventListener('click', () => addDestRow());
         DOM.saveDestinationsBtn.addEventListener('click', saveDestinationsChanges);
+
+        // --- NEW: Details Modal Listeners ---
+        DOM.detailsModalClose.addEventListener('click', closeDetailsModal);
+        document.addEventListener('click', (e) => {
+            const card = e.target.closest('.card[data-id]');
+            if (card) {
+                const itemId = card.dataset.id;
+                const item = allLogisticsItems.find(i => i.id === itemId);
+                openDetailsModal(item);
+            }
+        });
 
         // --- Start the page ---
         initPage();
