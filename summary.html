@@ -155,16 +155,17 @@
 
 
     <script type="module">
-        // --- FIXED: Updated Firebase to a stable version (e.g., 10.12.2) ---
+        // Using a stable Firebase version
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import {
-  getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
-  serverTimestamp, deleteDoc, updateDoc,
-  enableIndexedDbPersistence,        // ⬅️ חדש
-  enableMultiTabIndexedDbPersistence // ⬅️ אופציונלי (fallback)
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        // --- Firebase Configuration (Same as trip page) ---
+            getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
+            serverTimestamp, deleteDoc, updateDoc,
+            enableIndexedDbPersistence, 
+            enableMultiTabIndexedDbPersistence
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -179,20 +180,19 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-// --- Offline persistence (IndexedDB) ---
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // כנראה כמה טאבים פתוחים – ננסה מצב multi-tab:
-    console.warn('IndexedDB persistence failed-precondition. Trying multi-tab…', err);
-    enableMultiTabIndexedDbPersistence(db).catch(e => {
-      console.warn('Multi-tab persistence error:', e);
-    });
-  } else if (err.code === 'unimplemented') {
-    console.warn('Browser does not support IndexedDB persistence.');
-  } else {
-    console.warn('Persistence error:', err);
-  }
-});
+        // --- Offline persistence (IndexedDB) ---
+        enableIndexedDbPersistence(db).catch((err) => {
+          if (err.code === 'failed-precondition') {
+            console.warn('IndexedDB persistence failed-precondition. Trying multi-tab…', err);
+            enableMultiTabIndexedDbPersistence(db).catch(e => {
+              console.warn('Multi-tab persistence error:', e);
+            });
+          } else if (err.code === 'unimplemented') {
+            console.warn('Browser does not support IndexedDB persistence.');
+          } else {
+            console.warn('Persistence error:', err);
+          }
+        });
 
         // --- Global State & Constants ---
         let tripId = null;
@@ -242,7 +242,6 @@ enableIndexedDbPersistence(db).catch((err) => {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                // Using a custom modal/alert in the future would be better than window.alert
                 alert("שגיאה: לא נמצא מזהה טיול.");
                 window.location.href = 'index.html';
                 return;
@@ -261,7 +260,7 @@ enableIndexedDbPersistence(db).catch((err) => {
         }
 
         async function loadPageData() {
-            if (logisticsUnsubscribe) logisticsUnsubscribe(); // Detach previous listener if exists
+            if (logisticsUnsubscribe) logisticsUnsubscribe(); 
 
             const tripRef = doc(db, "trips", tripId);
             const tripSnap = await getDoc(tripRef);
@@ -273,7 +272,6 @@ enableIndexedDbPersistence(db).catch((err) => {
             }
 
             const tripDataFromSnap = tripSnap.data();
-
             const canAccess = tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid);
 
             if (!canAccess) {
@@ -390,16 +388,16 @@ enableIndexedDbPersistence(db).catch((err) => {
             card.innerHTML = `
                 <div class="flex-grow">
                     <div class="flex justify-between items-start">
-                       <h4 class="font-bold text-lg text-slate-800">${item.name}</h4>
+                       <h4 class="font-bold text-lg text-slate-800">${item.name || 'מלון ללא שם'}</h4>
                        <div class="flex gap-2">
                          <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}"><i class="fas fa-pencil"></i></button>
-                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${item.name}"><i class="fas fa-trash"></i></button>
+                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${item.name || 'מלון'}"><i class="fas fa-trash"></i></button>
                        </div>
                     </div>
-                    <p class="text-sm text-slate-500 mb-3">${item.destination} | ${item.dates}</p>
+                    <p class="text-sm text-slate-500 mb-3">${item.destination || ''} | ${item.dates || ''}</p>
                     <ul class="space-y-2 text-slate-600 text-sm mb-4">
                         <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> $${item.price ? item.price.toLocaleString() : 'לא צוין'}</li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-building-user fa-fw text-slate-500"></i> <strong>הוזמן דרך:</strong> ${item.booked_via}</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-building-user fa-fw text-slate-500"></i> <strong>הוזמן דרך:</strong> ${item.booked_via || ''}</li>
                     </ul>
                     ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 </div>
@@ -421,22 +419,22 @@ enableIndexedDbPersistence(db).catch((err) => {
                 case 'flight':
                     title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
                     icon = 'fa-plane-departure';
-                    details = `<p class="text-sm text-slate-500">${item.airline}</p><p class="text-sm text-slate-600 font-semibold">${item.dates || ''}</p>`;
+                    details = `<p class="text-sm text-slate-500">${item.airline || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.dates || ''}</p>`;
                     break;
                 case 'car_rental':
-                    title = `רכב שכור: ${item.destination}`;
+                    title = `רכב שכור: ${item.destination || ''}`;
                     icon = 'fa-car';
-                    details = `<p class="text-sm text-slate-500">${item.booked_via}</p><p class="text-sm text-slate-600 font-semibold">$${(item.price || 0).toLocaleString()}</p>`;
+                    details = `<p class="text-sm text-slate-500">${item.booked_via || ''}</p><p class="text-sm text-slate-600 font-semibold">$${(item.price || 0).toLocaleString()}</p>`;
                     break;
                 case 'ferry':
-                    title = `מעבורת: ${item.from_destination} ← ${item.to_destination}`;
+                    title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
                     icon = 'fa-ship';
-                    details = `<p class="text-sm text-slate-500">${item.company}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
+                    details = `<p class="text-sm text-slate-500">${item.company || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
                     break;
                 case 'train':
-                    title = `רכבת: ${item.from_station} ← ${item.to_station}`;
+                    title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
                     icon = 'fa-train';
-                    details = `<p class="text-sm text-slate-500">${item.company}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
+                    details = `<p class="text-sm text-slate-500">${item.company || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
                     break;
                 default:
                     title = "מעבר לא ידוע";
@@ -508,15 +506,16 @@ enableIndexedDbPersistence(db).catch((err) => {
             }, 300);
         }
         
+        // --- שינוי: כל השדות הוגדרו כאופציונליים (הוסרה התכונה required) ---
         function getStepDefinition() {
             const steps = {
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
                 hotel: [
-                    { title: "פרטי המלון", fields: [{id: 'name', label: 'שם המלון', required: true}, {id: 'booked_via', label: 'הוזמן דרך?', required: true}] },
-                    { title: "תאריכים ומחיר", fields: [{id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange', required: true}, {id: 'price', label: 'מחיר (בדולרים)', type: 'number', required: true}] },
+                    { title: "פרטי המלון", fields: [{id: 'name', label: 'שם המלון'}, {id: 'booked_via', label: 'הוזמן דרך?'}] },
+                    { title: "תאריכים ומחיר", fields: [{id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange'}, {id: 'price', label: 'מחיר (בדולרים)', type: 'number'}] },
                     { title: "מיקום המלון", fields: [
-                        {id: 'destination', label: 'יעד (עיר, אזור)', type: 'text', required: true},
-                        {id: 'address', label: 'כתובת מדויקת', type: 'addressmap', required: true}
+                        {id: 'destination', label: 'יעד (עיר, אזור)', type: 'text'},
+                        {id: 'address', label: 'כתובת מדויקת', type: 'addressmap'}
                     ]},
                     { title: "פרטים נוספים", fields: [
                         {id: 'link', label: 'קישור לאתר (בוקינג וכו\')', type: 'url'},
@@ -531,31 +530,31 @@ enableIndexedDbPersistence(db).catch((err) => {
                 ] }] },
                 car_rental: [
                     { title: "פרטי השכרת הרכב", fields: [
-                        {id: 'destination', label: 'לאיזה יעד?', type: 'text', required: true},
-                        {id: 'booked_via', label: 'דרך איפה הוזמן?', required: true},
-                        {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?', required: true},
+                        {id: 'destination', label: 'לאיזה יעד?', type: 'text'},
+                        {id: 'booked_via', label: 'דרך איפה הוזמן?'},
+                        {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?'},
                     ]},
                     { title: "תאריכים וסוג", fields: [
-                        {id: 'dates', label: 'תאריכי איסוף והחזרה', type: 'daterange', required: true},
-                        {id: 'pickup_time', label: 'שעת איסוף', type: 'time', required: true},
-                        {id: 'return_time', label: 'שעת החזרה', type: 'time', required: true},
-                        {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני', required: true},
+                        {id: 'dates', label: 'תאריכי איסוף והחזרה', type: 'daterange'},
+                        {id: 'pickup_time', label: 'שעת איסוף', type: 'time'},
+                        {id: 'return_time', label: 'שעת החזרה', type: 'time'},
+                        {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני'},
                     ]},
                     { title: "עלות ופרטים נוספים", fields: [
-                        {id: 'price', label: 'מחיר (בדולרים)', type: 'number', required: true},
+                        {id: 'price', label: 'מחיר (בדולרים)', type: 'number'},
                         {id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
                     ]}
                 ],
                 flight: [
-                    { title: "מסלול הטיסה", fields: [ { id: 'flightroute', type: 'flightroute', required: true } ]},
+                    { title: "מסלול הטיסה", fields: [ { id: 'flightroute', type: 'flightroute'} ]},
                     { title: "פרטי הטיסה", fields: [
-                        { id: 'airline', label: 'חברת תעופה', required: true },
-                        { id: 'flight_number', label: 'מספר טיסה', required: true},
-                        { id: 'dates', label: 'תאריך טיסה', type: 'date', required: true },
-                        { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time', required: true },
-                        { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time', required: true },
-                        { id: 'price_per_person', label: 'מחיר לאדם (בדולרים)', type: 'number', required: true },
+                        { id: 'airline', label: 'חברת תעופה' },
+                        { id: 'flight_number', label: 'מספר טיסה'},
+                        { id: 'dates', label: 'תאריך טיסה', type: 'date' },
+                        { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
+                        { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
+                        { id: 'price_per_person', label: 'מחיר לאדם (בדולרים)', type: 'number' },
                     ]},
                     { title: "כבודה, ישיבה ופרטים נוספים", fields: [ 
                         { id: 'luggage', type: 'luggage' }, 
@@ -565,15 +564,15 @@ enableIndexedDbPersistence(db).catch((err) => {
                 ],
                 ferry: [
                     { title: "פרטי המעבורת", fields: [
-                        { id: 'company', label: 'חברה מפעילה', required: true },
-                        { id: 'from_destination', label: 'נקודת יציאה', type: 'text', required: true },
-                        { id: 'to_destination', label: 'נקודת הגעה', type: 'text', required: true },
+                        { id: 'company', label: 'חברה מפעילה' },
+                        { id: 'from_destination', label: 'נקודת יציאה', type: 'text' },
+                        { id: 'to_destination', label: 'נקודת הגעה', type: 'text' },
                     ]},
                     { title: "תאריכים ועלות", fields: [
-                        { id: 'date', label: 'תאריך', type: 'date', required: true },
-                        { id: 'departure_time', label: 'שעת יציאה', type: 'time', required: true },
-                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time', required: true },
-                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number', required: true },
+                        { id: 'date', label: 'תאריך', type: 'date' },
+                        { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
+                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
+                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number' },
                     ]},
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
@@ -582,16 +581,15 @@ enableIndexedDbPersistence(db).catch((err) => {
                 ],
                 train: [
                     { title: "פרטי הרכבת", fields: [
-                        { id: 'company', label: 'חברה מפעילה', required: true },
-                        { id: 'from_station', label: 'תחנת יציאה', type: 'text', required: true },
-                        { id: 'to_station', label: 'תחנת הגעה', type: 'text', required: true },
+                        { id: 'company', label: 'חברה מפעילה' },
+                        { id: 'from_station', label: 'תחנת יציאה', type: 'text' },
+                        { id: 'to_station', label: 'תחנת הגעה', type: 'text' },
                     ]},
-                    // --- FIXED: Reconstructed the missing fields for the train step ---
                     { title: "תאריכים ועלות", fields: [
-                        { id: 'date', label: 'תאריך', type: 'date', required: true },
-                        { id: 'departure_time', label: 'שעת יציאה', type: 'time', required: true },
-                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time', required: true },
-                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number', required: true },
+                        { id: 'date', label: 'תאריך', type: 'date' },
+                        { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
+                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
+                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number' },
                     ]},
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
@@ -657,7 +655,7 @@ enableIndexedDbPersistence(db).catch((err) => {
                         <label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                             <div class="flex gap-2 mt-1">
                                 <input type="text" id="${field.id}" value="${modalState.data.address || ''}" class="block w-full p-2 border rounded-md shadow-sm" placeholder="הזן כתובת מלאה">
-                                <button type="button" data-action="find-address" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא</button>
+                                <button type="button" data-action="find-address" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-24 text-center">מצא</button>
                             </div>
                         </label>
                         <div id="map-container" class="mt-4 small-map-container"></div>
@@ -665,8 +663,8 @@ enableIndexedDbPersistence(db).catch((err) => {
                 case 'flightroute':
                     return `
                         <div class="space-y-4">
-                            ${renderFlightLeg('from', 'מאיפה?', modalState.data)}
-                            ${renderFlightLeg('to', 'לאיפה?', modalState.data)}
+                            ${renderFlightLeg('from', 'מאיפה?', modalState.data, 'מאיזו עיר ממריאים?')}
+                            ${renderFlightLeg('to', 'לאיפה?', modalState.data, 'באיזו עיר נוחתים?')}
                             <div id="connections-container" class="space-y-4">${(modalState.data.connections || []).map((conn, i) => renderFlightLeg(`connection-${i}`, `קונקשן ${i+1}`, conn)).join('')}</div>
                             <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף קונקשן</button>
                             <hr class="my-6"/>
@@ -703,7 +701,8 @@ enableIndexedDbPersistence(db).catch((err) => {
             }
         }
         
-        function renderFlightLeg(id, legend, data = {}) {
+        // --- שינוי: הוספת פרמטר destinationLabel לשינוי התווית "יעד" ---
+        function renderFlightLeg(id, legend, data = {}, destinationLabel = 'יעד') {
             let legData = {};
             if (id === 'from' || id === 'to') {
                 legData = data[id] || {};
@@ -715,12 +714,12 @@ enableIndexedDbPersistence(db).catch((err) => {
             return `<fieldset class="border p-4 rounded-lg" id="fieldset-${id}">
                 <legend class="px-2 font-semibold">${legend}</legend>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <label><span class="text-sm font-semibold text-slate-600">יעד</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
+                    <label><span class="text-sm font-semibold text-slate-600">${destinationLabel}</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
                     <label><span class="text-sm font-semibold text-slate-600">שם שדה תעופה</span><input type="text" id="${id}_airport_name" value="${legData.airport_name || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: JFK"></label>
                     <label class="md:col-span-2"><span class="text-sm font-semibold text-slate-600">כתובת שדה תעופה</span>
                         <div class="flex gap-2 mt-1">
                             <input type="text" id="${id}_airport_address" value="${legData.airport_address || ''}" class="block w-full p-2 border rounded-md">
-                            <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא</button>
+                            <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-24 text-center">מצא</button>
                         </div>
                     </label>
                     <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container"></div>
@@ -747,7 +746,6 @@ enableIndexedDbPersistence(db).catch((err) => {
             
             if (document.getElementById('add-seat-btn')) {
                 (modalState.data.seats || []).forEach(seat => addSeatInput(seat));
-                // --- FIXED: Removed syntax error from here ---
             }
         }
         
@@ -765,11 +763,9 @@ enableIndexedDbPersistence(db).catch((err) => {
             const stepDefinitions = getStepDefinition();
             if (!stepDefinitions.length) return false;
             const stepDef = stepDefinitions[modalState.currentStep - 1];
-            let isValid = true;
             DOM.modalError.textContent = '';
 
             stepDef.fields.forEach(field => {
-                if (!isValid) return; 
                 let value;
                 if (field.type === 'radio') {
                     const checked = document.querySelector(`input[name="${field.id}"]:checked`);
@@ -798,23 +794,18 @@ enableIndexedDbPersistence(db).catch((err) => {
                 else {
                     const input = document.getElementById(field.id);
                     if (input) {
-                         value = field.type === 'number' ? parseFloat(input.value) || 0 : input.value;
+                         value = field.type === 'number' ? parseFloat(input.value) || null : input.value;
                     }
                 }
                 
-                if (field.required && !value) {
-                    // --- FIXED: Removed syntax error from here ---
-                    DOM.modalError.textContent = `שדה חובה: ${field.label}`;
-                    isValid = false;
-                }
-                
+                // --- שינוי: אין יותר בדיקת חובה, רק שמירת הנתון ---
                 if (field.id) modalState.data[field.id] = value;
             });
             
-            if (isValid && !modalState.mainType) modalState.mainType = modalState.data.mainType;
-            if (isValid && modalState.mainType === 'transport' && !modalState.subType) modalState.subType = modalState.data.subType;
+            if (!modalState.mainType) modalState.mainType = modalState.data.mainType;
+            if (modalState.mainType === 'transport' && !modalState.subType) modalState.subType = modalState.data.subType;
             
-            return isValid;
+            return true; // Always valid now
         }
 
         async function handleFormSubmit(e) {
@@ -871,16 +862,28 @@ enableIndexedDbPersistence(db).catch((err) => {
             modalState.maps[mapKey] = map;
         }
 
+        // --- שינוי: הוספת מגבלת זמן (timeout) לחיפוש למניעת תקיעות ---
         async function geocodeAddress(address) {
             if (!address) return null;
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
+
             try {
-                const response = await fetch(url);
+                const response = await fetch(url, { signal: controller.signal });
                 const data = await response.json();
                 return (data && data.length > 0) ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
             } catch (error) {
-                console.error('Geocoding error:', error);
+                if (error.name === 'AbortError') {
+                    console.error('Geocoding request timed out.');
+                    DOM.modalError.textContent = 'החיפוש ארך זמן רב מדי.';
+                } else {
+                    console.error('Geocoding error:', error);
+                    DOM.modalError.textContent = 'שגיאה בחיפוש הכתובת.';
+                }
                 return null;
+            } finally {
+                clearTimeout(timeoutId);
             }
         }
 
@@ -910,7 +913,9 @@ enableIndexedDbPersistence(db).catch((err) => {
                      modalState.data.coords = coords;
                 }
             } else {
-                DOM.modalError.textContent = 'הכתובת לא נמצאה.';
+                 if (!DOM.modalError.textContent.includes('זמן רב מדי')) {
+                    DOM.modalError.textContent = 'הכתובת לא נמצאה.';
+                }
             }
         }
         
@@ -1044,16 +1049,29 @@ enableIndexedDbPersistence(db).catch((err) => {
             }, 10);
         });
 
-        DOM.modalForm.addEventListener('click', e => {
+        // --- שינוי: הוספת טיפול במצב טעינה לכפתורי החיפוש ---
+        DOM.modalForm.addEventListener('click', async e => {
             const target = e.target.closest('button');
             if (!target) return;
             const { action, legId } = target.dataset;
 
+            const handleSearch = async (searchFunction) => {
+                const originalText = target.innerHTML;
+                target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                target.disabled = true;
+                try {
+                    await searchFunction();
+                } finally {
+                    target.innerHTML = originalText;
+                    target.disabled = false;
+                }
+            };
+
             if (action === 'find-address') {
-                findAddressOnMap('hotel', document.getElementById('address').value);
+                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value));
             } else if (action === 'find-flight-leg') {
                 const address = document.getElementById(`${legId}_airport_address`).value;
-                findAddressOnMap(legId, address);
+                await handleSearch(() => findAddressOnMap(legId, address));
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
             } else if (target.id === 'calculate-final-route-btn') {
@@ -1096,11 +1114,11 @@ enableIndexedDbPersistence(db).catch((err) => {
         // --- Summary Table Logic ---
         function renderSummaryTables() {
             const categories = {
-                hotel: { label: '🏨 מלונות', total: 0, items: [] },
-                flight: { label: '✈️ טיסות', total: 0, items: [] },
-                car_rental: { label: '🚗 רכבים', total: 0, items: [] },
-                ferry: { label: '🚢 מעבורות', total: 0, items: [] },
-                train: { label: '🚆 רכבות', total: 0, items: [] },
+                hotel: { label: '🏨 מלונות', total: 0 },
+                flight: { label: '✈️ טיסות', total: 0 },
+                car_rental: { label: '🚗 רכבים', total: 0 },
+                ferry: { label: '🚢 מעבורות', total: 0 },
+                train: { label: '🚆 רכבות', total: 0 },
             };
 
             allItems.forEach(item => {
