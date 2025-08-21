@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מרכז הקיצורים | API</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Assistant', sans-serif; }
+        .api-card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 8px_25px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+        }
+        .input-group {
+            position: relative;
+        }
+        .api-input {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 100%;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #334155;
+            padding-left: 3rem; /* Space for the button */
+        }
+        .copy-btn {
+            position: absolute;
+            left: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 0.375rem;
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .copy-btn:hover {
+            background-color: #2563eb;
+        }
+        .copy-btn .fa-copy {
+            display: inline-block;
+        }
+        .copy-btn .fa-check {
+            display: none;
+        }
+        .copy-btn.copied .fa-copy {
+            display: none;
+        }
+        .copy-btn.copied .fa-check {
+            display: inline-block;
+        }
+        .endpoint-url {
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-cogs text-5xl text-slate-600 animate-spin"></i>
+        <p class="text-xl font-bold text-slate-700">מייצר את מפתחות ה-API שלך...</p>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-slate-800">🛠️ מרכז הקיצורים (API)</h1>
+            <p class="text-slate-600 mt-2 max-w-3xl mx-auto">
+                הדף הזה מספק לך את כל הנתונים הדרושים כדי ליצור אינטגרציות וקיצורים אישיים. כל קיצור הוא בעצם קריאה לכתובת URL (Endpoint) שתפעיל Service Worker ותחזיר לך מידע רלוונטי.
+            </p>
+             <a id="back-to-trip-btn" href="#" class="mt-4 inline-block text-blue-600 font-semibold hover:underline">
+                <i class="fas fa-arrow-left ml-1"></i> חזור לדף הטיול
+            </a>
+        </header>
+
+        <main class="space-y-8">
+            <!-- API Credentials -->
+            <section class="api-card p-6">
+                <h2 class="text-2xl font-bold text-slate-800 mb-4">פרטי ה-API שלך</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">מזהה הטיול (Trip ID)</label>
+                        <div class="input-group">
+                            <input type="text" id="trip-id-input" class="api-input" readonly value="טוען...">
+                            <button class="copy-btn" data-target="trip-id-input" title="העתק מזהה טיול"><i class="fas fa-copy"></i><i class="fas fa-check"></i></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">טוקן גישה (API Token)</label>
+                        <div class="input-group">
+                            <input type="text" id="api-token-input" class="api-input" readonly value="טוען...">
+                            <button class="copy-btn" data-target="api-token-input" title="העתק טוקן"><i class="fas fa-copy"></i><i class="fas fa-check"></i></button>
+                        </div>
+                         <p class="text-xs text-slate-500 mt-1">טוקן זה הוא זמני ותקף לשעה. אם הקיצור מפסיק לעבוד, יש לייצר אחד חדש מדף זה.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Endpoints -->
+            <section>
+                <h2 class="text-2xl font-bold text-slate-800 mb-4 text-center">נקודות קצה (Endpoints) לקיצורים</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- Shortcut 1: Navigate to Hotel -->
+                    <div class="api-card p-6">
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ניווט למלון הנוכחי</h3>
+                        <p class="text-slate-500 mt-2 text-sm">קריאה לכתובת זו תחזיר הפנייה (redirect) אוטומטית לאפליקציית הניווט (Waze/Google Maps) עם הכתובת של המלון להיום.</p>
+                        <div class="mt-4">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">URL Endpoint</label>
+                            <div class="input-group">
+                                <input type="text" id="hotel-nav-url" class="api-input endpoint-url" readonly value="טוען...">
+                                <button class="copy-btn" data-target="hotel-nav-url" title="העתק כתובת"><i class="fas fa-copy"></i><i class="fas fa-check"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shortcut 2: Daily Schedule -->
+                    <div class="api-card p-6">
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-calendar-day text-green-500"></i> קבל לו"ז יומי</h3>
+                        <p class="text-slate-500 mt-2 text-sm">קריאה לכתובת זו תחזיר טקסט פשוט עם סיכום של כל הפעילויות המתוכננות להיום, מוכן להצגה בהתראה או להעתקה.</p>
+                        <div class="mt-4">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">URL Endpoint</label>
+                            <div class="input-group">
+                                <input type="text" id="schedule-url" class="api-input endpoint-url" readonly value="טוען...">
+                                <button class="copy-btn" data-target="schedule-url" title="העתק כתובת"><i class="fas fa-copy"></i><i class="fas fa-check"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shortcut 3: Nearby Places -->
+                    <div class="api-card p-6 lg:col-span-2">
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-map-location-dot text-orange-500"></i> מצא מקומות קרובים</h3>
+                        <p class="text-slate-500 mt-2 text-sm">
+                            זהו קיצור דינמי. יש להשתמש בכתובת הבסיס ולהוסיף לה את פרמטרי המיקום הנוכחי שלך (קו רוחב וקו אורך), אותם ניתן לקבל אוטומטית באפליקציית "קיצורים".
+                            הקריאה תחזיר רשימת מקומות ממוינת לפי מרחק.
+                        </p>
+                        <div class="mt-4">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">תבנית URL (יש להוסיף מיקום)</label>
+                            <div class="input-group">
+                                <input type="text" id="nearby-url" class="api-input endpoint-url" readonly value="טוען...">
+                                <button class="copy-btn" data-target="nearby-url" title="העתק תבנית"><i class="fas fa-copy"></i><i class="fas fa-check"></i></button>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">לדוגמה: יש להוסיף בסוף <code class="text-red-500">&lat=31.7&lon=35.2</code></p>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        
+        // --- Firebase Init ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // --- DOM Elements ---
+        const DOM = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            backToTripBtn: document.getElementById('back-to-trip-btn'),
+            tripIdInput: document.getElementById('trip-id-input'),
+            apiTokenInput: document.getElementById('api-token-input'),
+            hotelNavUrl: document.getElementById('hotel-nav-url'),
+            scheduleUrl: document.getElementById('schedule-url'),
+            nearbyUrl: document.getElementById('nearby-url'),
+            copyButtons: document.querySelectorAll('.copy-btn'),
+        };
+
+        let tripId = null;
+
+        // --- Page Initialization ---
+        function initPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('id');
+            if (!tripId) {
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
+                return;
+            }
+            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+            DOM.tripIdInput.value = tripId;
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    generateApiDetails(user);
+                } else {
+                    window.location.href = 'login.html';
+                }
+            });
+        }
+
+        async function generateApiDetails(user) {
+            try {
+                const token = await user.getIdToken(true); // Force refresh
+                DOM.apiTokenInput.value = token;
+
+                // Build the endpoint URLs
+                const baseUrl = `${window.location.origin}/api`; // Assuming SW will be at /api
+                
+                DOM.hotelNavUrl.value = `${baseUrl}/navigate-hotel?tripId=${tripId}&token=${token}`;
+                DOM.scheduleUrl.value = `${baseUrl}/daily-schedule?tripId=${tripId}&token=${token}`;
+                DOM.nearbyUrl.value = `${baseUrl}/nearby-places?tripId=${tripId}&token=${token}`;
+
+                DOM.loadingOverlay.style.display = 'none';
+            } catch (error) {
+                console.error("Error generating API token:", error);
+                alert("שגיאה ביצירת טוקן גישה.");
+                DOM.apiTokenInput.value = "שגיאה. רענן את הדף.";
+            }
+        }
+
+        // --- Copy to Clipboard Logic ---
+        function setupCopyButtons() {
+            DOM.copyButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetInputId = button.dataset.target;
+                    const inputElement = document.getElementById(targetInputId);
+                    
+                    navigator.clipboard.writeText(inputElement.value).then(() => {
+                        button.classList.add('copied');
+                        setTimeout(() => {
+                            button.classList.remove('copied');
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        alert('ההעתקה נכשלה');
+                    });
+                });
+            });
+        }
+
+        // --- Start the page ---
+        initPage();
+        setupCopyButtons();
+    </script>
+</body>
+</html>
