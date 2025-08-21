@@ -506,7 +506,6 @@
             }, 300);
         }
         
-        // --- שינוי: כל השדות הוגדרו כאופציונליים (הוסרה התכונה required) ---
         function getStepDefinition() {
             const steps = {
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
@@ -701,7 +700,6 @@
             }
         }
         
-        // --- שינוי: הוספת פרמטר destinationLabel לשינוי התווית "יעד" ---
         function renderFlightLeg(id, legend, data = {}, destinationLabel = 'יעד') {
             let legData = {};
             if (id === 'from' || id === 'to') {
@@ -721,6 +719,7 @@
                             <input type="text" id="${id}_airport_address" value="${legData.airport_address || ''}" class="block w-full p-2 border rounded-md">
                             <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-24 text-center">מצא</button>
                         </div>
+                        <p class="text-xs text-slate-500 mt-1">לתוצאות טובות: 'שם שדה תעופה, עיר, מדינה'.</p>
                     </label>
                     <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container"></div>
                 </div>
@@ -798,14 +797,13 @@
                     }
                 }
                 
-                // --- שינוי: אין יותר בדיקת חובה, רק שמירת הנתון ---
                 if (field.id) modalState.data[field.id] = value;
             });
             
             if (!modalState.mainType) modalState.mainType = modalState.data.mainType;
             if (modalState.mainType === 'transport' && !modalState.subType) modalState.subType = modalState.data.subType;
             
-            return true; // Always valid now
+            return true;
         }
 
         async function handleFormSubmit(e) {
@@ -862,26 +860,30 @@
             modalState.maps[mapKey] = map;
         }
 
-        // --- שינוי: הוספת מגבלת זמן (timeout) לחיפוש למניעת תקיעות ---
         async function geocodeAddress(address) {
-            if (!address) return null;
+            if (!address) return { success: false, message: 'לא הוזנה כתובת.' };
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
 
             try {
-                const response = await fetch(url, { signal: controller.signal });
+                const response = await fetch(url, { 
+                    signal: controller.signal,
+                    headers: { 'Accept-Language': 'en' } // Request results in English for better matching
+                });
                 const data = await response.json();
-                return (data && data.length > 0) ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
+                if (data && data.length > 0) {
+                    return { success: true, coords: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } };
+                } else {
+                    return { success: false, message: 'הכתובת לא נמצאה.' };
+                }
             } catch (error) {
                 if (error.name === 'AbortError') {
-                    console.error('Geocoding request timed out.');
-                    DOM.modalError.textContent = 'החיפוש ארך זמן רב מדי.';
+                    return { success: false, message: 'החיפוש ארך זמן רב מדי.' };
                 } else {
                     console.error('Geocoding error:', error);
-                    DOM.modalError.textContent = 'שגיאה בחיפוש הכתובת.';
+                    return { success: false, message: 'שגיאת רשת בחיפוש.' };
                 }
-                return null;
             } finally {
                 clearTimeout(timeoutId);
             }
@@ -889,17 +891,19 @@
 
         async function findAddressOnMap(mapKey, address) {
             DOM.modalError.textContent = 'מחפש...';
-            const coords = await geocodeAddress(address);
+            const result = await geocodeAddress(address);
             const map = modalState.maps[mapKey];
 
-            if (coords && map) {
+            if (result.success && map) {
                 DOM.modalError.textContent = '';
+                const coords = result.coords;
                 map.setView([coords.lat, coords.lng], 13);
                 if (modalState.mapMarkers[mapKey]) modalState.mapMarkers[mapKey].remove();
                 
                 const marker = L.marker([coords.lat, coords.lng]).addTo(map);
                 modalState.mapMarkers[mapKey] = marker;
                 
+                // Save coordinates to the state
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (!modalState.data[legId]) modalState.data[legId] = {};
@@ -909,12 +913,23 @@
                     if (modalState.data.connections && modalState.data.connections[index]) {
                         modalState.data.connections[index].coords = coords;
                     }
-                } else { 
+                } else { // hotel
                      modalState.data.coords = coords;
                 }
             } else {
-                 if (!DOM.modalError.textContent.includes('זמן רב מדי')) {
-                    DOM.modalError.textContent = 'הכתובת לא נמצאה.';
+                DOM.modalError.textContent = result.message;
+                
+                // Clear old coordinates if search fails, to avoid saving stale data
+                const legId = mapKey;
+                if (legId === 'from' || legId === 'to') {
+                    if (modalState.data[legId]) delete modalState.data[legId].coords;
+                } else if (legId.startsWith('connection-')) {
+                    const index = parseInt(legId.split('-')[1], 10);
+                    if (modalState.data.connections?.[index]) {
+                        delete modalState.data.connections[index].coords;
+                    }
+                } else { // hotel
+                     if (modalState.data.coords) delete modalState.data.coords;
                 }
             }
         }
@@ -1049,7 +1064,6 @@
             }, 10);
         });
 
-        // --- שינוי: הוספת טיפול במצב טעינה לכפתורי החיפוש ---
         DOM.modalForm.addEventListener('click', async e => {
             const target = e.target.closest('button');
             if (!target) return;
