@@ -6,8 +6,10 @@
     <title>ניהול הוצאות</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- New libraries for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf-autotable.umd.min.js"></script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -123,86 +125,32 @@
             background-color: #f9fafb; /* gray-50 */
         }
         
-        /* NEW: Timeline Layout Styles */
-        .timeline-view {
-            position: relative;
-            padding: 2rem 0;
-        }
-        .timeline-view::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 3px;
-            height: 100%;
-            background-color: color-mix(in srgb, var(--accent-color) 30%, transparent);
-            border-radius: 2px;
-        }
-        .timeline-date-group {
-            margin-bottom: 2rem;
-            position: relative;
-        }
-        .timeline-date-marker {
-            position: sticky;
-            top: 70px; /* Below header */
-            z-index: 10;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: var(--accent-color);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-weight: bold;
-            display: inline-block;
-            margin-bottom: 1rem;
-        }
-        .timeline-item {
-            position: relative;
-            width: 50%;
-            padding: 0 2rem;
-            margin-bottom: 1rem;
-        }
-        .timeline-item:nth-child(odd) {
-            left: 0;
-            text-align: right;
-        }
-        .timeline-item:nth-child(even) {
-            left: 50%;
-            text-align: left;
-        }
-        .timeline-item::after {
-            content: '';
-            position: absolute;
-            top: 10px;
-            width: 15px;
-            height: 15px;
-            background-color: var(--card-bg-color);
-            border: 3px solid var(--accent-color);
-            border-radius: 50%;
-            z-index: 1;
-        }
-        .timeline-item:nth-child(odd)::after {
-            right: -7.5px; /* FIX: Symmetrical positioning */
-        }
-        .timeline-item:nth-child(even)::after {
-            left: -7.5px; /* FIX: Symmetrical positioning */
-        }
-        .timeline-item-content {
-            background-color: var(--card-bg-color);
-            padding: 1rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-        }
-
         /* Layout Switching Logic */
-        .layout-cards .expense-table-view, .layout-cards .timeline-view { display: none; }
-        .layout-table .expense-cards-view, .layout-table .timeline-view { display: none; }
-        .layout-timeline .expense-cards-view, .layout-timeline .expense-table-view { display: none; }
+        .layout-cards .expense-table-view { display: none; }
+        .layout-table .expense-cards-view { display: none; }
         
         /* FIX for sticky header scroll jump */
         #main-content-wrapper {
             padding-top: 64px; /* Height of the header (h-16) */
+        }
+
+        /* Toast Notification for PDF export */
+        .toast-notification {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            background-color: #334155; /* slate-700 */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 9999px;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            transform: translateX(-50%) translateY(20px);
+        }
+        .toast-notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
 
     </style>
@@ -312,6 +260,7 @@
                     <div class="space-y-6">
                         <div>
                             <h4 class="text-lg font-semibold mb-2">סגנון תצוגה</h4>
+                            <!-- REMOVED: Timeline layout option -->
                             <div class="flex gap-4 rounded-lg bg-slate-100 p-1">
                                 <label class="flex-1 text-center cursor-pointer">
                                     <input type="radio" name="layout-style" value="cards" class="sr-only peer" checked>
@@ -320,10 +269,6 @@
                                 <label class="flex-1 text-center cursor-pointer">
                                     <input type="radio" name="layout-style" value="table" class="sr-only peer">
                                     <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">טבלה</div>
-                                </label>
-                                <label class="flex-1 text-center cursor-pointer">
-                                    <input type="radio" name="layout-style" value="timeline" class="sr-only peer">
-                                    <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">ציר זמן</div>
                                 </label>
                             </div>
                         </div>
@@ -427,6 +372,10 @@
                     </a>
                     <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
                     <div class="flex items-center gap-2">
+                        <!-- ADDED: Export to PDF button -->
+                        <button id="export-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצוא סיכום ל-PDF">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
                         <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
                             <i class="fas fa-cog"></i>
                         </button>
@@ -749,16 +698,13 @@
             listContainer.innerHTML = `
                 <div class="expense-cards-view"></div>
                 <div class="expense-table-view"></div>
-                <div class="timeline-view"></div>
             `;
             
             const cardsContainer = listContainer.querySelector('.expense-cards-view');
             const tableContainer = listContainer.querySelector('.expense-table-view');
-            const timelineContainer = listContainer.querySelector('.timeline-view');
 
             // Render all views, CSS will handle visibility
             renderExpenseTable(expenses, tableContainer, tabId);
-            renderTimelineView(expenses, timelineContainer, tabId);
             if (tabId === 'all') {
                 renderCollapsibleCategories(expenses, cardsContainer);
             } else {
@@ -886,56 +832,6 @@
             wrapper.appendChild(table);
             container.appendChild(wrapper);
         }
-        
-        function renderTimelineView(expenses, container, tabId) {
-            container.innerHTML = ''; // Clear previous content
-            if (expenses.length === 0) return;
-
-            const groupedByDate = expenses.reduce((acc, exp) => {
-                const date = exp.date;
-                if (!acc[date]) acc[date] = [];
-                acc[date].push(exp);
-                return acc;
-            }, {});
-
-            const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
-
-            sortedDates.forEach(date => {
-                const dateGroup = document.createElement('div');
-                dateGroup.className = 'timeline-date-group';
-                
-                const dateMarker = document.createElement('div');
-                dateMarker.className = 'timeline-date-marker';
-                dateMarker.textContent = new Date(date).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
-                
-                const itemsContainer = document.createElement('div');
-                itemsContainer.className = 'relative';
-
-                dateGroup.appendChild(dateMarker);
-                dateGroup.appendChild(itemsContainer);
-
-                groupedByDate[date].forEach((exp, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'timeline-item';
-                    
-                    const uniqueId = `conv-timeline-${tabId}-${date}-${index}`;
-                    const card = createExpenseCard(exp, uniqueId);
-                    card.classList.add('timeline-item-content');
-
-                    item.appendChild(card);
-                    itemsContainer.appendChild(item);
-
-                    if (exp.currency !== 'ILS') {
-                        displayConvertedAmount(uniqueId, exp.amount, exp.currency);
-                    } else {
-                        const el = document.getElementById(uniqueId);
-                        if (el) el.style.display = 'none';
-                    }
-                });
-                container.appendChild(dateGroup);
-            });
-        }
-
 
         function createExpenseCard(exp, uniqueId) {
             const card = document.createElement('div');
@@ -1536,12 +1432,190 @@
             applyTheme(themeConfig);
         }
 
+        // --- NEW: PDF Export Logic ---
+        function showToast(message, duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, duration);
+        }
+
+        async function generateOwnerSection(doc, ownerName, expenses, startY) {
+            // Title using autoTable for proper font rendering
+            doc.autoTable({
+                body: [[`סיכום הוצאות עבור: ${ownerName}`]],
+                startY: startY,
+                theme: 'plain',
+                styles: { font: 'Assistant', fontSize: 16, halign: 'center', cellPadding: { top: 5, bottom: 5 } },
+            });
+            let currentY = doc.autoTable.previous.finalY;
+
+            // Main expenses table, sorted by date
+            const expenseTableHeaders = [['סכום (₪)', 'סכום מקורי', 'פירוט', 'קטגוריה', 'תאריך']];
+            const expenseTableBody = await Promise.all(
+                [...expenses]
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .map(async (exp) => {
+                        const ilsAmount = await convertToILS(exp.amount, exp.currency);
+                        return [
+                            ilsAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                            `${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${exp.currency}`,
+                            exp.notes || '-',
+                            exp.category,
+                            new Date(exp.date).toLocaleDateString('he-IL'),
+                        ];
+                    })
+            );
+
+            doc.autoTable({
+                head: expenseTableHeaders,
+                body: expenseTableBody,
+                startY: currentY,
+                theme: 'grid',
+                styles: { font: 'Assistant', halign: 'right' },
+                headStyles: { fillColor: [33, 150, 243] },
+            });
+            currentY = doc.autoTable.previous.finalY + 10;
+
+            // Summary table
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+            }
+            const summaryTableHeaders = [['סכום כולל (₪)', 'קטגוריה']];
+            const summaryTableBody = Object.entries(categoryTotals)
+                .sort(([, a], [, b]) => b - a)
+                .map(([category, total]) => [
+                    total.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    category,
+                ]);
+            const totalSum = Object.values(categoryTotals).reduce((sum, current) => sum + current, 0);
+
+            doc.autoTable({
+                body: [['סיכום לפי קטגוריות']],
+                startY: currentY,
+                theme: 'plain',
+                styles: { font: 'Assistant', fontSize: 14, halign: 'center', cellPadding: { top: 2, bottom: 2 } },
+            });
+            currentY = doc.autoTable.previous.finalY;
+
+            doc.autoTable({
+                head: summaryTableHeaders,
+                body: summaryTableBody,
+                startY: currentY,
+                theme: 'striped',
+                styles: { font: 'Assistant', halign: 'right' },
+            });
+            currentY = doc.autoTable.previous.finalY;
+
+            // Grand total
+            doc.autoTable({
+                body: [[`סך הכל: ${totalSum.toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}`]],
+                startY: currentY,
+                theme: 'plain',
+                styles: { font: 'Assistant', fontSize: 12, fontStyle: 'bold', halign: 'right', cellPadding: { top: 5 } },
+            });
+            return doc.autoTable.previous.finalY;
+        }
+
+        async function generateOverallSummary(doc, expenses, startY) {
+            doc.autoTable({
+                body: [['סיכום הוצאות כללי']],
+                startY: startY,
+                theme: 'plain',
+                styles: { font: 'Assistant', fontSize: 16, halign: 'center', cellPadding: { top: 5, bottom: 5 } },
+            });
+            let currentY = doc.autoTable.previous.finalY;
+
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+            }
+            const summaryTableHeaders = [['סכום כולל (₪)', 'קטגוריה']];
+            const summaryTableBody = Object.entries(categoryTotals)
+                .sort(([, a], [, b]) => b - a)
+                .map(([category, total]) => [
+                    total.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    category,
+                ]);
+            const totalSum = Object.values(categoryTotals).reduce((sum, current) => sum + current, 0);
+
+            doc.autoTable({
+                head: summaryTableHeaders,
+                body: summaryTableBody,
+                startY: currentY,
+                theme: 'striped',
+                styles: { font: 'Assistant', halign: 'right' },
+            });
+            currentY = doc.autoTable.previous.finalY;
+
+            doc.autoTable({
+                body: [[`סך הכל הוצאות הטיול: ${totalSum.toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}`]],
+                startY: currentY,
+                theme: 'plain',
+                styles: { font: 'Assistant', fontSize: 14, fontStyle: 'bold', halign: 'right', cellPadding: { top: 5 } },
+            });
+            return doc.autoTable.previous.finalY;
+        }
+
+        async function exportSummaryToPDF() {
+            if (allExpenses.length === 0) {
+                showToast('אין הוצאות לייצא.');
+                return;
+            }
+
+            const exportBtn = document.getElementById('export-btn');
+            const originalIcon = exportBtn.innerHTML;
+            exportBtn.innerHTML = '<span class="loader"></span>';
+            exportBtn.disabled = true;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+
+                const owners = [...new Set(allExpenses.map(exp => exp.ownerName || 'לא ידוע'))];
+                let startY = 15;
+
+                if (owners.length > 1) {
+                    for (const owner of owners) {
+                        const ownerExpenses = allExpenses.filter(exp => (exp.ownerName || 'לא ידוע') === owner);
+                        await generateOwnerSection(doc, owner, ownerExpenses, startY);
+                        if (owners.indexOf(owner) < owners.length - 1) {
+                            doc.addPage();
+                            startY = 15;
+                        }
+                    }
+                    doc.addPage();
+                    await generateOverallSummary(doc, allExpenses, 15);
+                } else {
+                    await generateOwnerSection(doc, owners[0], allExpenses, startY);
+                }
+
+                doc.save(`trip_summary_${tripId}.pdf`);
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+                showToast('שגיאה ביצירת ה-PDF.');
+            } finally {
+                exportBtn.innerHTML = originalIcon;
+                exportBtn.disabled = false;
+            }
+        }
 
         // --- Event Listeners ---
         function setupEventListeners() {
             document.getElementById('add-expense-btn-header').addEventListener('click', () => openExpenseModal());
             document.getElementById('add-first-expense-btn').addEventListener('click', () => openExpenseModal());
             document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+            document.getElementById('export-btn').addEventListener('click', exportSummaryToPDF); // New listener
             document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
             
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -1644,7 +1718,6 @@
                 });
             });
 
-            // BUG 2 FIX: Refactored theme control event listeners
             document.querySelectorAll('input[name="layout-style"]').forEach(radio => {
                 radio.addEventListener('change', (e) => {
                     const savedTheme = JSON.parse(localStorage.getItem(`tripTheme_${tripId}`)) || { name: 'defaultLight', layout: 'cards' };
