@@ -85,12 +85,11 @@
     <div class="relative z-10">
         <div id="nav-modal" class="modal fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 hidden opacity-0">
             <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center">
-                <h3 id="nav-modal-title" class="text-xl font-bold text-slate-800 mb-4">נווט אל...</h3>
+                <h3 id="nav-modal-title" class="text-xl font-bold text-slate-800 mb-2">נווט אל...</h3>
+                <p id="nav-modal-message" class="text-slate-600 mb-4"></p>
                 <div id="nav-modal-content" class="flex flex-col gap-4">
-                    <a id="nav-waze-link" href="#" target="_blank" class="block w-full text-center bg-[#33ccff] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#00bfff] transition text-lg"><i class="fa-brands fa-waze"></i> Waze</a>
-                    <a id="nav-gmaps-link" href="#" target="_blank" class="block w-full text-center bg-[#4285F4] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#3367D6] transition text-lg"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>
+                    <!-- Navigation buttons will be injected here -->
                 </div>
-                <p id="nav-modal-message" class="text-slate-600"></p>
                 <button id="nav-modal-close" class="mt-6 text-slate-500 hover:text-slate-700">סגור</button>
             </div>
         </div>
@@ -166,7 +165,6 @@
             </div>
         </div>
         
-        <!-- *** NEW: Details Modal *** -->
         <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-[102] hidden items-center justify-center p-4 opacity-0">
             <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col transform scale-95">
                 <header class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl sticky top-0">
@@ -427,7 +425,7 @@
             buildNavButtons();
         }
         
-        // --- NEW: Sorting and Summary Population ---
+        // --- Sorting and Summary Population ---
         function populateSummaries(items) {
             const hotels = items.filter(item => item.type === 'hotel');
             const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
@@ -478,22 +476,37 @@
                 const place = hotel.destination || '';
                 const dates = hotel.dates || '';
                 const price = hotel.price || 0;
+                const address = hotel.address || '';
+
+                const navButtons = address ? `
+                <div class="mt-4 pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-2 text-sm font-bold text-white bg-green-500 hover:bg-green-600 rounded-full px-4 py-2 transition-transform hover:scale-105">
+                        <i class="fa-solid fa-map-location-dot"></i> Google Maps
+                    </a>
+                    <a href="https://waze.com/ul?q=${encodeURIComponent(address)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-2 text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 rounded-full px-4 py-2 transition-transform hover:scale-105">
+                        <i class="fa-brands fa-waze"></i> Waze
+                    </a>
+                </div>
+                ` : '';
 
                 return `
-                <div class="card p-4" data-id="${hotel.id}">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <h4 class="text-lg font-extrabold text-slate-800 truncate">${title}</h4>
-                      <div class="mt-1 flex flex-wrap items-center gap-2">
-                        ${place ? `<span class="badge"><i class="fa-solid fa-location-dot"></i>${place}</span>` : ''}
-                        ${dates ? `<span class="badge"><i class="fa-regular fa-calendar"></i>${dates}</span>` : ''}
+                <div class="card p-4 flex flex-col justify-between" data-id="${hotel.id}">
+                  <div>
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <h4 class="text-lg font-extrabold text-slate-800 truncate">${title}</h4>
+                          <div class="mt-1 flex flex-wrap items-center gap-2">
+                            ${place ? `<span class="badge"><i class="fa-solid fa-location-dot"></i>${place}</span>` : ''}
+                            ${dates ? `<span class="badge"><i class="fa-regular fa-calendar"></i>${dates}</span>` : ''}
+                          </div>
+                        </div>
+                        <div class="flex flex-col items-end">
+                          <span class="price-chip">$${Number(price).toLocaleString()}</span>
+                          <span class="text-[11px] text-slate-400 mt-1">סה״כ שהייה</span>
+                        </div>
                       </div>
-                    </div>
-                    <div class="flex flex-col items-end">
-                      <span class="price-chip">$${Number(price).toLocaleString()}</span>
-                      <span class="text-[11px] text-slate-400 mt-1">סה״כ שהייה</span>
-                    </div>
                   </div>
+                  ${navButtons}
                 </div>`;
             }).join('');
         }
@@ -517,24 +530,54 @@
 
             container.innerHTML = transports.map(item => {
                 let title = '';
-                if (item.type === 'flight') title = `${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
-                else if (item.type === 'car_rental') title = `רכב שכור ב${item.destination || ''}`;
-                else if (item.type === 'ferry') title = `מעבורת מ${item.from_destination || ''} ל${item.to_destination || ''}`;
-                else if (item.type === 'train') title = `רכבת מ${item.from_station || ''} ל${item.to_station || ''}`;
-
                 const date = item.dates || item.date || '';
+                let departureAddress = '';
+
+                switch(item.type) {
+                    case 'flight':
+                        title = `${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+                        departureAddress = item.from?.airport_name || item.from?.destination;
+                        break;
+                    case 'car_rental':
+                        title = `רכב שכור ב${item.destination || ''}`;
+                        departureAddress = item.pickup_location;
+                        break;
+                    case 'ferry':
+                        title = `מעבורת מ${item.from_destination || ''} ל${item.to_destination || ''}`;
+                        departureAddress = item.from_destination;
+                        break;
+                    case 'train':
+                        title = `רכבת מ${item.from_station || ''} ל${item.to_station || ''}`;
+                        departureAddress = item.from_station;
+                        break;
+                }
+
+                const navButtons = departureAddress ? `
+                <div class="mt-3 pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <span class="text-xs text-slate-500 font-semibold flex-grow">ניווט לנקודת יציאה:</span>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(departureAddress)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center justify-center w-9 h-9 text-white bg-green-500 hover:bg-green-600 rounded-full transition-transform hover:scale-110" title="נווט עם Google Maps">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                    </a>
+                    <a href="https://waze.com/ul?q=${encodeURIComponent(departureAddress)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center justify-center w-9 h-9 text-white bg-sky-500 hover:bg-sky-600 rounded-full transition-transform hover:scale-110" title="נווט עם Waze">
+                        <i class="fa-brands fa-waze"></i>
+                    </a>
+                </div>
+                ` : '';
 
                 return `
-                <div class="card p-4" data-id="${item.id}">
-                  <div class="flex items-center gap-4">
-                    <div class="shrink-0 w-12 h-12 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center">
-                      <i class="fas ${getIcon(item.type)} fa-lg text-sky-600"></i>
-                    </div>
-                    <div class="min-w-0">
-                      <h4 class="font-bold text-slate-800 truncate">${title || 'מעבר'}</h4>
-                      ${date ? `<div class="mt-1"><span class="badge"><i class="fa-regular fa-calendar"></i>${date}</span></div>` : ''}
-                    </div>
+                <div class="card p-4 flex flex-col justify-between" data-id="${item.id}">
+                  <div>
+                      <div class="flex items-center gap-4">
+                        <div class="shrink-0 w-12 h-12 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center">
+                          <i class="fas ${getIcon(item.type)} fa-lg text-sky-600"></i>
+                        </div>
+                        <div class="min-w-0">
+                          <h4 class="font-bold text-slate-800 truncate">${title || 'מעבר'}</h4>
+                          ${date ? `<div class="mt-1"><span class="badge"><i class="fa-regular fa-calendar"></i>${date}</span></div>` : ''}
+                        </div>
+                      </div>
                   </div>
+                  ${navButtons}
                 </div>`;
             }).join('');
         }
@@ -692,7 +735,6 @@
             return dates;
         }
 
-        // --- NEW: Date parsing for sorting ---
         function getStartDate(item) {
             let dateStr = item.dates || item.date;
             if (!dateStr || typeof dateStr !== 'string') return null;
@@ -712,26 +754,93 @@
             DOM.overlay.classList.toggle('hidden');
         }
         
-        function openNavModal(title, address) {
+        // --- Navigation Modal Logic (NEW & UPDATED) ---
+        function openNavModal({ title, options = [], message = '' }) {
             document.getElementById('nav-modal-title').textContent = title;
             const navContent = document.getElementById('nav-modal-content');
             const navMessage = document.getElementById('nav-modal-message');
             
-            if (address) {
-                document.getElementById('nav-waze-link').href = `https://waze.com/ul?q=${encodeURIComponent(address)}`;
-                document.getElementById('nav-gmaps-link').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-                navContent.classList.remove('hidden');
-                navMessage.classList.add('hidden');
+            navContent.innerHTML = '';
+            navMessage.textContent = '';
+
+            if (options.length === 1 && options[0].address) {
+                const { address } = options[0];
+                navContent.innerHTML = `
+                    <a href="https://waze.com/ul?q=${encodeURIComponent(address)}" target="_blank" class="block w-full text-center bg-[#33ccff] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#00bfff] transition text-lg"><i class="fa-brands fa-waze"></i> Waze</a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" target="_blank" class="block w-full text-center bg-[#4285F4] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#3367D6] transition text-lg"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>
+                `;
+                navMessage.textContent = message;
+            } else if (options.length > 1) {
+                navContent.innerHTML = options.map(opt => 
+                    `<button data-address="${opt.address}" class="hotel-choice-btn block w-full text-center bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 px-4 rounded-lg transition">${opt.name}</button>`
+                ).join('');
+                navMessage.textContent = "יש לבחור לאיזה מלון לנווט:";
             } else {
-                navContent.classList.add('hidden');
-                navMessage.textContent = "לא הוגדרה כתובת.";
-                navMessage.classList.remove('hidden');
+                navMessage.textContent = message || 'לא נמצא יעד לניווט.';
             }
+
             DOM.navModal.classList.remove('hidden');
             setTimeout(() => DOM.navModal.classList.remove('opacity-0'), 10);
         }
 
-        // --- NEW: Details Modal Logic ---
+        function parseDate(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const parts = dateStr.split('/');
+            if (parts.length !== 3) return null;
+            return new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+
+        function isDateInRange(checkDate, rangeStr) {
+            if (!rangeStr || !rangeStr.includes(' - ')) return false;
+            const [startStr, endStr] = rangeStr.split(' - ');
+            const startDate = parseDate(startStr);
+            const endDate = parseDate(endStr);
+            if (!startDate || !endDate) return false;
+            
+            const normalizedCheckDate = new Date(checkDate);
+            normalizedCheckDate.setHours(0, 0, 0, 0);
+
+            return normalizedCheckDate >= startDate && normalizedCheckDate <= endDate;
+        }
+
+        async function handleNavigateToHotel() {
+            const hotels = allLogisticsItems.filter(item => item.type === 'hotel' && item.address);
+            if (hotels.length === 0) {
+                openNavModal({ title: 'ניווט למלון', message: 'לא נמצאו מלונות עם כתובת בטיול זה.' });
+                return;
+            }
+
+            const today = new Date();
+            const todaysHotels = hotels.filter(h => isDateInRange(today, h.dates));
+
+            if (todaysHotels.length > 0) {
+                openNavModal({
+                    title: 'נווט למלון להיום',
+                    options: todaysHotels.map(h => ({ name: h.name, address: h.address }))
+                });
+                return;
+            }
+
+            const futureHotels = hotels
+                .map(h => ({ ...h, startDate: getStartDate(h) }))
+                .filter(h => h.startDate && h.startDate >= today)
+                .sort((a, b) => a.startDate - b.startDate);
+
+            if (futureHotels.length > 0) {
+                const nextHotel = futureHotels[0];
+                openNavModal({
+                    title: `המלון הבא`,
+                    message: `${nextHotel.name} (בתאריך ${nextHotel.dates.split(' - ')[0]})`,
+                    options: [{ name: nextHotel.name, address: nextHotel.address }]
+                });
+                return;
+            }
+
+            openNavModal({ title: 'ניווט למלון', message: 'לא נמצא מלון להיום או בעתיד.' });
+        }
+
+
+        // --- Details Modal Logic ---
         function openDetailsModal(item) {
             if (!item) return;
             DOM.detailsModalTitle.textContent = item.name || `פרטי ${item.type}`;
@@ -985,7 +1094,7 @@
         DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
         DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
         DOM.overlay.addEventListener('click', toggleSidebar);
-        DOM.navigateHotelBtn.addEventListener('click', () => openNavModal('ניווט למלון', null));
+        DOM.navigateHotelBtn.addEventListener('click', handleNavigateToHotel);
         DOM.navModalClose.addEventListener('click', () => {
             DOM.navModal.classList.add('opacity-0');
             setTimeout(() => DOM.navModal.classList.add('hidden'), 300);
@@ -1010,7 +1119,7 @@
         DOM.addDestBtn.addEventListener('click', () => addDestRow());
         DOM.saveDestinationsBtn.addEventListener('click', saveDestinationsChanges);
 
-        // --- NEW: Details Modal Listeners ---
+        // Details Modal Listeners
         DOM.detailsModalClose.addEventListener('click', closeDetailsModal);
         document.addEventListener('click', (e) => {
             const card = e.target.closest('.card[data-id]');
@@ -1018,6 +1127,18 @@
                 const itemId = card.dataset.id;
                 const item = allLogisticsItems.find(i => i.id === itemId);
                 openDetailsModal(item);
+            }
+        });
+        
+        // Navigation modal choice listener
+        document.getElementById('nav-modal-content').addEventListener('click', (e) => {
+            const choiceBtn = e.target.closest('.hotel-choice-btn');
+            if (choiceBtn) {
+                const address = choiceBtn.dataset.address;
+                const name = choiceBtn.textContent;
+                if (address) {
+                    openNavModal({ title: `נווט אל ${name}`, options: [{ name, address }] });
+                }
             }
         });
 
