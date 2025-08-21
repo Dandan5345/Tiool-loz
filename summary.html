@@ -158,8 +158,12 @@
         // --- FIXED: Updated Firebase to a stable version (e.g., 10.12.2) ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
+        import {
+  getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
+  serverTimestamp, deleteDoc, updateDoc,
+  enableIndexedDbPersistence,        // ⬅️ חדש
+  enableMultiTabIndexedDbPersistence // ⬅️ אופציונלי (fallback)
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         // --- Firebase Configuration (Same as trip page) ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
@@ -174,6 +178,21 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+// --- Offline persistence (IndexedDB) ---
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // כנראה כמה טאבים פתוחים – ננסה מצב multi-tab:
+    console.warn('IndexedDB persistence failed-precondition. Trying multi-tab…', err);
+    enableMultiTabIndexedDbPersistence(db).catch(e => {
+      console.warn('Multi-tab persistence error:', e);
+    });
+  } else if (err.code === 'unimplemented') {
+    console.warn('Browser does not support IndexedDB persistence.');
+  } else {
+    console.warn('Persistence error:', err);
+  }
+});
 
         // --- Global State & Constants ---
         let tripId = null;
