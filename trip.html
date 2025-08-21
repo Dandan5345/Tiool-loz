@@ -234,7 +234,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -248,6 +248,15 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+        // --- הוספת יכולות אופליין ---
+        enableIndexedDbPersistence(db).catch((err) => {
+          if (err.code === 'failed-precondition') {
+            console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
+          } else if (err.code === 'unimplemented') {
+            console.warn("הדפדפן לא תומך ב־Persistence.");
+          }
+        });
 
         // --- DOM Elements ---
         const DOM = {
@@ -271,7 +280,7 @@
             hotelSummaryContainer: document.getElementById('hotel-summary-container'),
             transportSummaryContainer: document.getElementById('transport-summary-container'),
             costsSummaryContainer: document.getElementById('costs-summary-container'),
-            shareTripBtn: document.getElementById('share-trip-btn'), // [שינוי 2] הוספת הכפתור לאובייקט
+            shareTripBtn: document.getElementById('share-trip-btn'),
             // Settings Modal Elements
             settingsBtn: document.getElementById('settings-btn'),
             settingsModal: document.getElementById('settings-modal'),
@@ -323,26 +332,22 @@
             const tripRef = doc(db, "trips", tripId);
             const tripSnap = await getDoc(tripRef);
 
-            // --- [שינוי 3] - לוגיקת הרשאות חדשה ---
             if (tripSnap.exists()) {
                 const loadedTripData = tripSnap.data();
-                // בדיקה חדשה: האם המשתמש הנוכחי כלול במערך העורכים (editors)
                 const canAccess = loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid);
 
                 if (canAccess) {
-                    tripData = loadedTripData; // השמה למשתנה הגלובלי
+                    tripData = loadedTripData;
                     document.title = tripData.name;
                     applySettings();
                     populateUI();
                     listenForLogistics();
                     DOM.loadingOverlay.style.display = 'none';
                 } else {
-                    // אם המשתמש לא מורשה, שלח אותו לדף הבית
                     alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
                     window.location.href = 'index.html';
                 }
             } else {
-                // אם הטיול לא קיים כלל
                 alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
                 window.location.href = 'index.html';
             }
@@ -396,7 +401,6 @@
         // --- UI Population ---
         function populateUI() {
             DOM.tripTitle.textContent = tripData.name;
-            // [שינוי 4] - הגדרת הקישור של כפתור השיתוף לדף המתאים
             DOM.shareTripBtn.href = `join.html`; 
             buildSidebarMenu();
             buildTripMap();
@@ -589,7 +593,6 @@
             const mapContainer = DOM.tripMapContainer;
             if (!mapContainer) return;
 
-            // מנקה את המפה הקודמת אם קיימת כדי למנוע כפילות
             if (mapContainer._leaflet_id) {
                 mapContainer._leaflet_id = null;
                 mapContainer.innerHTML = "";
@@ -666,12 +669,9 @@
 
         // --- Edit Destinations Modal Logic ---
         function openEditDestinationsModal(){
-            // Trip dates (general)
             DOM.tripDatesEdit.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
-            // init picker
             new Litepicker({ element: DOM.tripDatesEdit, singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
 
-            // Fill list
             DOM.destinationsList.innerHTML = '';
             editUI.clear();
 
@@ -720,7 +720,6 @@
 
             new Litepicker({ element: el.querySelector('.dest-dates'), singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
 
-            // map
             const mapDiv = el.querySelector('.map');
             const map = L.map(mapDiv).setView(dest.coords ? [dest.coords.lat, dest.coords.lng] : [20,0], dest.coords ? 10 : 2);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
