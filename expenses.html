@@ -6,14 +6,12 @@
     <title>ניהול הוצאות</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PDF Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- New libraries for PDF and DOCX export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -137,22 +135,6 @@
         #main-content-wrapper {
             padding-top: 64px; /* Height of the header (h-16) */
         }
-        
-        /* Styles for export dropdown */
-        .export-dropdown {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background-color: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-            z-index: 40;
-            overflow: hidden;
-        }
-        .export-dropdown.show {
-            display: block;
-        }
 
     </style>
 </head>
@@ -162,6 +144,19 @@
         <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
         <p class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
     </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[105] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center">
+            <h3 class="text-lg font-bold text-slate-800 mb-2">אישור פעולה</h3>
+            <p id="confirm-modal-message" class="text-slate-600 mb-6">האם אתה בטוח?</p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-modal-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-black font-bold py-2 px-6 rounded-lg w-full">ביטול</button>
+                <button id="confirm-modal-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg w-full">אישור</button>
+            </div>
+        </div>
+    </div>
+
 
     <div id="onboarding-screen" class="hidden">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
@@ -372,22 +367,9 @@
                     </a>
                     <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
                     <div class="flex items-center gap-2">
-                        <!-- Export Button with Dropdown -->
-                        <div class="relative">
-                            <button id="export-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
-                                <i class="fas fa-file-export"></i>
-                            </button>
-                            <div id="export-dropdown" class="export-dropdown">
-                                <button id="export-pdf-btn" class="flex items-center gap-2 w-full text-right px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">
-                                    <i class="fas fa-file-pdf text-red-500 w-4"></i>
-                                    <span>ייצא ל-PDF</span>
-                                </button>
-                                <button id="export-docx-btn" class="flex items-center gap-2 w-full text-right px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">
-                                    <i class="fas fa-file-word text-blue-500 w-4"></i>
-                                    <span>ייצא ל-Word</span>
-                                </button>
-                            </div>
-                        </div>
+                        <button id="export-pdf-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצוא ל-PDF">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
                         <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition">
                             <i class="fas fa-cog"></i>
                         </button>
@@ -489,9 +471,6 @@
             </main>
         </div>
     </div>
-    
-    <!-- Hidden container for PDF generation -->
-    <div id="pdf-export-content" class="hidden" style="font-family: 'Assistant', sans-serif;"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -513,7 +492,7 @@
         // --- Global State ---
         let currentUserProfile = null;
         let tripId = null;
-        let tripName = 'הטיול שלי';
+        let tripDetails = {};
         let allExpenses = [];
         let tripCategories = [];
         let expensesUnsubscribe = null;
@@ -531,6 +510,7 @@
         let activeComparisonCategory = 'all';
         let currentTheme = {};
         let themeUpdateInterval = null;
+        let isInitialLoad = true;
 
         let rateCache = {};
         
@@ -578,8 +558,8 @@
             const tripDocRef = doc(db, "trips", tripId);
             const docSnap = await getDoc(tripDocRef);
             if (docSnap.exists()) {
-                tripName = docSnap.data().name || 'ניהול הוצאות';
-                document.getElementById('trip-title').textContent = tripName;
+                tripDetails = docSnap.data();
+                document.getElementById('trip-title').textContent = tripDetails.name || 'ניהול הוצאות';
             }
         }
 
@@ -608,31 +588,28 @@
                 } else {
                     document.getElementById('main-content').classList.remove('hidden');
                     document.getElementById('onboarding-screen').classList.add('hidden');
-                    // Sort by date (newest first) then by creation time (newest first)
-                    allExpenses.sort((a, b) => {
-                        const dateA = new Date(a.date);
-                        const dateB = new Date(b.date);
-                        if (dateB > dateA) return 1;
-                        if (dateA > dateB) return -1;
-                        // If dates are same, sort by timestamp
-                        const timeA = a.createdAt?.toMillis() || 0;
-                        const timeB = b.createdAt?.toMillis() || 0;
-                        return timeB - timeA;
-                    });
-                    await render();
+                    allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
                 }
-
-                const loadingOverlay = document.getElementById('loading-overlay');
-                if (!loadingOverlay.classList.contains('opacity-0')) {
-                    loadingOverlay.classList.add('opacity-0');
-                    setTimeout(() => loadingOverlay.style.display = 'none', 500);
+                
+                // BUG FIX: Hide loading overlay as soon as data arrives, before slow rendering
+                if (isInitialLoad) {
+                    const loadingOverlay = document.getElementById('loading-overlay');
+                    if (!loadingOverlay.classList.contains('opacity-0')) {
+                        loadingOverlay.classList.add('opacity-0');
+                        setTimeout(() => loadingOverlay.style.display = 'none', 500);
+                    }
+                    isInitialLoad = false;
                 }
+                
+                // Now render the content
+                await render();
             });
         }
 
+
         // --- Central Render Function ---
         async function render() {
-            if (allExpenses.length === 0) return; // Don't render if no expenses
+            if (allExpenses.length === 0 && !isInitialLoad) return;
             
             renderOwnerFilters();
             let filteredExpenses = getFilteredExpenses();
@@ -1146,6 +1123,41 @@
         // --- Modal & Form Logic ---
         function openModal(modalId) { document.getElementById(modalId)?.classList.remove('modal-hidden'); }
         function closeModal(modalId) { document.getElementById(modalId)?.classList.add('modal-hidden'); }
+        
+        // --- Confirmation Modal ---
+        function showConfirm(message) {
+            return new Promise(resolve => {
+                const modal = document.getElementById('confirm-modal');
+                const messageEl = document.getElementById('confirm-modal-message');
+                const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+                const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+                messageEl.textContent = message;
+                
+                const onConfirm = () => {
+                    closeModal('confirm-modal');
+                    cleanup();
+                    resolve(true);
+                };
+                
+                const onCancel = () => {
+                    closeModal('confirm-modal');
+                    cleanup();
+                    resolve(false);
+                };
+
+                const cleanup = () => {
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    cancelBtn.removeEventListener('click', onCancel);
+                };
+                
+                confirmBtn.addEventListener('click', onConfirm, { once: true });
+                cancelBtn.addEventListener('click', onCancel, { once: true });
+
+                openModal('confirm-modal');
+            });
+        }
+
 
         function openExpenseModal(expense = null) {
             const expenseForm = document.getElementById('expense-form');
@@ -1302,14 +1314,14 @@
         async function handleDeleteCategory() {
             const categoryToDelete = document.getElementById('expense-category').value;
             if (!categoryToDelete || defaultCategories.includes(categoryToDelete)) return;
-            if (confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
+            if (await showConfirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
                 const updatedCategories = tripCategories.filter(c => c !== categoryToDelete);
                 await setDoc(doc(db, "trips", tripId, "settings", "categories"), { list: updatedCategories });
             }
         }
         
         async function handleDeleteExpense(id) {
-            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+            if (await showConfirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
                 await deleteDoc(doc(db, "trips", tripId, "expenses", id));
             }
         }
@@ -1460,324 +1472,120 @@
             }
             applyTheme(themeConfig);
         }
+
+        // --- PDF Export Logic ---
+        const assistantFontBase64 = "AAEAAAARAQAABAAQR0RFRgJ2BDcAAfgcAAAAHE9TLzK9V2+LAAABiAAAAGBTVEFUh2+e+gAAFgAAAAAVR01YUGgA1wQAAFlIAAAAMEdQT1O+v5cPAAH4YAAAH0dTVUK+L8BlAAH9YAAAA-pmaW50Y3VzdG9tAAH/gAAABERseXHm5L1PAAIYAAABVGhlYWQGZuKkAAAA4AAAADZoaGVhA+IB4QAAALwAAAAkaG10eA8DBAAAAAFoAAAATm1heHAAEgBcAAABCAAAACBuYW1lRSPg0gAAX1AAAANpcG9zdB2odVAAAGsAAAA9cHJlcBoAAAAIAFkAAAABAAEAAAIAHgADAAEAAQABAAEADgABAAIAAAAAAQAAAAEAAQAAAAAAAgABAAAAAAADAAUAAQAAAAAABAABABkAAAACAAQAAgAGADIA8gA8//8AAAAgADIA8gA8//8AAH/j/6MAAwADAAEAAAAAAAAAAAAAAAAAAQALAIAAAgCgAAACAAIAAgAAAAIAAgACAAAAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAg-";
         
-        // --- Export Logic ---
-        async function generateExportContent(forPDF = false) {
-            const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
-            const hasMultipleOwners = uniqueOwners.length > 1;
-
-            // 1. Group expenses by date
-            const groupedByDate = allExpenses.reduce((acc, exp) => {
-                const date = exp.date;
-                if (!acc[date]) acc[date] = [];
-                acc[date].push(exp);
-                return acc;
-            }, {});
-            const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(a) - new Date(b));
-
-            // 2. Calculate summaries
-            const overallCategorySummary = {};
-            const ownerSummaries = {};
-
-            for (const exp of allExpenses) {
-                const amountInILS = await convertToILS(exp.amount, exp.currency);
-                // Overall summary
-                overallCategorySummary[exp.category] = (overallCategorySummary[exp.category] || 0) + amountInILS;
-                // Per-owner summary
-                if (hasMultipleOwners) {
-                    if (!ownerSummaries[exp.ownerName]) {
-                        ownerSummaries[exp.ownerName] = {};
-                    }
-                    ownerSummaries[exp.ownerName][exp.category] = (ownerSummaries[exp.ownerName][exp.category] || 0) + amountInILS;
-                }
-            }
-            
-            if (forPDF) {
-                return generateHtmlForPdf(sortedDates, groupedByDate, hasMultipleOwners, uniqueOwners, ownerSummaries, overallCategorySummary);
-            } else {
-                return generateDocxObject(sortedDates, groupedByDate, hasMultipleOwners, uniqueOwners, ownerSummaries, overallCategorySummary);
-            }
-        }
-
-        async function generateHtmlForPdf(sortedDates, groupedByDate, hasMultipleOwners, uniqueOwners, ownerSummaries, overallCategorySummary) {
-            let html = `<div dir="rtl" style="padding: 20px; font-family: 'Assistant', sans-serif; color: #333;">`;
-            html += `<h1 style="text-align: center; font-size: 24px; margin-bottom: 20px;">סיכום הוצאות - ${tripName}</h1>`;
-
-            // Main expenses table
-            html += `<h2 style="font-size: 20px; border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 30px;">פירוט הוצאות כללי</h2>`;
-            for (const date of sortedDates) {
-                html += `<h3 style="margin-top: 20px; font-size: 16px; background-color: #f2f2f2; padding: 5px;">${new Date(date).toLocaleDateString('he-IL', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</h3>`;
-                html += `<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead style="background-color: #e9e9e9;">
-                        <tr>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">שם</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">קטגוריה</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">פירוט</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">סכום</th>
-                        </tr>
-                    </thead><tbody>`;
-                for (const exp of groupedByDate[date]) {
-                    html += `<tr>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${exp.ownerName}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${exp.category}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${exp.notes || ''}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${exp.amount.toFixed(2)} ${exp.currency}</td>
-                    </tr>`;
-                }
-                html += `</tbody></table>`;
-            }
-
-            // Per-owner summaries if needed
-            if (hasMultipleOwners) {
-                for (const owner of uniqueOwners) {
-                    html += `<h2 style="font-size: 20px; border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 40px;">סיכום לפי קטגוריות - ${owner}</h2>`;
-                    html += `<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                        <thead style="background-color: #e9e9e9;">
-                            <tr>
-                                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">קטגוריה</th>
-                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">סה"כ (₪)</th>
-                            </tr>
-                        </thead><tbody>`;
-                    let ownerTotal = 0;
-                    for (const [category, total] of Object.entries(ownerSummaries[owner]).sort(([,a],[,b]) => b-a)) {
-                        ownerTotal += total;
-                        html += `<tr>
-                            <td style="padding: 8px; border: 1px solid #ddd;">${category}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${total.toFixed(2)}</td>
-                        </tr>`;
-                    }
-                    html += `<tr style="font-weight: bold; background-color: #f2f2f2;">
-                        <td style="padding: 8px; border: 1px solid #ddd;">סה"כ</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${ownerTotal.toFixed(2)}</td>
-                    </tr>`;
-                    html += `</tbody></table>`;
-                }
-            }
-
-            // Overall summary
-            html += `<h2 style="font-size: 20px; border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 40px;">סיכום כללי לכולם</h2>`;
-            html += `<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                <thead style="background-color: #e9e9e9;">
-                    <tr>
-                        <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">קטגוריה</th>
-                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">סה"כ (₪)</th>
-                    </tr>
-                </thead><tbody>`;
-            let grandTotal = 0;
-            for (const [category, total] of Object.entries(overallCategorySummary).sort(([,a],[,b]) => b-a)) {
-                grandTotal += total;
-                html += `<tr>
-                    <td style="padding: 8px; border: 1px solid #ddd;">${category}</td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${total.toFixed(2)}</td>
-                </tr>`;
-            }
-            html += `<tr style="font-weight: bold; background-color: #f2f2f2;">
-                <td style="padding: 8px; border: 1px solid #ddd;">סה"כ כללי</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${grandTotal.toFixed(2)}</td>
-            </tr>`;
-            html += `</tbody></table>`;
-
-            html += `</div>`;
-            return html;
-        }
-
-        async function generateDocxObject(sortedDates, groupedByDate, hasMultipleOwners, uniqueOwners, ownerSummaries, overallCategorySummary) {
-            const { Document, Packer, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, HeadingLevel, AlignmentType } = docx;
-            
-            const sections = [];
-
-            // Title
-            sections.push({
-                children: [new Paragraph({
-                    text: `סיכום הוצאות - ${tripName}`,
-                    heading: HeadingLevel.TITLE,
-                    alignment: AlignmentType.CENTER,
-                    bidirectional: true,
-                })]
-            });
-
-            // Main expenses table
-            const expenseRows = [
-                new TableRow({ children: [
-                    new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "שם", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                    new TableCell({ width: { size: 25, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "קטגוריה", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                    new TableCell({ width: { size: 35, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "פירוט", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                    new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "סכום", bold: true })], alignment: AlignmentType.LEFT, bidirectional: true })] }),
-                ]}),
-            ];
-            
-            for (const date of sortedDates) {
-                expenseRows.push(new TableRow({ children: [new TableCell({
-                    columnSpan: 4,
-                    children: [new Paragraph({
-                        children: [new TextRun({ text: new Date(date).toLocaleDateString('he-IL', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'}), bold: true })],
-                        alignment: AlignmentType.RIGHT,
-                        bidirectional: true,
-                    })]
-                })]}));
-
-                for (const exp of groupedByDate[date]) {
-                    expenseRows.push(new TableRow({ children: [
-                        new TableCell({ children: [new Paragraph({ text: exp.ownerName, alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                        new TableCell({ children: [new Paragraph({ text: exp.category, alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                        new TableCell({ children: [new Paragraph({ text: exp.notes || '', alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                        new TableCell({ children: [new Paragraph({ text: `${exp.amount.toFixed(2)} ${exp.currency}`, alignment: AlignmentType.LEFT })] }),
-                    ]}));
-                }
-            }
-            
-            sections.push({
-                children: [
-                    new Paragraph({ text: "פירוט הוצאות כללי", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, bidirectional: true }),
-                    new Table({ rows: expenseRows, width: { size: 100, type: WidthType.PERCENTAGE } })
-                ]
-            });
-
-            // Per-owner summaries
-            if (hasMultipleOwners) {
-                for (const owner of uniqueOwners) {
-                    const ownerSummaryRows = [new TableRow({ children: [
-                        new TableCell({ width: { size: 70, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "קטגוריה", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                        new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "סה\"כ (₪)", bold: true })], alignment: AlignmentType.LEFT, bidirectional: true })] }),
-                    ]})];
-                    
-                    let ownerTotal = 0;
-                    for (const [category, total] of Object.entries(ownerSummaries[owner]).sort(([,a],[,b]) => b-a)) {
-                        ownerTotal += total;
-                        ownerSummaryRows.push(new TableRow({ children: [
-                            new TableCell({ children: [new Paragraph({ text: category, alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                            new TableCell({ children: [new Paragraph({ text: total.toFixed(2), alignment: AlignmentType.LEFT })] }),
-                        ]}));
-                    }
-                    ownerSummaryRows.push(new TableRow({ children: [
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "סה\"כ", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: ownerTotal.toFixed(2), bold: true })], alignment: AlignmentType.LEFT })] }),
-                    ]}));
-
-                    sections.push({
-                        children: [
-                            new Paragraph({ text: `סיכום לפי קטגוריות - ${owner}`, heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, bidirectional: true }),
-                            new Table({ rows: ownerSummaryRows, width: { size: 100, type: WidthType.PERCENTAGE } })
-                        ]
-                    });
-                }
-            }
-            
-            // Overall summary
-            const overallSummaryRows = [new TableRow({ children: [
-                new TableCell({ width: { size: 70, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "קטגוריה", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: "סה\"כ (₪)", bold: true })], alignment: AlignmentType.LEFT, bidirectional: true })] }),
-            ]})];
-            let grandTotal = 0;
-            for (const [category, total] of Object.entries(overallCategorySummary).sort(([,a],[,b]) => b-a)) {
-                grandTotal += total;
-                overallSummaryRows.push(new TableRow({ children: [
-                    new TableCell({ children: [new Paragraph({ text: category, alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                    new TableCell({ children: [new Paragraph({ text: total.toFixed(2), alignment: AlignmentType.LEFT })] }),
-                ]}));
-            }
-            overallSummaryRows.push(new TableRow({ children: [
-                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "סה\"כ כללי", bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })] }),
-                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: grandTotal.toFixed(2), bold: true })], alignment: AlignmentType.LEFT })] }),
-            ]}));
-            
-            sections.push({
-                children: [
-                    new Paragraph({ text: "סיכום כללי לכולם", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, bidirectional: true }),
-                    new Table({ rows: overallSummaryRows, width: { size: 100, type: WidthType.PERCENTAGE } })
-                ]
-            });
-
-            return new Document({ sections });
-        }
-
-        async function exportAsPdf() {
+        async function exportToPdf() {
             const { jsPDF } = window.jspdf;
-            const content = document.getElementById('pdf-export-content');
-            content.innerHTML = await generateHtmlForPdf(true);
-            content.classList.remove('hidden');
-
-            // Add Amiri font for Hebrew support
-            const font = 'AAEAAAAQAQAABAAAR0RFRgAQA…'; // A long base64 string for a font file, truncated for brevity. In a real scenario, this would be the full font data.
-            
             const doc = new jsPDF();
-            doc.addFileToVFS('Amiri-Regular.ttf', font);
-            doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-            doc.setFont('Amiri');
 
-            html2canvas(content, { scale: 2 }).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                const canvasWidth = canvas.width;
-                const canvasHeight = canvas.height;
-                const ratio = canvasWidth / canvasHeight;
-                const imgWidth = pdfWidth - 20; // with margin
-                const imgHeight = imgWidth / ratio;
-                let heightLeft = imgHeight;
-                let position = 10;
+            // Add Hebrew font support
+            doc.addFileToVFS("Assistant-Regular.ttf", assistantFontBase64);
+            doc.addFont("Assistant-Regular.ttf", "Assistant", "normal");
+            doc.setFont("Assistant");
+            
+            const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+            let finalY = 20; // Initial Y position
+            
+            const addCenteredText = (text, y) => {
+                const textWidth = doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+                const x = (doc.internal.pageSize.getWidth() - textWidth) / 2;
+                doc.text(text, x, y);
+            };
+            
+            const addRightAlignedText = (text, y) => {
+                const textWidth = doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+                const x = doc.internal.pageSize.getWidth() - textWidth - 14;
+                doc.text(text, x, y);
+            };
 
-                pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                heightLeft -= (pdfHeight - 20);
-
-                while (heightLeft > 0) {
-                    position = heightLeft - imgHeight + 10;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                    heightLeft -= (pdfHeight - 20);
+            const generateSummaryFor = async (expenses, title) => {
+                // Main expenses table
+                const expenseBody = [];
+                for (const exp of expenses) {
+                    const amountInILS = await convertToILS(exp.amount, exp.currency);
+                    expenseBody.push([
+                        amountInILS.toLocaleString('he-IL', { minimumFractionDigits: 2 }),
+                        `${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2 })} ${exp.currency}`,
+                        exp.notes || '-',
+                        exp.category,
+                        exp.ownerName,
+                        new Date(exp.date).toLocaleDateString('he-IL')
+                    ]);
                 }
+                
+                doc.setFontSize(16);
+                addRightAlignedText(title, finalY);
+                finalY += 8;
 
-                pdf.save(`expenses-summary-${tripName}.pdf`);
-                content.classList.add('hidden');
-                content.innerHTML = '';
-            });
+                doc.autoTable({
+                    startY: finalY,
+                    head: [['(₪) סכום', 'סכום מקורי', 'פירוט', 'קטגוריה', 'שם', 'תאריך']],
+                    body: expenseBody,
+                    theme: 'grid',
+                    styles: { font: 'Assistant', halign: 'right' },
+                    headStyles: { fillColor: [41, 128, 185] }
+                });
+                finalY = doc.autoTable.previous.finalY + 15;
+
+                // Category summary table
+                const categoryTotals = {};
+                let totalInILS = 0;
+                for (const exp of expenses) {
+                    const amountInILS = await convertToILS(exp.amount, exp.currency);
+                    categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+                    totalInILS += amountInILS;
+                }
+                const categoryBody = Object.entries(categoryTotals).map(([cat, total]) => [
+                    `₪${total.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`, cat
+                ]);
+
+                doc.setFontSize(14);
+                addRightAlignedText('סיכום לפי קטגוריות', finalY);
+                finalY += 8;
+                
+                doc.autoTable({
+                    startY: finalY,
+                    head: [['סכום', 'קטגוריה']],
+                    body: categoryBody,
+                    theme: 'grid',
+                    styles: { font: 'Assistant', halign: 'right' },
+                    headStyles: { fillColor: [22, 160, 133] }
+                });
+                finalY = doc.autoTable.previous.finalY + 10;
+                
+                doc.setFontSize(14);
+                addRightAlignedText(`סה"כ: ₪${totalInILS.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`, finalY);
+                finalY += 15;
+            };
+            
+            doc.setFontSize(22);
+            addCenteredText(`סיכום הוצאות - ${tripDetails.name || 'הטיול'}`, finalY);
+            finalY += 15;
+
+            if (uniqueOwners.length > 1) {
+                for (const owner of uniqueOwners) {
+                    const ownerExpenses = allExpenses.filter(exp => exp.ownerName === owner);
+                    await generateSummaryFor(ownerExpenses, `סיכום עבור: ${owner}`);
+                }
+                await generateSummaryFor(allExpenses, 'סיכום כללי לכולם');
+            } else {
+                await generateSummaryFor(allExpenses, 'סיכום כללי');
+            }
+
+            doc.save(`expenses-summary-${tripId}.pdf`);
         }
 
-        async function exportAsDocx() {
-            const { Packer } = docx;
-            const doc = await generateExportContent(false);
-            Packer.toBlob(doc).then(blob => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `expenses-summary-${tripName}.docx`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            });
-        }
 
         // --- Event Listeners ---
         function setupEventListeners() {
             document.getElementById('add-expense-btn-header').addEventListener('click', () => openExpenseModal());
             document.getElementById('add-first-expense-btn').addEventListener('click', () => openExpenseModal());
             document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+            document.getElementById('export-pdf-btn').addEventListener('click', exportToPdf);
             document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
             
-            // Export buttons
-            const exportBtn = document.getElementById('export-btn');
-            const exportDropdown = document.getElementById('export-dropdown');
-            exportBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                exportDropdown.classList.toggle('show');
-            });
-            document.getElementById('export-pdf-btn').addEventListener('click', () => {
-                exportAsPdf();
-                exportDropdown.classList.remove('show');
-            });
-            document.getElementById('export-docx-btn').addEventListener('click', () => {
-                exportAsDocx();
-                exportDropdown.classList.remove('show');
-            });
-            // Hide dropdown if clicked outside
-            document.addEventListener('click', (e) => {
-                if (!exportBtn.contains(e.target)) {
-                    exportDropdown.classList.remove('show');
-                }
-            });
-
             document.querySelectorAll('[data-close-modal]').forEach(btn => {
                 btn.addEventListener('click', () => closeModal(btn.dataset.closeModal));
             });
