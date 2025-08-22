@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>מסע אטרקציות ומסעדות</title>
+  <title>מסע חלומות 🗽 אטרקציות ומסעדות</title>
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
@@ -333,13 +333,6 @@
       const input = document.getElementById('item-location-search');
       if (!input) return;
       let wrapper = input.closest('.ac-wrapper');
-      if (!wrapper) {
-        const w = document.createElement('div');
-        w.className = 'ac-wrapper';
-        input.parentNode.insertBefore(w, input);
-        w.appendChild(input);
-        wrapper = w;
-      }
       let list = wrapper.querySelector('.ac-list');
       if (!list) {
         list = document.createElement('div');
@@ -427,32 +420,20 @@
     // ---------- Leaflet maps ----------
     function initAddEditMap(location = { lat: 40.7128, lng: -74.0060 }) {
       const mapDiv = document.getElementById('map-preview');
-      if (!mapDiv) return;
-      if (!addEditMap) {
-        addEditMap = L.map(mapDiv, { zoomControl: false, attributionControl: true }).setView([location.lat, location.lng], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-        }).addTo(addEditMap);
-        addEditMarker = L.marker([location.lat, location.lng], { draggable: true }).addTo(addEditMap);
-        addEditMarker.on('dragend', () => {
-          const { lat, lng } = addEditMarker.getLatLng();
-          if (!selectedOSMPlaceDetails) selectedOSMPlaceDetails = {};
-          selectedOSMPlaceDetails.coords = { lat, lng };
-        });
-      } else {
-        addEditMap.setView([location.lat, location.lng], 15);
-        if (!addEditMarker) addEditMarker = L.marker([location.lat, location.lng], { draggable: true }).addTo(addEditMap);
-        addEditMarker.setLatLng([location.lat, location.lng]);
-      }
-      // --- התיקון ---
-      // הפקודה הזו "מרעננת" את המפה ומוודאת שהיא מציגה את האריחים כראוי,
-      // גם כשהיא נפתחת במודאל שכבר היה קיים.
-      // ה-setTimeout הקטן נותן לדפדפן מספיק זמן להציג את המודאל לפני הרענון.
-      setTimeout(() => {
-        if (addEditMap) {
-          addEditMap.invalidateSize();
-        }
-      }, 100);
+      if (!mapDiv || addEditMap) return; // אם המפה כבר קיימת, אל תאתחל שוב
+
+      addEditMap = L.map(mapDiv, { zoomControl: false, attributionControl: true }).setView([location.lat, location.lng], 13);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      }).addTo(addEditMap);
+      
+      addEditMarker = L.marker([location.lat, location.lng], { draggable: true }).addTo(addEditMap);
+      
+      addEditMarker.on('dragend', () => {
+        const { lat, lng } = addEditMarker.getLatLng();
+        if (!selectedOSMPlaceDetails) selectedOSMPlaceDetails = {};
+        selectedOSMPlaceDetails.coords = { lat, lng };
+      });
     }
 
     function initDetailsMap(coords) {
@@ -574,7 +555,6 @@
                 }
               }
             }
-            if (item.coords) initAddEditMap(item.coords);
           }
         }, 50);
       } else {
@@ -587,9 +567,17 @@
       modal.classList.add('flex');
     }
 
+    // --- התיקון המרכזי ---
     function closeModalHandler() {
+      // הורסים את מופע המפה ומשחררים את המשאבים
+      if (addEditMap) {
+        addEditMap.remove();
+        addEditMap = null;
+        addEditMarker = null;
+      }
       editingItemId = null;
-      modal.classList.add('hidden'); modal.classList.remove('flex');
+      modal.classList.add('hidden'); 
+      modal.classList.remove('flex');
       showModalError('');
     }
 
@@ -613,7 +601,8 @@
         stepEl.classList.add('active');
       }
 
-      if (document.getElementById('map-preview')) {
+      // מאתחלים את המפה רק אם הגענו לשלב 4
+      if (actualStep === 4) {
         const item = allItems.find(i => i.id === editingItemId);
         initAddEditMap(item?.coords || undefined);
       }
