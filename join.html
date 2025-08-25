@@ -432,7 +432,7 @@
             }).join('');
         }
 
-        // --- Word Document Generation Logic (FIXED & ROBUST) ---
+        // --- Word Document Generation Logic ---
         DOM.generateWordDocBtn.addEventListener('click', async () => {
             if (!activeTripId) return;
             const trip = allUserTrips.find(t => t.id === activeTripId);
@@ -445,7 +445,6 @@
 
             try {
                 // 1. Fetch all related data
-                console.log("Fetching data for Word doc...");
                 const placesQuery = query(collection(db, 'trips', activeTripId, 'places'));
                 const logisticsQuery = query(collection(db, 'trips', activeTripId, 'logistics'));
                 const schedulesQuery = query(collection(db, 'trips', activeTripId, 'schedules'));
@@ -469,9 +468,7 @@
                         items: itemsSnap.docs.map(d => d.data()).sort((a,b) => (a.sort || 0) - (b.sort || 0))
                     });
                 }
-                // Sort schedules by date (which is the document ID)
                 schedules.sort((a,b) => a.date.localeCompare(b.date));
-                console.log("Data fetched successfully:", { places, logistics, schedules });
 
                 // 2. Build and download the Word document
                 DOM.generateWordText.textContent = 'יוצר את הקובץ...';
@@ -490,10 +487,26 @@
         async function createAndDownloadDoc(trip, places, logistics, schedules) {
             const { Document, Packer, HeadingLevel, Paragraph, TextRun, AlignmentType, SectionType } = window.docx;
 
-            // Helper function to create RTL paragraphs
+            // --- FIXED HELPER FUNCTION ---
+            // This function now correctly handles both simple text and complex children arrays.
+            // The original error happened because the Paragraph constructor expects a 'children' array
+            // of TextRun objects, not a direct 'text' property.
             const createRtlParagraph = (options) => {
+                const newOptions = { ...options };
+
+                if (newOptions.text && !newOptions.children) {
+                    newOptions.children = [new TextRun({
+                        text: String(newOptions.text),
+                        bold: newOptions.bold,
+                        size: newOptions.size,
+                    })];
+                    delete newOptions.text;
+                    delete newOptions.bold;
+                    delete newOptions.size;
+                }
+
                 return new Paragraph({
-                    ...options,
+                    ...newOptions,
                     alignment: AlignmentType.RIGHT,
                     rightToLeft: true,
                 });
@@ -503,7 +516,9 @@
 
             // --- Title Section ---
             sections.push(createRtlParagraph({
-                children: [new TextRun({ text: `סיכום תכנון טיול: ${trip.name || 'ללא שם'}`, bold: true, size: 44 })],
+                text: `סיכום תכנון טיול: ${trip.name || 'ללא שם'}`,
+                bold: true,
+                size: 44,
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 400 },
             }));
