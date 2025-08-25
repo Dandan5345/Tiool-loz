@@ -92,7 +92,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <button id="generate-word-doc-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
                         <i class="fas fa-file-word"></i>
-                        <span id="generate-word-text">צור קובץ וורד</span>
+                        <span id="generate-word-text">צור קובץ Docx</span>
                     </button>
                     <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
                         <i class="fas fa-link"></i>
@@ -366,7 +366,7 @@
             DOM.createLinkText.textContent = 'צור קישור שיתוף';
             DOM.generateWordDocBtn.disabled = false;
             DOM.generateWordDocBtn.querySelector('i').className = 'fas fa-file-word';
-            DOM.generateWordText.textContent = 'צור קובץ וורד';
+            DOM.generateWordText.textContent = 'צור קובץ Docx';
             loadSharedWithList(tripId);
         }
 
@@ -424,7 +424,7 @@
                 
                 return `<div class="flex items-center justify-between bg-white/5 p-2.5 rounded-lg">
                             <div class="flex items-center gap-3">
-                               <div class="size-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">${userData.name?.charAt(0).toUpperCase() || 'U'}</div>
+                               <div class="size-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">${(userData.name || 'U').charAt(0).toUpperCase()}</div>
                                 <span class="font-semibold text-slate-100">${userData.name || 'משתמש'}</span>
                            </div>
                             <span class="text-xs font-bold py-1 px-2.5 rounded-full ${isOwner ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200/10 text-slate-300'}">${isOwner ? 'יוצר' : 'עורך'}</span>
@@ -432,7 +432,7 @@
             }).join('');
         }
 
-        // --- Word Document Generation Logic (FIXED) ---
+        // --- Word Document Generation Logic (FIXED & ROBUST) ---
         DOM.generateWordDocBtn.addEventListener('click', async () => {
             if (!activeTripId) return;
             const trip = allUserTrips.find(t => t.id === activeTripId);
@@ -445,6 +445,7 @@
 
             try {
                 // 1. Fetch all related data
+                console.log("Fetching data for Word doc...");
                 const placesQuery = query(collection(db, 'trips', activeTripId, 'places'));
                 const logisticsQuery = query(collection(db, 'trips', activeTripId, 'logistics'));
                 const schedulesQuery = query(collection(db, 'trips', activeTripId, 'schedules'));
@@ -463,12 +464,14 @@
                     const itemsQuery = query(collection(scheduleDoc.ref, 'items'));
                     const itemsSnap = await getDocs(itemsQuery);
                     schedules.push({
-                        date: scheduleDoc.id,
+                        date: scheduleDoc.id, // YYYY-MM-DD format
                         ...scheduleDoc.data(),
-                        items: itemsSnap.docs.map(d => d.data()).sort((a,b) => a.sort - b.sort)
+                        items: itemsSnap.docs.map(d => d.data()).sort((a,b) => (a.sort || 0) - (b.sort || 0))
                     });
                 }
-                schedules.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-')));
+                // Sort schedules by date (which is the document ID)
+                schedules.sort((a,b) => a.date.localeCompare(b.date));
+                console.log("Data fetched successfully:", { places, logistics, schedules });
 
                 // 2. Build and download the Word document
                 DOM.generateWordText.textContent = 'יוצר את הקובץ...';
@@ -476,22 +479,30 @@
 
             } catch (error) {
                 console.error("Error generating Word document:", error);
-                alert("אירעה שגיאה ביצירת הקובץ. בדוק את המסוף לפרטים נוספים.");
+                alert("אירעה שגיאה ביצירת הקובץ. בדוק את המסוף (F12) לפרטים נוספים.");
             } finally {
                 btn.disabled = false;
                 btn.querySelector('i').className = 'fas fa-file-word';
-                DOM.generateWordText.textContent = 'צור קובץ וורד';
+                DOM.generateWordText.textContent = 'צור קובץ Docx';
             }
         });
 
         async function createAndDownloadDoc(trip, places, logistics, schedules) {
-            // Use the global docx object from the CDN
             const { Document, Packer, HeadingLevel, Paragraph, TextRun, AlignmentType, SectionType } = window.docx;
+
+            // Helper function to create RTL paragraphs
+            const createRtlParagraph = (options) => {
+                return new Paragraph({
+                    ...options,
+                    alignment: AlignmentType.RIGHT,
+                    rightToLeft: true,
+                });
+            };
 
             const sections = [];
 
             // --- Title Section ---
-            sections.push(new Paragraph({
+            sections.push(createRtlParagraph({
                 children: [new TextRun({ text: `סיכום תכנון טיול: ${trip.name || 'ללא שם'}`, bold: true, size: 44 })],
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 400 },
@@ -499,35 +510,35 @@
 
             // --- Schedules Section ---
             if (schedules && schedules.length > 0) {
-                sections.push(new Paragraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                sections.push(createRtlParagraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 schedules.forEach(day => {
-                    const [d, m, y] = day.date.split('-');
+                    const [y, m, d] = day.date.split('-');
                     const date = new Date(y, m - 1, d);
                     const formattedDate = !isNaN(date) ? date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : day.date;
-                    sections.push(new Paragraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    sections.push(createRtlParagraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
 
                     if (day.items && day.items.length > 0) {
                         day.items.forEach(item => {
                             const time = `${item.startTime || ''}${item.endTime ? ` - ${item.endTime}` : ''}`;
-                            sections.push(new Paragraph({
+                            sections.push(createRtlParagraph({
                                 children: [
                                     new TextRun({ text: `${time ? time + ': ' : ''}`, bold: true }),
-                                    new TextRun(item.title || 'פריט ללא כותרת')
+                                    new TextRun(String(item.title || 'פריט ללא כותרת'))
                                 ],
                             }));
                             if (item.summary) {
-                                sections.push(new Paragraph({ text: item.summary, indentation: { start: 720 } }));
+                                sections.push(createRtlParagraph({ text: String(item.summary), indentation: { start: 720 } }));
                             }
                         });
                     } else {
-                        sections.push(new Paragraph({ text: "אין פריטים בלוז ליום זה." }));
+                        sections.push(createRtlParagraph({ text: "אין פריטים בלוז ליום זה." }));
                     }
                 });
             }
 
             // --- Places Section ---
             if (places && places.length > 0) {
-                sections.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                sections.push(createRtlParagraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 const placesByDest = places.reduce((acc, p) => {
                     const dest = p.destination || 'כללי';
                     (acc[dest] = acc[dest] || []).push(p);
@@ -535,53 +546,46 @@
                 }, {});
 
                 for (const dest in placesByDest) {
-                    sections.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    sections.push(createRtlParagraph({ text: dest, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
                     placesByDest[dest].forEach(p => {
-                        sections.push(new Paragraph({ text: p.name || 'ללא שם', heading: HeadingLevel.HEADING_3 }));
-                        if (p.shortDescription) sections.push(new Paragraph({ text: p.shortDescription }));
-                        if (p.location) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(p.location)] }));
+                        sections.push(createRtlParagraph({ text: String(p.name || 'ללא שם'), heading: HeadingLevel.HEADING_3 }));
+                        if (p.shortDescription) sections.push(createRtlParagraph({ text: String(p.shortDescription) }));
+                        if (p.location) sections.push(createRtlParagraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(String(p.location))] }));
                     });
                 }
             }
 
             // --- Logistics Section ---
             if (logistics && logistics.length > 0) {
-                sections.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                sections.push(createRtlParagraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 logistics.forEach(l => {
-                    sections.push(new Paragraph({ text: l.name || l.type || 'פריט לוגיסטי', heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
-                    if (l.dates) sections.push(new Paragraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(l.dates)] }));
-                    if (l.address) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(l.address)] }));
-                    if (l.price) sections.push(new Paragraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)] }));
+                    sections.push(createRtlParagraph({ text: String(l.name || l.type || 'פריט לוגיסטי'), heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    if (l.dates) sections.push(createRtlParagraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(String(l.dates))] }));
+                    if (l.address) sections.push(createRtlParagraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(String(l.address))] }));
+                    if (l.price) sections.push(createRtlParagraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)] }));
                     
                     if (l.type === 'flight') {
-                         const fromDest = l.from?.destination || 'לא צוין';
-                         const toDest = l.to?.destination || 'לא צוין';
+                         const fromDest = l.from?.destination ?? 'לא צוין';
+                         const toDest = l.to?.destination ?? 'לא צוין';
                          const flightNum = l.flight_number ? ` (${l.flight_number})` : '';
-                         sections.push(new Paragraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${fromDest} -> ${toDest}${flightNum}`)] }));
+                         sections.push(createRtlParagraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${fromDest} -> ${toDest}${flightNum}`)] }));
                     }
                 });
             }
 
-            // Create the document with RTL property for the whole document
             const doc = new Document({
                 features: { MIGRATION_2023_11: true },
                 sections: [{ 
                     properties: { 
                         type: SectionType.NEXT_PAGE,
-                        rightToLeft: true // Setting RTL for the whole section
+                        rightToLeft: true // Set RTL for the whole section
                     }, 
-                    children: sections.map(p => {
-                        // Ensure every paragraph has RTL properties
-                        p.options.alignment = AlignmentType.RIGHT;
-                        p.options.rightToLeft = true;
-                        return p;
-                    })
+                    children: sections
                 }]
             });
 
-            // Use the global Packer and saveAs
-            window.docx.Packer.toBlob(doc).then(blob => {
-                window.saveAs(blob, `${trip.name || 'Trip'} - סיכום טיול.docx`);
+            Packer.toBlob(doc).then(blob => {
+                saveAs(blob, `${trip.name || 'Trip'} - סיכום טיול.docx`);
             });
         }
 
