@@ -9,10 +9,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
 
-    <!-- ספריות ליצירת קובץ וורד והורדתו -->
-    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
     <style>
         :root {
             --glass: rgba(255,255,255,0.1);
@@ -83,22 +79,16 @@
             <div class="flex justify-between items-start mb-4 shrink-0">
                 <div class="pr-4">
                     <h3 id="share-modal-title" class="text-xl font-bold text-white">שתף את הטיול</h3>
-                    <p class="text-sm text-slate-300">ייצא את הטיול כקובץ Word או שלח קישור הצטרפות.</p>
+                    <p class="text-sm text-slate-300">כל מי שיקבל את הקישור יוכל להצטרף כעורך.</p>
                 </div>
                 <button id="share-modal-close" class="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/10 transition-colors"><i class="fas fa-times"></i></button>
             </div>
             
             <div class="space-y-4 shrink-0">
-                <div class="grid grid-cols-2 gap-3">
-                    <button id="generate-word-doc-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
-                        <i class="fas fa-file-word"></i>
-                        <span id="generate-word-text">צור קובץ Docx</span>
-                    </button>
-                    <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
-                        <i class="fas fa-link"></i>
-                        <span id="create-link-text">צור קישור שיתוף</span>
-                    </button>
-                </div>
+                <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg flex items-center justify-center gap-2">
+                    <i class="fas fa-link"></i>
+                    <span id="create-link-text">צור קישור שיתוף</span>
+                </button>
                 <div id="share-link-container" class="hidden">
                     <label class="font-semibold text-sm text-slate-200">הקישור מוכן! העתק ושתף:</label>
                     <div class="mt-1 flex gap-2">
@@ -128,7 +118,7 @@
                     </a>
                     
                     <div id="auth-container">
-                        </div>
+                       </div>
                 </div>
             </div>
         </header>
@@ -159,7 +149,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp, collectionGroup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -194,8 +184,6 @@
             shareLinkInput: document.getElementById('share-link-input'),
             copyLinkBtn: document.getElementById('copy-link-btn'),
             sharedWithList: document.getElementById('shared-with-list'),
-            generateWordDocBtn: document.getElementById('generate-word-doc-btn'),
-            generateWordText: document.getElementById('generate-word-text'),
         };
         const TRIP_IMG_PLACEHOLDER = 'https://i.imgur.com/K73z2Zg.png';
 
@@ -238,11 +226,12 @@
             const { tripId } = inviteDoc.data();
             const tripRef = doc(db, "trips", tripId);
             
+            // Prevent adding user if already an editor
             const tripSnap = await getDoc(tripRef);
             if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
-                alert("אתה כבר חבר בטיול הזה.");
-                window.history.replaceState({}, document.title, window.location.pathname);
-                return;
+                 alert("אתה כבר חבר בטיול הזה.");
+                 window.history.replaceState({}, document.title, window.location.pathname);
+                 return;
             }
 
             const batch = writeBatch(db);
@@ -364,9 +353,6 @@
             DOM.createShareLinkBtn.disabled = false;
             DOM.createShareLinkBtn.querySelector('i').className = 'fas fa-link';
             DOM.createLinkText.textContent = 'צור קישור שיתוף';
-            DOM.generateWordDocBtn.disabled = false;
-            DOM.generateWordDocBtn.querySelector('i').className = 'fas fa-file-word';
-            DOM.generateWordText.textContent = 'צור קובץ Docx';
             loadSharedWithList(tripId);
         }
 
@@ -384,7 +370,7 @@
                 await addDoc(collection(db, "invites"), {
                     tripId: activeTripId, token, createdAt: serverTimestamp()
                 });
-                const shareUrl = `${window.location.origin}${window.location.pathname.replace('join.html', '')}join.html?token=${token}`;
+                const shareUrl = `${window.location.origin}/join.html?token=${token}`;
                 DOM.shareLinkInput.value = shareUrl;
                 DOM.shareLinkContainer.classList.remove('hidden');
             } catch (error) {
@@ -420,199 +406,23 @@
             DOM.sharedWithList.innerHTML = userDocs.map(userDoc => {
                 if (!userDoc.exists()) return '';
                 const userData = userDoc.data();
+                // *** BUG FIX HERE ***
+                // Was: userData.uid === tripData.ownerId
+                // Now: userDoc.id === tripData.ownerId
                 const isOwner = userDoc.id === tripData.ownerId; 
                 
                 return `<div class="flex items-center justify-between bg-white/5 p-2.5 rounded-lg">
                             <div class="flex items-center gap-3">
-                               <div class="size-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">${(userData.name || 'U').charAt(0).toUpperCase()}</div>
+                               <div class="size-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">${userData.name?.charAt(0).toUpperCase() || 'U'}</div>
                                 <span class="font-semibold text-slate-100">${userData.name || 'משתמש'}</span>
                            </div>
                             <span class="text-xs font-bold py-1 px-2.5 rounded-full ${isOwner ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200/10 text-slate-300'}">${isOwner ? 'יוצר' : 'עורך'}</span>
                         </div>`;
             }).join('');
         }
-
-        // --- Word Document Generation Logic ---
-        DOM.generateWordDocBtn.addEventListener('click', async () => {
-            if (!activeTripId) return;
-            const trip = allUserTrips.find(t => t.id === activeTripId);
-            if (!trip) return;
-
-            const btn = DOM.generateWordDocBtn;
-            btn.disabled = true;
-            btn.querySelector('i').className = 'fas fa-spinner fa-spin';
-            DOM.generateWordText.textContent = 'אוסף נתונים...';
-
-            try {
-                // 1. Fetch all related data
-                const placesQuery = query(collection(db, 'trips', activeTripId, 'places'));
-                const logisticsQuery = query(collection(db, 'trips', activeTripId, 'logistics'));
-                const schedulesQuery = query(collection(db, 'trips', activeTripId, 'schedules'));
-
-                const [placesSnap, logisticsSnap, schedulesSnap] = await Promise.all([
-                    getDocs(placesQuery),
-                    getDocs(logisticsQuery),
-                    getDocs(schedulesQuery)
-                ]);
-
-                const places = placesSnap.docs.map(d => d.data());
-                const logistics = logisticsSnap.docs.map(d => d.data());
-                
-                let schedules = [];
-                for (const scheduleDoc of schedulesSnap.docs) {
-                    const itemsQuery = query(collection(scheduleDoc.ref, 'items'));
-                    const itemsSnap = await getDocs(itemsQuery);
-                    schedules.push({
-                        date: scheduleDoc.id, // YYYY-MM-DD format
-                        ...scheduleDoc.data(),
-                        items: itemsSnap.docs.map(d => d.data()).sort((a,b) => (a.sort || 0) - (b.sort || 0))
-                    });
-                }
-                schedules.sort((a,b) => a.date.localeCompare(b.date));
-
-                // 2. Build and download the Word document
-                DOM.generateWordText.textContent = 'יוצר את הקובץ...';
-                await createAndDownloadDoc(trip, places, logistics, schedules);
-
-            } catch (error) {
-                console.error("Error during the data fetching phase for Word doc:", error);
-                alert("אירעה שגיאה באיסוף הנתונים ליצירת הקובץ.");
-            } finally {
-                btn.disabled = false;
-                btn.querySelector('i').className = 'fas fa-file-word';
-                DOM.generateWordText.textContent = 'צור קובץ Docx';
-            }
-        });
-
-        // --- REBUILT & ROBUST Word Document Generation ---
-        async function createAndDownloadDoc(trip, places, logistics, schedules) {
-            console.log("Starting Word doc creation with data:", { trip, places, logistics, schedules });
-            const { Document, Packer, HeadingLevel, Paragraph, TextRun, AlignmentType, SectionType } = window.docx;
-
-            // Robust sanitizer function to prevent errors from invalid data types
-            const sanitize = (value) => {
-                if (value === null || typeof value === 'undefined') {
-                    return '';
-                }
-                if (typeof value === 'object') {
-                    // Avoid printing [Object object]
-                    return JSON.stringify(value, null, 2);
-                }
-                return String(value);
-            };
-
-            try {
-                const docSections = [];
-
-                // --- Title Section ---
-                console.log("Creating Title section...");
-                docSections.push(new Paragraph({
-                    children: [new TextRun({ text: `סיכום תכנון טיול: ${sanitize(trip.name)}`, bold: true, size: 44 })],
-                    alignment: AlignmentType.CENTER,
-                    rightToLeft: true,
-                    spacing: { after: 400 },
-                }));
-
-                // --- Schedules Section ---
-                console.log("Creating Schedules section...");
-                if (schedules && schedules.length > 0) {
-                    docSections.push(new Paragraph({ children: [new TextRun("לוחות זמנים יומיים")], heading: HeadingLevel.HEADING_1, rightToLeft: true, spacing: { before: 400 } }));
-                    schedules.forEach(day => {
-                        const [y, m, d] = sanitize(day.date).split('-');
-                        const date = new Date(y, m - 1, d);
-                        const formattedDate = !isNaN(date) ? date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : sanitize(day.date);
-                        docSections.push(new Paragraph({ children: [new TextRun(formattedDate)], heading: HeadingLevel.HEADING_2, rightToLeft: true, spacing: { before: 300 } }));
-
-                        if (day.items && day.items.length > 0) {
-                            day.items.forEach(item => {
-                                const time = `${sanitize(item.startTime)}${item.endTime ? ` - ${sanitize(item.endTime)}` : ''}`;
-                                docSections.push(new Paragraph({
-                                    children: [
-                                        new TextRun({ text: `${time ? time + ': ' : ''}`, bold: true }),
-                                        new TextRun(sanitize(item.title) || 'פריט ללא כותרת')
-                                    ],
-                                    rightToLeft: true,
-                                }));
-                                if (item.summary) {
-                                    docSections.push(new Paragraph({ children: [new TextRun(sanitize(item.summary))], indentation: { start: 720 }, rightToLeft: true }));
-                                }
-                            });
-                        } else {
-                            docSections.push(new Paragraph({ children: [new TextRun("אין פריטים בלוז ליום זה.")], rightToLeft: true }));
-                        }
-                    });
-                } else {
-                    console.log("No schedules to add.");
-                }
-
-                // --- Places Section ---
-                console.log("Creating Places section...");
-                if (places && places.length > 0) {
-                    docSections.push(new Paragraph({ children: [new TextRun("אטרקציות ומסעדות")], heading: HeadingLevel.HEADING_1, rightToLeft: true, spacing: { before: 400 } }));
-                    const placesByDest = places.reduce((acc, p) => {
-                        const dest = sanitize(p.destination) || 'כללי';
-                        (acc[dest] = acc[dest] || []).push(p);
-                        return acc;
-                    }, {});
-
-                    for (const dest in placesByDest) {
-                        docSections.push(new Paragraph({ children: [new TextRun(dest)], heading: HeadingLevel.HEADING_2, rightToLeft: true, spacing: { before: 300 } }));
-                        placesByDest[dest].forEach(p => {
-                            docSections.push(new Paragraph({ children: [new TextRun(sanitize(p.name) || 'ללא שם')], heading: HeadingLevel.HEADING_3, rightToLeft: true }));
-                            if (p.shortDescription) docSections.push(new Paragraph({ children: [new TextRun(sanitize(p.shortDescription))], rightToLeft: true }));
-                            if (p.location) docSections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(sanitize(p.location))], rightToLeft: true }));
-                        });
-                    }
-                } else {
-                    console.log("No places to add.");
-                }
-
-                // --- Logistics Section ---
-                console.log("Creating Logistics section...");
-                if (logistics && logistics.length > 0) {
-                    docSections.push(new Paragraph({ children: [new TextRun("לוגיסטיקה")], heading: HeadingLevel.HEADING_1, rightToLeft: true, spacing: { before: 400 } }));
-                    logistics.forEach(l => {
-                        docSections.push(new Paragraph({ children: [new TextRun(sanitize(l.name) || sanitize(l.type) || 'פריט לוגיסטי')], heading: HeadingLevel.HEADING_2, rightToLeft: true, spacing: { before: 300 } }));
-                        if (l.dates) docSections.push(new Paragraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(sanitize(l.dates))], rightToLeft: true }));
-                        if (l.address) docSections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(sanitize(l.address))], rightToLeft: true }));
-                        if (l.price) {
-                            const priceValue = Number(l.price);
-                            const priceText = !isNaN(priceValue) ? `$${priceValue.toLocaleString()}` : sanitize(l.price);
-                            docSections.push(new Paragraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(priceText)], rightToLeft: true }));
-                        }
-                        if (l.type === 'flight') {
-                            const fromDest = l.from?.destination ?? 'לא צוין';
-                            const toDest = l.to?.destination ?? 'לא צוין';
-                            const flightNum = l.flight_number ? ` (${sanitize(l.flight_number)})` : '';
-                            docSections.push(new Paragraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${sanitize(fromDest)} -> ${sanitize(toDest)}${flightNum}`)], rightToLeft: true }));
-                        }
-                    });
-                } else {
-                    console.log("No logistics to add.");
-                }
-
-                console.log("All sections created. Assembling document.");
-                const doc = new Document({
-                    features: { MIGRATION_2023_11: true },
-                    sections: [{
-                        properties: { type: SectionType.NEXT_PAGE, rightToLeft: true },
-                        children: docSections
-                    }]
-                });
-
-                console.log("Packing document to blob...");
-                const blob = await Packer.toBlob(doc);
-
-                console.log("Blob created successfully. Triggering download.");
-                saveAs(blob, `${sanitize(trip.name) || 'Trip'} - סיכום טיול.docx`);
-                console.log("Download triggered.");
-
-            } catch (error) {
-                console.error("CRITICAL ERROR during Word document generation:", error);
-                alert("אירעה שגיאה קריטית בזמן יצירת המסמך. אנא בדוק את המסוף (F12) לפרטים נוספים.");
-            }
-        }
-
     </script>
 </body>
 </html>
+
+
+
