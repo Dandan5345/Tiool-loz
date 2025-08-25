@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ניהול שיתופים</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -10,7 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
 
     <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
 
     <style>
         :root {
@@ -82,20 +83,20 @@
             <div class="flex justify-between items-start mb-4 shrink-0">
                 <div class="pr-4">
                     <h3 id="share-modal-title" class="text-xl font-bold text-white">שתף את הטיול</h3>
-                    <p class="text-sm text-slate-300">שתף עם חברים או הורד סיכום מלא של הטיול.</p>
+                    <p class="text-sm text-slate-300">ייצא את הטיול כקובץ Word או שלח קישור הצטרפות.</p>
                 </div>
                 <button id="share-modal-close" class="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/10 transition-colors"><i class="fas fa-times"></i></button>
             </div>
             
             <div class="space-y-4 shrink-0">
-                 <div class="grid grid-cols-2 gap-3">
-                    <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-lg transition text-base flex items-center justify-center gap-2">
-                        <i class="fas fa-link"></i>
-                        <span id="create-link-text">צור קישור</span>
-                    </button>
-                    <button id="generate-word-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-3 rounded-lg transition text-base flex items-center justify-center gap-2">
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="generate-word-doc-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
                         <i class="fas fa-file-word"></i>
                         <span id="generate-word-text">צור קובץ וורד</span>
+                    </button>
+                    <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-base flex items-center justify-center gap-2">
+                        <i class="fas fa-link"></i>
+                        <span id="create-link-text">צור קישור שיתוף</span>
                     </button>
                 </div>
                 <div id="share-link-container" class="hidden">
@@ -127,7 +128,7 @@
                     </a>
                     
                     <div id="auth-container">
-                       </div>
+                        </div>
                 </div>
             </div>
         </header>
@@ -158,7 +159,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp, collectionGroup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -193,8 +194,8 @@
             shareLinkInput: document.getElementById('share-link-input'),
             copyLinkBtn: document.getElementById('copy-link-btn'),
             sharedWithList: document.getElementById('shared-with-list'),
-            generateWordBtn: document.getElementById('generate-word-btn'), // ✨ כפתור חדש
-            generateWordText: document.getElementById('generate-word-text'), // ✨ טקסט לכפתור
+            generateWordDocBtn: document.getElementById('generate-word-doc-btn'), // כפתור חדש
+            generateWordText: document.getElementById('generate-word-text'),     // טקסט לכפתור החדש
         };
         const TRIP_IMG_PLACEHOLDER = 'https://i.imgur.com/K73z2Zg.png';
 
@@ -237,7 +238,6 @@
             const { tripId } = inviteDoc.data();
             const tripRef = doc(db, "trips", tripId);
             
-            // Prevent adding user if already an editor
             const tripSnap = await getDoc(tripRef);
             if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
                 alert("אתה כבר חבר בטיול הזה.");
@@ -364,6 +364,9 @@
             DOM.createShareLinkBtn.disabled = false;
             DOM.createShareLinkBtn.querySelector('i').className = 'fas fa-link';
             DOM.createLinkText.textContent = 'צור קישור שיתוף';
+            DOM.generateWordDocBtn.disabled = false;
+            DOM.generateWordDocBtn.querySelector('i').className = 'fas fa-file-word';
+            DOM.generateWordText.textContent = 'צור קובץ וורד';
             loadSharedWithList(tripId);
         }
 
@@ -407,8 +410,8 @@
             const tripData = tripDocSnap.data();
             const editors = tripData.editors || [];
             if (editors.length === 0) {
-                DOM.sharedWithList.innerHTML = `<p class="text-slate-400 text-center py-4">הטיול לא משותף עדיין.</p>`;
-                return;
+                 DOM.sharedWithList.innerHTML = `<p class="text-slate-400 text-center py-4">הטיול לא משותף עדיין.</p>`;
+                 return;
             }
 
             const userPromises = editors.map(uid => getDoc(doc(db, "users", uid)));
@@ -429,26 +432,48 @@
             }).join('');
         }
 
-        // --- ✨ לוגיקה חדשה ליצירת קובץ וורד ---
-
-        DOM.generateWordBtn.addEventListener('click', async () => {
+        // ====== לוגיקה חדשה ליצירת קובץ וורד ======
+        DOM.generateWordDocBtn.addEventListener('click', async () => {
             if (!activeTripId) return;
-            
-            const btn = DOM.generateWordBtn;
-            const textSpan = DOM.generateWordText;
-            const originalText = textSpan.textContent;
-            
+            const trip = allUserTrips.find(t => t.id === activeTripId);
+            if (!trip) return;
+
+            const btn = DOM.generateWordDocBtn;
             btn.disabled = true;
             btn.querySelector('i').className = 'fas fa-spinner fa-spin';
-            textSpan.textContent = 'מכין קובץ...';
+            DOM.generateWordText.textContent = 'אוסף נתונים...';
 
             try {
-                const allData = await fetchAllTripData(activeTripId);
-                const doc = createTripDocument(allData);
+                // 1. Fetch all data
+                const placesQuery = query(collection(db, 'trips', activeTripId, 'places'));
+                const logisticsQuery = query(collection(db, 'trips', activeTripId, 'logistics'));
+                const schedulesQuery = query(collection(db, 'trips', activeTripId, 'schedules'));
+
+                const [placesSnap, logisticsSnap, schedulesSnap] = await Promise.all([
+                    getDocs(placesQuery),
+                    getDocs(logisticsQuery),
+                    getDocs(schedulesQuery)
+                ]);
+
+                const places = placesSnap.docs.map(d => d.data());
+                const logistics = logisticsSnap.docs.map(d => d.data());
                 
-                docx.Packer.toBlob(doc).then(blob => {
-                    saveAs(blob, `סיכום-טיול-${allData.tripDetails.name.replace(/\s+/g, '-')}.docx`);
-                });
+                let schedules = [];
+                for (const scheduleDoc of schedulesSnap.docs) {
+                    const itemsQuery = query(collection(scheduleDoc.ref, 'items'));
+                    const itemsSnap = await getDocs(itemsQuery);
+                    schedules.push({
+                        date: scheduleDoc.id,
+                        ...scheduleDoc.data(),
+                        items: itemsSnap.docs.map(d => d.data()).sort((a,b) => a.sort - b.sort)
+                    });
+                }
+                schedules.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+
+                // 2. Build the Word document
+                DOM.generateWordText.textContent = 'יוצר את הקובץ...';
+                await createAndDownloadDoc(trip, places, logistics, schedules);
 
             } catch (error) {
                 console.error("Error generating Word document:", error);
@@ -456,142 +481,95 @@
             } finally {
                 btn.disabled = false;
                 btn.querySelector('i').className = 'fas fa-file-word';
-                textSpan.textContent = originalText;
+                DOM.generateWordText.textContent = 'צור קובץ וורד';
             }
         });
-        
-        async function fetchAllTripData(tripId) {
-            const tripRef = doc(db, 'trips', tripId);
-            const tripSnap = await getDoc(tripRef);
-            if (!tripSnap.exists()) throw new Error("Trip not found");
 
-            const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
-            const promises = collectionsToFetch.map(c => getDocs(query(collection(db, tripRef.path, c))));
-            const [logisticsSnap, placesSnap, checklistsSnap, schedulesSnap] = await Promise.all(promises);
+        async function createAndDownloadDoc(trip, places, logistics, schedules) {
+            const { HeadingLevel, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType } = docx;
 
-            const schedulesData = await Promise.all(schedulesSnap.docs.map(async (scheduleDoc) => {
-                const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                const notesQuery = query(collection(scheduleDoc.ref, 'notes'));
-                const [itemsSnap, notesSnap] = await Promise.all([getDocs(itemsQuery), getDocs(notesQuery)]);
-                return {
-                    id: scheduleDoc.id,
-                    ...scheduleDoc.data(),
-                    items: itemsSnap.docs.map(d => d.data()),
-                    notes: notesSnap.docs.map(d => d.data())
-                };
+            const sections = [];
+
+            // --- Title Section ---
+            sections.push(new Paragraph({
+                children: [new TextRun({ text: `סיכום תכנון טיול: ${trip.name}`, bold: true, size: 44 })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 400 }
             }));
-            
-            return {
-                tripDetails: tripSnap.data(),
-                logistics: logisticsSnap.docs.map(d => d.data()),
-                places: placesSnap.docs.map(d => d.data()),
-                checklists: checklistsSnap.docs.map(d => d.data()),
-                schedules: schedulesData.sort((a,b) => new Date(a.id) - new Date(b.id)), // Sort schedules by date
-            };
-        }
 
-        function createTripDocument(data) {
-            const { tripDetails, logistics, places, checklists, schedules } = data;
-            const { HeadingLevel, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle } = docx;
+            // --- Schedules Section ---
+            if (schedules.length > 0) {
+                sections.push(new Paragraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                schedules.forEach(day => {
+                    const date = new Date(day.date);
+                    const formattedDate = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    sections.push(new Paragraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
 
-            const docChildren = [];
-
-            // Title
-            docChildren.push(new Paragraph({
-                children: [new TextRun({ text: tripDetails.name, bold: true, size: 48 })],
-                heading: HeadingLevel.TITLE,
-                alignment: docx.AlignmentType.CENTER
-            }));
-            docChildren.push(new Paragraph({
-                text: `${tripDetails.startDate || ''} - ${tripDetails.endDate || ''}`,
-                alignment: docx.AlignmentType.CENTER,
-                style: "header"
-            }));
-            
-            // --- Logistics ---
-            docChildren.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, style: "header" }));
-            const hotels = logistics.filter(l => l.type === 'hotel');
-            const flights = logistics.filter(l => l.type === 'flight');
-            if (hotels.length > 0) {
-                docChildren.push(new Paragraph({ text: "מלונות", heading: HeadingLevel.HEADING_2 }));
-                hotels.forEach(h => {
-                    docChildren.push(new Paragraph({ children: [new TextRun({ text: h.name, bold: true })] }));
-                    docChildren.push(new Paragraph(`תאריכים: ${h.dates || ''}, יעד: ${h.destination || ''}, כתובת: ${h.address || ''}`));
-                });
-            }
-             if (flights.length > 0) {
-                docChildren.push(new Paragraph({ text: "טיסות", heading: HeadingLevel.HEADING_2 }));
-                flights.forEach(f => {
-                    docChildren.push(new Paragraph({ children: [new TextRun({ text: `${f.from.destination} ➔ ${f.to.destination}`, bold: true })] }));
-                    docChildren.push(new Paragraph(`תאריך: ${f.dates}, טיסה ${f.flight_number}, המראה: ${f.departure_time}, נחיתה: ${f.arrival_time}`));
-                });
-            }
-            docChildren.push(new Paragraph(" ")); // Spacer
-
-            // --- Attractions ---
-            docChildren.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, style: "header" }));
-            const placesByDest = places.reduce((acc, p) => {
-                const dest = p.destination || 'כללי';
-                if (!acc[dest]) acc[dest] = [];
-                acc[dest].push(p);
-                return acc;
-            }, {});
-            for (const dest in placesByDest) {
-                docChildren.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2 }));
-                placesByDest[dest].forEach(p => {
-                     docChildren.push(new Paragraph({ children: [new TextRun({ text: p.name, bold: true })]}));
-                     if(p.shortDescription) docChildren.push(new Paragraph(p.shortDescription));
-                     if(p.location) docChildren.push(new Paragraph(`כתובת: ${p.location}`));
-                });
-            }
-            docChildren.push(new Paragraph(" "));
-
-            // --- Daily Schedules ---
-            docChildren.push(new Paragraph({ text: "לו\"ז יומי", heading: HeadingLevel.HEADING_1, style: "header" }));
-            schedules.forEach(day => {
-                const date = new Date(day.id);
-                const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                docChildren.push(new Paragraph({ text: `${dateString} - ${day.title || ''}`, heading: HeadingLevel.HEADING_2 }));
-                if (day.items && day.items.length > 0) {
-                    day.items.forEach(item => {
-                         docChildren.push(new Paragraph({ children: [
-                            new TextRun({ text: `${item.startTime || ''}: `, bold: true }),
-                            new TextRun(item.title)
-                         ]}));
-                         if(item.summary) docChildren.push(new Paragraph({ text: item.summary, indentation: { left: 720 }}));
-                    });
-                } else {
-                    docChildren.push(new Paragraph("אין פריטים בלוז ליום זה."));
-                }
-            });
-            docChildren.push(new Paragraph(" "));
-
-             // --- Checklists ---
-            if (checklists.length > 0) {
-                docChildren.push(new Paragraph({ text: "רשימות", heading: HeadingLevel.HEADING_1, style: "header" }));
-                checklists.forEach(list => {
-                    docChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2 }));
-                    if (list.items && list.items.length > 0) {
-                        list.items.forEach(item => {
-                            docChildren.push(new Paragraph({ text: `☐ ${item.text} (כמות: ${item.quantity || 1})`, bullet: { level: 0 } }));
+                    if (day.items.length > 0) {
+                        day.items.forEach(item => {
+                            const time = `${item.startTime || ''}${item.endTime ? ` - ${item.endTime}` : ''}`;
+                            sections.push(new Paragraph({
+                                children: [
+                                    new TextRun({ text: `${time}: `, bold: true }),
+                                    new TextRun(item.title)
+                                ],
+                                alignment: AlignmentType.RIGHT,
+                                rightToLeft: true,
+                            }));
+                            if (item.summary) {
+                                sections.push(new Paragraph({ text: item.summary, alignment: AlignmentType.RIGHT, rightToLeft: true, indentation: { start: 720 } }));
+                            }
                         });
+                    } else {
+                        sections.push(new Paragraph({ text: "אין פריטים בלוז ליום זה.", alignment: AlignmentType.RIGHT, rightToLeft: true }));
                     }
                 });
             }
 
-            return new docx.Document({
-                sections: [{
-                    properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-                    children: docChildren
-                }],
-                styles: {
-                    paragraphStyles: [
-                        { id: "header", name: "Header", run: { color: "334155", size: 24, bold: true }, paragraph: { spacing: { before: 240, after: 120 } } }
-                    ]
+            // --- Places Section ---
+            if (places.length > 0) {
+                sections.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 400 } }));
+                const placesByDest = places.reduce((acc, p) => {
+                    const dest = p.destination || 'כללי';
+                    (acc[dest] = acc[dest] || []).push(p);
+                    return acc;
+                }, {});
+
+                for (const dest in placesByDest) {
+                    sections.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
+                    placesByDest[dest].forEach(p => {
+                        sections.push(new Paragraph({ text: p.name, heading: HeadingLevel.HEADING_3, alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                        if (p.shortDescription) sections.push(new Paragraph({ text: p.shortDescription, alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                        if (p.location) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(p.location)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                    });
                 }
+            }
+
+            // --- Logistics Section ---
+            if (logistics.length > 0) {
+                sections.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 400 } }));
+                logistics.forEach(l => {
+                    sections.push(new Paragraph({ text: l.name || l.type, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
+                    if (l.dates) sections.push(new Paragraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(l.dates)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                    if (l.address) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(l.address)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                    if (l.price) sections.push(new Paragraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                    // Add more details for flights, etc.
+                    if (l.type === 'flight') {
+                         sections.push(new Paragraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${l.from.destination} -> ${l.to.destination} (${l.flight_number})`)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                    }
+                });
+            }
+
+            const doc = new docx.Document({
+                features: { MIGRATION_2023_11: true },
+                sections: [{ properties: { type: docx.SectionType.NEXT_PAGE }, children: sections }]
+            });
+
+            docx.Packer.toBlob(doc).then(blob => {
+                saveAs(blob, `${trip.name} - סיכום טיול.docx`);
             });
         }
-        
+
     </script>
 </body>
 </html>
