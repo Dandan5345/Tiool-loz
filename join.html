@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ניהול שיתופים</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
 
     <style>
         :root {
@@ -79,16 +82,22 @@
             <div class="flex justify-between items-start mb-4 shrink-0">
                 <div class="pr-4">
                     <h3 id="share-modal-title" class="text-xl font-bold text-white">שתף את הטיול</h3>
-                    <p class="text-sm text-slate-300">כל מי שיקבל את הקישור יוכל להצטרף כעורך.</p>
+                    <p class="text-sm text-slate-300">שתף עם חברים או הורד סיכום מלא של הטיול.</p>
                 </div>
                 <button id="share-modal-close" class="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/10 transition-colors"><i class="fas fa-times"></i></button>
             </div>
             
             <div class="space-y-4 shrink-0">
-                <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg flex items-center justify-center gap-2">
-                    <i class="fas fa-link"></i>
-                    <span id="create-link-text">צור קישור שיתוף</span>
-                </button>
+                 <div class="grid grid-cols-2 gap-3">
+                    <button id="create-share-link-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-lg transition text-base flex items-center justify-center gap-2">
+                        <i class="fas fa-link"></i>
+                        <span id="create-link-text">צור קישור</span>
+                    </button>
+                    <button id="generate-word-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-3 rounded-lg transition text-base flex items-center justify-center gap-2">
+                        <i class="fas fa-file-word"></i>
+                        <span id="generate-word-text">צור קובץ וורד</span>
+                    </button>
+                </div>
                 <div id="share-link-container" class="hidden">
                     <label class="font-semibold text-sm text-slate-200">הקישור מוכן! העתק ושתף:</label>
                     <div class="mt-1 flex gap-2">
@@ -149,7 +158,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -184,6 +193,8 @@
             shareLinkInput: document.getElementById('share-link-input'),
             copyLinkBtn: document.getElementById('copy-link-btn'),
             sharedWithList: document.getElementById('shared-with-list'),
+            generateWordBtn: document.getElementById('generate-word-btn'), // ✨ כפתור חדש
+            generateWordText: document.getElementById('generate-word-text'), // ✨ טקסט לכפתור
         };
         const TRIP_IMG_PLACEHOLDER = 'https://i.imgur.com/K73z2Zg.png';
 
@@ -229,9 +240,9 @@
             // Prevent adding user if already an editor
             const tripSnap = await getDoc(tripRef);
             if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
-                 alert("אתה כבר חבר בטיול הזה.");
-                 window.history.replaceState({}, document.title, window.location.pathname);
-                 return;
+                alert("אתה כבר חבר בטיול הזה.");
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
             }
 
             const batch = writeBatch(db);
@@ -396,8 +407,8 @@
             const tripData = tripDocSnap.data();
             const editors = tripData.editors || [];
             if (editors.length === 0) {
-                 DOM.sharedWithList.innerHTML = `<p class="text-slate-400 text-center py-4">הטיול לא משותף עדיין.</p>`;
-                 return;
+                DOM.sharedWithList.innerHTML = `<p class="text-slate-400 text-center py-4">הטיול לא משותף עדיין.</p>`;
+                return;
             }
 
             const userPromises = editors.map(uid => getDoc(doc(db, "users", uid)));
@@ -406,9 +417,6 @@
             DOM.sharedWithList.innerHTML = userDocs.map(userDoc => {
                 if (!userDoc.exists()) return '';
                 const userData = userDoc.data();
-                // *** BUG FIX HERE ***
-                // Was: userData.uid === tripData.ownerId
-                // Now: userDoc.id === tripData.ownerId
                 const isOwner = userDoc.id === tripData.ownerId; 
                 
                 return `<div class="flex items-center justify-between bg-white/5 p-2.5 rounded-lg">
@@ -420,6 +428,170 @@
                         </div>`;
             }).join('');
         }
+
+        // --- ✨ לוגיקה חדשה ליצירת קובץ וורד ---
+
+        DOM.generateWordBtn.addEventListener('click', async () => {
+            if (!activeTripId) return;
+            
+            const btn = DOM.generateWordBtn;
+            const textSpan = DOM.generateWordText;
+            const originalText = textSpan.textContent;
+            
+            btn.disabled = true;
+            btn.querySelector('i').className = 'fas fa-spinner fa-spin';
+            textSpan.textContent = 'מכין קובץ...';
+
+            try {
+                const allData = await fetchAllTripData(activeTripId);
+                const doc = createTripDocument(allData);
+                
+                docx.Packer.toBlob(doc).then(blob => {
+                    saveAs(blob, `סיכום-טיול-${allData.tripDetails.name.replace(/\s+/g, '-')}.docx`);
+                });
+
+            } catch (error) {
+                console.error("Error generating Word document:", error);
+                alert("אירעה שגיאה ביצירת הקובץ.");
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('i').className = 'fas fa-file-word';
+                textSpan.textContent = originalText;
+            }
+        });
+        
+        async function fetchAllTripData(tripId) {
+            const tripRef = doc(db, 'trips', tripId);
+            const tripSnap = await getDoc(tripRef);
+            if (!tripSnap.exists()) throw new Error("Trip not found");
+
+            const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
+            const promises = collectionsToFetch.map(c => getDocs(query(collection(db, tripRef.path, c))));
+            const [logisticsSnap, placesSnap, checklistsSnap, schedulesSnap] = await Promise.all(promises);
+
+            const schedulesData = await Promise.all(schedulesSnap.docs.map(async (scheduleDoc) => {
+                const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
+                const notesQuery = query(collection(scheduleDoc.ref, 'notes'));
+                const [itemsSnap, notesSnap] = await Promise.all([getDocs(itemsQuery), getDocs(notesQuery)]);
+                return {
+                    id: scheduleDoc.id,
+                    ...scheduleDoc.data(),
+                    items: itemsSnap.docs.map(d => d.data()),
+                    notes: notesSnap.docs.map(d => d.data())
+                };
+            }));
+            
+            return {
+                tripDetails: tripSnap.data(),
+                logistics: logisticsSnap.docs.map(d => d.data()),
+                places: placesSnap.docs.map(d => d.data()),
+                checklists: checklistsSnap.docs.map(d => d.data()),
+                schedules: schedulesData.sort((a,b) => new Date(a.id) - new Date(b.id)), // Sort schedules by date
+            };
+        }
+
+        function createTripDocument(data) {
+            const { tripDetails, logistics, places, checklists, schedules } = data;
+            const { HeadingLevel, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle } = docx;
+
+            const docChildren = [];
+
+            // Title
+            docChildren.push(new Paragraph({
+                children: [new TextRun({ text: tripDetails.name, bold: true, size: 48 })],
+                heading: HeadingLevel.TITLE,
+                alignment: docx.AlignmentType.CENTER
+            }));
+            docChildren.push(new Paragraph({
+                text: `${tripDetails.startDate || ''} - ${tripDetails.endDate || ''}`,
+                alignment: docx.AlignmentType.CENTER,
+                style: "header"
+            }));
+            
+            // --- Logistics ---
+            docChildren.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, style: "header" }));
+            const hotels = logistics.filter(l => l.type === 'hotel');
+            const flights = logistics.filter(l => l.type === 'flight');
+            if (hotels.length > 0) {
+                docChildren.push(new Paragraph({ text: "מלונות", heading: HeadingLevel.HEADING_2 }));
+                hotels.forEach(h => {
+                    docChildren.push(new Paragraph({ children: [new TextRun({ text: h.name, bold: true })] }));
+                    docChildren.push(new Paragraph(`תאריכים: ${h.dates || ''}, יעד: ${h.destination || ''}, כתובת: ${h.address || ''}`));
+                });
+            }
+             if (flights.length > 0) {
+                docChildren.push(new Paragraph({ text: "טיסות", heading: HeadingLevel.HEADING_2 }));
+                flights.forEach(f => {
+                    docChildren.push(new Paragraph({ children: [new TextRun({ text: `${f.from.destination} ➔ ${f.to.destination}`, bold: true })] }));
+                    docChildren.push(new Paragraph(`תאריך: ${f.dates}, טיסה ${f.flight_number}, המראה: ${f.departure_time}, נחיתה: ${f.arrival_time}`));
+                });
+            }
+            docChildren.push(new Paragraph(" ")); // Spacer
+
+            // --- Attractions ---
+            docChildren.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, style: "header" }));
+            const placesByDest = places.reduce((acc, p) => {
+                const dest = p.destination || 'כללי';
+                if (!acc[dest]) acc[dest] = [];
+                acc[dest].push(p);
+                return acc;
+            }, {});
+            for (const dest in placesByDest) {
+                docChildren.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2 }));
+                placesByDest[dest].forEach(p => {
+                     docChildren.push(new Paragraph({ children: [new TextRun({ text: p.name, bold: true })]}));
+                     if(p.shortDescription) docChildren.push(new Paragraph(p.shortDescription));
+                     if(p.location) docChildren.push(new Paragraph(`כתובת: ${p.location}`));
+                });
+            }
+            docChildren.push(new Paragraph(" "));
+
+            // --- Daily Schedules ---
+            docChildren.push(new Paragraph({ text: "לו\"ז יומי", heading: HeadingLevel.HEADING_1, style: "header" }));
+            schedules.forEach(day => {
+                const date = new Date(day.id);
+                const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                docChildren.push(new Paragraph({ text: `${dateString} - ${day.title || ''}`, heading: HeadingLevel.HEADING_2 }));
+                if (day.items && day.items.length > 0) {
+                    day.items.forEach(item => {
+                         docChildren.push(new Paragraph({ children: [
+                            new TextRun({ text: `${item.startTime || ''}: `, bold: true }),
+                            new TextRun(item.title)
+                         ]}));
+                         if(item.summary) docChildren.push(new Paragraph({ text: item.summary, indentation: { left: 720 }}));
+                    });
+                } else {
+                    docChildren.push(new Paragraph("אין פריטים בלוז ליום זה."));
+                }
+            });
+            docChildren.push(new Paragraph(" "));
+
+             // --- Checklists ---
+            if (checklists.length > 0) {
+                docChildren.push(new Paragraph({ text: "רשימות", heading: HeadingLevel.HEADING_1, style: "header" }));
+                checklists.forEach(list => {
+                    docChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2 }));
+                    if (list.items && list.items.length > 0) {
+                        list.items.forEach(item => {
+                            docChildren.push(new Paragraph({ text: `☐ ${item.text} (כמות: ${item.quantity || 1})`, bullet: { level: 0 } }));
+                        });
+                    }
+                });
+            }
+
+            return new docx.Document({
+                sections: [{
+                    properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+                    children: docChildren
+                }],
+                styles: {
+                    paragraphStyles: [
+                        { id: "header", name: "Header", run: { color: "334155", size: 24, bold: true }, paragraph: { spacing: { before: 240, after: 120 } } }
+                    ]
+                }
+            });
+        }
+        
     </script>
 </body>
 </html>
