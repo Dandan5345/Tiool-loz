@@ -484,76 +484,64 @@
             }
         });
 
+        // --- REBUILT & ROBUST Word Document Generation ---
         async function createAndDownloadDoc(trip, places, logistics, schedules) {
             const { Document, Packer, HeadingLevel, Paragraph, TextRun, AlignmentType, SectionType } = window.docx;
 
-            // --- FIXED HELPER FUNCTION ---
-            // This function now correctly handles both simple text and complex children arrays.
-            // The original error happened because the Paragraph constructor expects a 'children' array
-            // of TextRun objects, not a direct 'text' property.
-            const createRtlParagraph = (options) => {
-                const newOptions = { ...options };
+            // --- HELPER FUNCTIONS ---
+            // Creates a TextRun object, ensuring the text is always a string to prevent errors.
+            const createRtlTextRun = (text, options = {}) => {
+                return new TextRun({ text: String(text ?? ''), ...options });
+            };
 
-                if (newOptions.text && !newOptions.children) {
-                    newOptions.children = [new TextRun({
-                        text: String(newOptions.text),
-                        bold: newOptions.bold,
-                        size: newOptions.size,
-                    })];
-                    delete newOptions.text;
-                    delete newOptions.bold;
-                    delete newOptions.size;
-                }
-
+            // Creates a Paragraph object, ensuring its children are always in an array.
+            const createRtlParagraph = (children, options = {}) => {
+                const childArray = Array.isArray(children) ? children : [children];
                 return new Paragraph({
-                    ...newOptions,
-                    alignment: AlignmentType.RIGHT,
+                    children: childArray,
+                    ...options,
+                    alignment: options.alignment || AlignmentType.RIGHT,
                     rightToLeft: true,
                 });
             };
 
-            const sections = [];
+            const docSections = [];
 
             // --- Title Section ---
-            sections.push(createRtlParagraph({
-                text: `סיכום תכנון טיול: ${trip.name || 'ללא שם'}`,
-                bold: true,
-                size: 44,
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
-            }));
+            docSections.push(createRtlParagraph(
+                createRtlTextRun(`סיכום תכנון טיול: ${trip.name || 'ללא שם'}`, { bold: true, size: 44 }),
+                { alignment: AlignmentType.CENTER, spacing: { after: 400 } }
+            ));
 
             // --- Schedules Section ---
             if (schedules && schedules.length > 0) {
-                sections.push(createRtlParagraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                docSections.push(createRtlParagraph(createRtlTextRun("לוחות זמנים יומיים"), { heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 schedules.forEach(day => {
                     const [y, m, d] = day.date.split('-');
                     const date = new Date(y, m - 1, d);
                     const formattedDate = !isNaN(date) ? date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : day.date;
-                    sections.push(createRtlParagraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    docSections.push(createRtlParagraph(createRtlTextRun(formattedDate), { heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
 
                     if (day.items && day.items.length > 0) {
                         day.items.forEach(item => {
                             const time = `${item.startTime || ''}${item.endTime ? ` - ${item.endTime}` : ''}`;
-                            sections.push(createRtlParagraph({
-                                children: [
-                                    new TextRun({ text: `${time ? time + ': ' : ''}`, bold: true }),
-                                    new TextRun(String(item.title || 'פריט ללא כותרת'))
-                                ],
-                            }));
+                            docSections.push(createRtlParagraph([
+                                createRtlTextRun(`${time ? time + ': ' : ''}`, { bold: true }),
+                                createRtlTextRun(item.title || 'פריט ללא כותרת')
+                            ]));
                             if (item.summary) {
-                                sections.push(createRtlParagraph({ text: String(item.summary), indentation: { start: 720 } }));
+                                docSections.push(createRtlParagraph(createRtlTextRun(item.summary), { indentation: { start: 720 } }));
                             }
                         });
                     } else {
-                        sections.push(createRtlParagraph({ text: "אין פריטים בלוז ליום זה." }));
+                        docSections.push(createRtlParagraph(createRtlTextRun("אין פריטים בלוז ליום זה.")));
                     }
                 });
             }
 
             // --- Places Section ---
             if (places && places.length > 0) {
-                sections.push(createRtlParagraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                docSections.push(createRtlParagraph(createRtlTextRun("אטרקציות ומסעדות"), { heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 const placesByDest = places.reduce((acc, p) => {
                     const dest = p.destination || 'כללי';
                     (acc[dest] = acc[dest] || []).push(p);
@@ -561,29 +549,39 @@
                 }, {});
 
                 for (const dest in placesByDest) {
-                    sections.push(createRtlParagraph({ text: dest, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    docSections.push(createRtlParagraph(createRtlTextRun(dest), { heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
                     placesByDest[dest].forEach(p => {
-                        sections.push(createRtlParagraph({ text: String(p.name || 'ללא שם'), heading: HeadingLevel.HEADING_3 }));
-                        if (p.shortDescription) sections.push(createRtlParagraph({ text: String(p.shortDescription) }));
-                        if (p.location) sections.push(createRtlParagraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(String(p.location))] }));
+                        docSections.push(createRtlParagraph(createRtlTextRun(p.name || 'ללא שם'), { heading: HeadingLevel.HEADING_3 }));
+                        if (p.shortDescription) docSections.push(createRtlParagraph(createRtlTextRun(p.shortDescription)));
+                        if (p.location) docSections.push(createRtlParagraph([
+                            createRtlTextRun("כתובת: ", { bold: true }), 
+                            createRtlTextRun(p.location)
+                        ]));
                     });
                 }
             }
 
             // --- Logistics Section ---
             if (logistics && logistics.length > 0) {
-                sections.push(createRtlParagraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+                docSections.push(createRtlParagraph(createRtlTextRun("לוגיסטיקה"), { heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 logistics.forEach(l => {
-                    sections.push(createRtlParagraph({ text: String(l.name || l.type || 'פריט לוגיסטי'), heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
-                    if (l.dates) sections.push(createRtlParagraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(String(l.dates))] }));
-                    if (l.address) sections.push(createRtlParagraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(String(l.address))] }));
-                    if (l.price) sections.push(createRtlParagraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)] }));
+                    docSections.push(createRtlParagraph(createRtlTextRun(l.name || l.type || 'פריט לוגיסטי'), { heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    if (l.dates) docSections.push(createRtlParagraph([createRtlTextRun("תאריכים: ", { bold: true }), createRtlTextRun(l.dates)]));
+                    if (l.address) docSections.push(createRtlParagraph([createRtlTextRun("כתובת: ", { bold: true }), createRtlTextRun(l.address)]));
+                    if (l.price) {
+                        const priceValue = Number(l.price);
+                        const priceText = !isNaN(priceValue) ? `$${priceValue.toLocaleString()}` : String(l.price);
+                        docSections.push(createRtlParagraph([createRtlTextRun("מחיר: ", { bold: true }), createRtlTextRun(priceText)]));
+                    }
                     
                     if (l.type === 'flight') {
                          const fromDest = l.from?.destination ?? 'לא צוין';
                          const toDest = l.to?.destination ?? 'לא צוין';
                          const flightNum = l.flight_number ? ` (${l.flight_number})` : '';
-                         sections.push(createRtlParagraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${fromDest} -> ${toDest}${flightNum}`)] }));
+                         docSections.push(createRtlParagraph([
+                             createRtlTextRun("טיסה: ", { bold: true }), 
+                             createRtlTextRun(`${fromDest} -> ${toDest}${flightNum}`)
+                         ]));
                     }
                 });
             }
@@ -593,9 +591,9 @@
                 sections: [{ 
                     properties: { 
                         type: SectionType.NEXT_PAGE,
-                        rightToLeft: true // Set RTL for the whole section
+                        rightToLeft: true
                     }, 
-                    children: sections
+                    children: docSections
                 }]
             });
 
