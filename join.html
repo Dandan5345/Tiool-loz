@@ -9,9 +9,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
 
+    <!-- ספריות ליצירת קובץ וורד והורדתו -->
     <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
 
     <style>
         :root {
@@ -194,8 +194,8 @@
             shareLinkInput: document.getElementById('share-link-input'),
             copyLinkBtn: document.getElementById('copy-link-btn'),
             sharedWithList: document.getElementById('shared-with-list'),
-            generateWordDocBtn: document.getElementById('generate-word-doc-btn'), // כפתור חדש
-            generateWordText: document.getElementById('generate-word-text'),     // טקסט לכפתור החדש
+            generateWordDocBtn: document.getElementById('generate-word-doc-btn'),
+            generateWordText: document.getElementById('generate-word-text'),
         };
         const TRIP_IMG_PLACEHOLDER = 'https://i.imgur.com/K73z2Zg.png';
 
@@ -384,7 +384,7 @@
                 await addDoc(collection(db, "invites"), {
                     tripId: activeTripId, token, createdAt: serverTimestamp()
                 });
-                const shareUrl = `${window.location.origin}/join.html?token=${token}`;
+                const shareUrl = `${window.location.origin}${window.location.pathname.replace('join.html', '')}join.html?token=${token}`;
                 DOM.shareLinkInput.value = shareUrl;
                 DOM.shareLinkContainer.classList.remove('hidden');
             } catch (error) {
@@ -432,7 +432,7 @@
             }).join('');
         }
 
-        // ====== לוגיקה חדשה ליצירת קובץ וורד ======
+        // --- Word Document Generation Logic (FIXED) ---
         DOM.generateWordDocBtn.addEventListener('click', async () => {
             if (!activeTripId) return;
             const trip = allUserTrips.find(t => t.id === activeTripId);
@@ -444,7 +444,7 @@
             DOM.generateWordText.textContent = 'אוסף נתונים...';
 
             try {
-                // 1. Fetch all data
+                // 1. Fetch all related data
                 const placesQuery = query(collection(db, 'trips', activeTripId, 'places'));
                 const logisticsQuery = query(collection(db, 'trips', activeTripId, 'logistics'));
                 const schedulesQuery = query(collection(db, 'trips', activeTripId, 'schedules'));
@@ -468,16 +468,15 @@
                         items: itemsSnap.docs.map(d => d.data()).sort((a,b) => a.sort - b.sort)
                     });
                 }
-                schedules.sort((a,b) => new Date(a.date) - new Date(b.date));
+                schedules.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-')));
 
-
-                // 2. Build the Word document
+                // 2. Build and download the Word document
                 DOM.generateWordText.textContent = 'יוצר את הקובץ...';
                 await createAndDownloadDoc(trip, places, logistics, schedules);
 
             } catch (error) {
                 console.error("Error generating Word document:", error);
-                alert("אירעה שגיאה ביצירת הקובץ.");
+                alert("אירעה שגיאה ביצירת הקובץ. בדוק את המסוף לפרטים נוספים.");
             } finally {
                 btn.disabled = false;
                 btn.querySelector('i').className = 'fas fa-file-word';
@@ -486,49 +485,49 @@
         });
 
         async function createAndDownloadDoc(trip, places, logistics, schedules) {
-            const { HeadingLevel, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType } = docx;
+            // Use the global docx object from the CDN
+            const { Document, Packer, HeadingLevel, Paragraph, TextRun, AlignmentType, SectionType } = window.docx;
 
             const sections = [];
 
             // --- Title Section ---
             sections.push(new Paragraph({
-                children: [new TextRun({ text: `סיכום תכנון טיול: ${trip.name}`, bold: true, size: 44 })],
+                children: [new TextRun({ text: `סיכום תכנון טיול: ${trip.name || 'ללא שם'}`, bold: true, size: 44 })],
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 400 }
+                spacing: { after: 400 },
             }));
 
             // --- Schedules Section ---
-            if (schedules.length > 0) {
-                sections.push(new Paragraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true }));
+            if (schedules && schedules.length > 0) {
+                sections.push(new Paragraph({ text: "לוחות זמנים יומיים", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 schedules.forEach(day => {
-                    const date = new Date(day.date);
-                    const formattedDate = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                    sections.push(new Paragraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
+                    const [d, m, y] = day.date.split('-');
+                    const date = new Date(y, m - 1, d);
+                    const formattedDate = !isNaN(date) ? date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : day.date;
+                    sections.push(new Paragraph({ text: formattedDate, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
 
-                    if (day.items.length > 0) {
+                    if (day.items && day.items.length > 0) {
                         day.items.forEach(item => {
                             const time = `${item.startTime || ''}${item.endTime ? ` - ${item.endTime}` : ''}`;
                             sections.push(new Paragraph({
                                 children: [
-                                    new TextRun({ text: `${time}: `, bold: true }),
-                                    new TextRun(item.title)
+                                    new TextRun({ text: `${time ? time + ': ' : ''}`, bold: true }),
+                                    new TextRun(item.title || 'פריט ללא כותרת')
                                 ],
-                                alignment: AlignmentType.RIGHT,
-                                rightToLeft: true,
                             }));
                             if (item.summary) {
-                                sections.push(new Paragraph({ text: item.summary, alignment: AlignmentType.RIGHT, rightToLeft: true, indentation: { start: 720 } }));
+                                sections.push(new Paragraph({ text: item.summary, indentation: { start: 720 } }));
                             }
                         });
                     } else {
-                        sections.push(new Paragraph({ text: "אין פריטים בלוז ליום זה.", alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                        sections.push(new Paragraph({ text: "אין פריטים בלוז ליום זה." }));
                     }
                 });
             }
 
             // --- Places Section ---
-            if (places.length > 0) {
-                sections.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 400 } }));
+            if (places && places.length > 0) {
+                sections.push(new Paragraph({ text: "אטרקציות ומסעדות", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 const placesByDest = places.reduce((acc, p) => {
                     const dest = p.destination || 'כללי';
                     (acc[dest] = acc[dest] || []).push(p);
@@ -536,37 +535,53 @@
                 }, {});
 
                 for (const dest in placesByDest) {
-                    sections.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
+                    sections.push(new Paragraph({ text: dest, heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
                     placesByDest[dest].forEach(p => {
-                        sections.push(new Paragraph({ text: p.name, heading: HeadingLevel.HEADING_3, alignment: AlignmentType.RIGHT, rightToLeft: true }));
-                        if (p.shortDescription) sections.push(new Paragraph({ text: p.shortDescription, alignment: AlignmentType.RIGHT, rightToLeft: true }));
-                        if (p.location) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(p.location)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                        sections.push(new Paragraph({ text: p.name || 'ללא שם', heading: HeadingLevel.HEADING_3 }));
+                        if (p.shortDescription) sections.push(new Paragraph({ text: p.shortDescription }));
+                        if (p.location) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(p.location)] }));
                     });
                 }
             }
 
             // --- Logistics Section ---
-            if (logistics.length > 0) {
-                sections.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 400 } }));
+            if (logistics && logistics.length > 0) {
+                sections.push(new Paragraph({ text: "לוגיסטיקה", heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
                 logistics.forEach(l => {
-                    sections.push(new Paragraph({ text: l.name || l.type, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, rightToLeft: true, spacing: { before: 300 } }));
-                    if (l.dates) sections.push(new Paragraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(l.dates)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
-                    if (l.address) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(l.address)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
-                    if (l.price) sections.push(new Paragraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
-                    // Add more details for flights, etc.
+                    sections.push(new Paragraph({ text: l.name || l.type || 'פריט לוגיסטי', heading: HeadingLevel.HEADING_2, spacing: { before: 300 } }));
+                    if (l.dates) sections.push(new Paragraph({ children: [new TextRun({ text: "תאריכים: ", bold: true }), new TextRun(l.dates)] }));
+                    if (l.address) sections.push(new Paragraph({ children: [new TextRun({ text: "כתובת: ", bold: true }), new TextRun(l.address)] }));
+                    if (l.price) sections.push(new Paragraph({ children: [new TextRun({ text: "מחיר: ", bold: true }), new TextRun(`$${l.price.toLocaleString()}`)] }));
+                    
                     if (l.type === 'flight') {
-                         sections.push(new Paragraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${l.from.destination} -> ${l.to.destination} (${l.flight_number})`)], alignment: AlignmentType.RIGHT, rightToLeft: true }));
+                         const fromDest = l.from?.destination || 'לא צוין';
+                         const toDest = l.to?.destination || 'לא צוין';
+                         const flightNum = l.flight_number ? ` (${l.flight_number})` : '';
+                         sections.push(new Paragraph({ children: [new TextRun({ text: "טיסה: ", bold: true }), new TextRun(`${fromDest} -> ${toDest}${flightNum}`)] }));
                     }
                 });
             }
 
-            const doc = new docx.Document({
+            // Create the document with RTL property for the whole document
+            const doc = new Document({
                 features: { MIGRATION_2023_11: true },
-                sections: [{ properties: { type: docx.SectionType.NEXT_PAGE }, children: sections }]
+                sections: [{ 
+                    properties: { 
+                        type: SectionType.NEXT_PAGE,
+                        rightToLeft: true // Setting RTL for the whole section
+                    }, 
+                    children: sections.map(p => {
+                        // Ensure every paragraph has RTL properties
+                        p.options.alignment = AlignmentType.RIGHT;
+                        p.options.rightToLeft = true;
+                        return p;
+                    })
+                }]
             });
 
-            docx.Packer.toBlob(doc).then(blob => {
-                saveAs(blob, `${trip.name} - סיכום טיול.docx`);
+            // Use the global Packer and saveAs
+            window.docx.Packer.toBlob(doc).then(blob => {
+                window.saveAs(blob, `${trip.name || 'Trip'} - סיכום טיול.docx`);
             });
         }
 
