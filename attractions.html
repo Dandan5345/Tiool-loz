@@ -582,8 +582,16 @@
       editingItemId = null;
       modal.classList.add('hidden'); modal.classList.remove('flex');
       showModalError('');
+      // ניקוי המפה בסגירת המודאל כדי למנוע בעיות בפתיחה הבאה
+      if (addEditMap) {
+        addEditMap.remove();
+        addEditMap = null;
+        addEditMarker = null;
+      }
     }
 
+    // ======================= 📍 תיקון #1: פונקציה מתוקנת 📍 =======================
+    // הפונקציה הזו תתקן את הבאג של המפה האפורה
     function updateModalView() {
       const itemTypeEl = document.getElementById('item-type');
       const currentType = itemTypeEl ? itemTypeEl.value : (allItems.find(i => i.id === editingItemId)?.type || '');
@@ -603,18 +611,17 @@
         if (!stepEl.innerHTML.trim()) generateStepContent(actualStep);
         stepEl.classList.add('active');
         
-        // ======================= 📍 התיקון כאן 📍 =======================
-        // בודק אם השלב הנוכחי הוא שלב המפה (4) ואם אובייקט המפה קיים.
-        // אם כן, מפעיל את invalidateSize כדי שהמפה תתאים את עצמה לגודל המיכל שלה.
+        // כאן התיקון לבאג המפה האפורה:
+        // הפקודה invalidateSize גורמת למפה לבדוק מחדש את גודל הקונטיינר שלה ולצייר את עצמה נכון.
+        // אנחנו מפעילים אותה עם השהייה קצרה כדי לוודא שה-CSS של הצגת השלב כבר התעדכן.
         if (actualStep === 4 && addEditMap) {
           setTimeout(() => {
             addEditMap.invalidateSize();
             if (addEditMarker) {
                 addEditMap.panTo(addEditMarker.getLatLng());
             }
-          }, 100); // השהייה קצרה כדי לאפשר ל-DOM להתעדכן
+          }, 100);
         }
-        // =============================================================
       }
 
       backStepBtn.classList.toggle('hidden', currentModalStep === 1);
@@ -667,6 +674,8 @@
       `;
     }
 
+    // ======================= 📍 תיקון #2: פונקציה מתוקנת 📍 =======================
+    // הפונקציה הזו תציג את המפה ממורכזת על היעד שנבחר
     function generateStepContent(step) {
       const c = document.getElementById(`step-${step}`);
       if (!c) return;
@@ -675,7 +684,39 @@
         case 1: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום</label><input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">`; break;
         case 2: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד?</label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`; break;
         case 3: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום</label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`; break;
-        case 4: c.innerHTML = createLocationHtml(); initOSMAutocomplete(); break;
+        case 4:
+          c.innerHTML = createLocationHtml();
+          initOSMAutocomplete();
+          
+          // כאן התיקון למרכוז המפה:
+          // אם אנחנו מוסיפים פריט חדש (או עורכים פריט בלי קואורדינטות),
+          // הקוד יקח את שם היעד משלב 2 וימצא את הקואורדינטות שלו כדי למרכז את המפה.
+          const itemBeingEdited = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
+          if (!itemBeingEdited || !itemBeingEdited.coords) {
+              const destName = document.getElementById('item-destination')?.value;
+              if (destName) {
+                  const geocodeAndInit = async (name) => {
+                      try {
+                          const url = `${NOM_BASE}/search?format=jsonv2&limit=1&q=${encodeURIComponent(name)}`;
+                          const res = await fetch(url);
+                          const data = await res.json();
+                          if (data && data.length > 0) {
+                              const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                              initAddEditMap(loc);
+                          } else {
+                              initAddEditMap(); // Fallback to default
+                          }
+                      } catch (e) {
+                          console.error("Geocoding destination failed:", e);
+                          initAddEditMap(); // Fallback to default
+                      }
+                  };
+                  geocodeAndInit(destName);
+              } else {
+                  initAddEditMap(); // Fallback if no destination is selected
+              }
+          }
+          break;
         case 5: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`; break;
         case 6: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-quote-left text-slate-400"></i>פירוט קצר (אופציונלי)</label><textarea id="item-short-description" class="form-textarea w-full p-3" rows="2" placeholder="משפט או שניים שיופיעו בכרטיסייה הראשית..."></textarea>`; break;
         case 7: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-pen-to-square text-slate-400"></i>תיאור מלא (אופציונלי)</label><textarea id="item-description" class="form-textarea w-full p-3" rows="4" placeholder="פרטים נוספים, המלצות, טיפים..."></textarea>`; break;
