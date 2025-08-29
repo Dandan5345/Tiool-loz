@@ -197,10 +197,14 @@
             if (user) {
                 currentUser = user;
                 setupAuthUI(user);
-                await handleInviteToken();
-                listenToTrips();
+                // --- FIX 1: Wait for token handling to finish before listening to trips ---
+                const tokenProcessed = await handleInviteToken();
+                // If a token was processed, handleInviteToken will cause a redirect,
+                // so the code below might not even run, which is fine.
+                if (!tokenProcessed) {
+                    listenToTrips();
+                }
             } else {
-                // Redirect to login but keep the token if it exists
                 const currentUrl = window.location.href;
                 window.location.href = `login.html?redirect=${encodeURIComponent(currentUrl)}`;
             }
@@ -209,45 +213,48 @@
         async function handleInviteToken() {
             const urlParams = new URLSearchParams(window.location.search);
             const token = urlParams.get('token');
-            if (!token || !currentUser) return;
+            // If there's no token, or we are still waiting for the user object, do nothing.
+            if (!token || !currentUser) {
+                return false; // Return false to indicate no token was processed
+            }
 
-            DOM.loadingOverlay.classList.remove('hidden');
+            // The loading overlay is already visible, no need to show it again.
             const invitesRef = collection(db, "invites");
             const q = query(invitesRef, where("token", "==", token));
-            const snapshot = await getDocs(q);
-
-            if (snapshot.empty) {
-                alert("קישור ההזמנה אינו חוקי או שכבר נעשה בו שימוש.");
-                window.history.replaceState({}, document.title, window.location.pathname);
-                DOM.loadingOverlay.style.opacity = '0';
-                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
-                return;
-            }
-
-            const inviteDoc = snapshot.docs[0];
-            const { tripId } = inviteDoc.data();
-            const tripRef = doc(db, "trips", tripId);
             
-            const tripSnap = await getDoc(tripRef);
-            if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
-                 alert("אתה כבר חבר בטיול הזה.");
-                 window.history.replaceState({}, document.title, window.location.pathname);
-                 DOM.loadingOverlay.style.opacity = '0';
-                 setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
-                 return;
-            }
-
-            const batch = writeBatch(db);
-            batch.update(tripRef, { editors: arrayUnion(currentUser.uid) });
-            batch.delete(inviteDoc.ref);
-
             try {
-                await batch.commit();
-                alert("הצטרפת בהצלחה לטיול! הוא יופיע ברשימת 'שותף איתי'.");
-                window.history.replaceState({}, document.title, window.location.pathname);
+                const snapshot = await getDocs(q);
+
+                if (snapshot.empty) {
+                    alert("קישור ההזמנה אינו חוקי או שכבר נעשה בו שימוש.");
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    return false;
+                }
+
+                const inviteDoc = snapshot.docs[0];
+                const { tripId } = inviteDoc.data();
+                const tripRef = doc(db, "trips", tripId);
+                
+                const tripSnap = await getDoc(tripRef);
+                if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
+                    alert("אתה כבר חבר בטיול הזה.");
+                } else {
+                    const batch = writeBatch(db);
+                    batch.update(tripRef, { editors: arrayUnion(currentUser.uid) });
+                    batch.delete(inviteDoc.ref);
+                    await batch.commit();
+                    alert("הצטרפת בהצלחה לטיול! הוא יופיע ברשימת 'שותף איתי'.");
+                }
+                
+                // --- FIX 2: Redirect to a clean page after processing the token ---
+                window.location.href = window.location.pathname; // This removes the token from the URL and forces a clean reload
+                return true; // Return true to indicate a token was processed
+
             } catch (error) {
                 console.error("Error accepting invite:", error);
                 alert("אירעה שגיאה בעת ההצטרפות לטיול.");
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return false;
             }
         }
         
@@ -257,6 +264,7 @@
             onSnapshot(q, (snapshot) => {
                 allUserTrips = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderTrips();
+                // Hide loading overlay ONLY after trips are fetched and ready to be rendered
                 DOM.loadingOverlay.style.opacity = '0';
                 setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
             }, error => {
@@ -373,12 +381,7 @@
                 await addDoc(collection(db, "invites"), {
                     tripId: activeTripId, token, createdAt: serverTimestamp()
                 });
-
-                // ================== FIXED LINE ==================
-                // This now points to the correct URL for GitHub Pages, including the repository name.
                 const shareUrl = `${window.location.origin}/Tiool-loz/join.html?token=${token}`;
-                // ================================================
-
                 DOM.shareLinkInput.value = shareUrl;
                 DOM.shareLinkContainer.classList.remove('hidden');
             } catch (error) {
@@ -428,3 +431,4 @@
     </script>
 </body>
 </html>
+
