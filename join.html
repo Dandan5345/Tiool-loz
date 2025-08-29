@@ -73,6 +73,22 @@
             </div>
         </div>
     </div>
+    
+    <!-- *** NEW: Remove User Confirmation Modal *** -->
+    <div id="remove-user-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[102] p-4">
+        <div class="glass rounded-2xl p-8 w-full max-w-sm text-center shadow-2xl">
+            <h2 class="text-2xl font-bold mb-4 text-white">אישור הסרה</h2>
+            <p id="remove-user-modal-text" class="text-slate-300 mb-8">האם להסיר את המשתמש מהטיול?</p>
+            <div class="flex justify-center gap-4">
+                <button id="cancel-remove-btn" class="glass px-6 py-2 rounded-lg hover:bg-white/10 font-semibold transition-colors">ביטול</button>
+                <button id="confirm-remove-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <span id="confirm-remove-text">הסר</span>
+                    <i id="confirm-remove-spinner" class="fas fa-spinner fa-spin hidden"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
 
     <div id="share-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
         <div class="glass rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
@@ -149,7 +165,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, addDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, onSnapshot, updateDoc, arrayUnion, arrayRemove, addDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -184,6 +200,11 @@
             shareLinkInput: document.getElementById('share-link-input'),
             copyLinkBtn: document.getElementById('copy-link-btn'),
             sharedWithList: document.getElementById('shared-with-list'),
+            // New modal elements
+            removeUserModal: document.getElementById('remove-user-modal'),
+            removeUserModalText: document.getElementById('remove-user-modal-text'),
+            confirmRemoveBtn: document.getElementById('confirm-remove-btn'),
+            cancelRemoveBtn: document.getElementById('cancel-remove-btn'),
         };
         const TRIP_IMG_PLACEHOLDER = 'https://i.imgur.com/K73z2Zg.png';
 
@@ -191,16 +212,14 @@
         let allUserTrips = []; 
         let currentView = 'my';
         let activeTripId = null;
+        let userToRemove = { tripId: null, userId: null }; // State for removal confirmation
 
         // --- Page Initialization ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user;
                 setupAuthUI(user);
-                // --- FIX 1: Wait for token handling to finish before listening to trips ---
                 const tokenProcessed = await handleInviteToken();
-                // If a token was processed, handleInviteToken will cause a redirect,
-                // so the code below might not even run, which is fine.
                 if (!tokenProcessed) {
                     listenToTrips();
                 }
@@ -213,12 +232,10 @@
         async function handleInviteToken() {
             const urlParams = new URLSearchParams(window.location.search);
             const token = urlParams.get('token');
-            // If there's no token, or we are still waiting for the user object, do nothing.
             if (!token || !currentUser) {
-                return false; // Return false to indicate no token was processed
+                return false; 
             }
 
-            // The loading overlay is already visible, no need to show it again.
             const invitesRef = collection(db, "invites");
             const q = query(invitesRef, where("token", "==", token));
             
@@ -246,10 +263,8 @@
                     alert("הצטרפת בהצלחה לטיול! הוא יופיע ברשימת 'שותף איתי'.");
                 }
                 
-                // --- FIX 2: Redirect to a clean page after processing the token ---
-                window.location.href = window.location.pathname; // This removes the token from the URL and forces a clean reload
-                return true; // Return true to indicate a token was processed
-
+                window.location.href = window.location.pathname;
+                return true; 
             } catch (error) {
                 console.error("Error accepting invite:", error);
                 alert("אירעה שגיאה בעת ההצטרפות לטיול.");
@@ -264,7 +279,6 @@
             onSnapshot(q, (snapshot) => {
                 allUserTrips = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderTrips();
-                // Hide loading overlay ONLY after trips are fetched and ready to be rendered
                 DOM.loadingOverlay.style.opacity = '0';
                 setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
             }, error => {
@@ -381,11 +395,12 @@
                 await addDoc(collection(db, "invites"), {
                     tripId: activeTripId, token, createdAt: serverTimestamp()
                 });
-                const shareUrl = `${window.location.origin}/Tiool-loz/join.html?token=${token}`;
+                const shareUrl = `${window.location.origin}${window.location.pathname.replace('index.html', 'join.html')}?token=${token}`;
                 DOM.shareLinkInput.value = shareUrl;
                 DOM.shareLinkContainer.classList.remove('hidden');
             } catch (error) {
                 console.error("Error creating share link", error);
+            } finally {
                 btn.disabled = false;
                 btn.querySelector('i').className = 'fas fa-link';
                 DOM.createLinkText.textContent = 'צור קישור שיתוף';
@@ -418,17 +433,77 @@
                 if (!userDoc.exists()) return '';
                 const userData = userDoc.data();
                 const isOwner = userDoc.id === tripData.ownerId; 
+                const isCurrentUserOwner = currentUser.uid === tripData.ownerId;
+
+                const removeButtonHtml = (isCurrentUserOwner && !isOwner)
+                    ? `<button class="remove-user-btn text-red-400 hover:text-red-300 transition-colors p-2 rounded-full hover:bg-red-500/10" 
+                                title="הסר משתמש"
+                                data-trip-id="${tripId}" 
+                                data-user-id="${userDoc.id}" 
+                                data-user-name="${userData.name || 'משתמש'}">
+                           <i class="fas fa-trash-alt"></i>
+                       </button>`
+                    : '';
                 
                 return `<div class="flex items-center justify-between bg-white/5 p-2.5 rounded-lg">
                             <div class="flex items-center gap-3">
                                <div class="size-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">${userData.name?.charAt(0).toUpperCase() || 'U'}</div>
                                 <span class="font-semibold text-slate-100">${userData.name || 'משתמש'}</span>
-                           </div>
-                            <span class="text-xs font-bold py-1 px-2.5 rounded-full ${isOwner ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200/10 text-slate-300'}">${isOwner ? 'יוצר' : 'עורך'}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold py-1 px-2.5 rounded-full ${isOwner ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-200/10 text-slate-300'}">${isOwner ? 'יוצר' : 'עורך'}</span>
+                                ${removeButtonHtml}
+                            </div>
                         </div>`;
             }).join('');
         }
+        
+        // --- Remove User Logic ---
+        DOM.sharedWithList.addEventListener('click', (e) => {
+            const removeBtn = e.target.closest('.remove-user-btn');
+            if (removeBtn) {
+                userToRemove.tripId = removeBtn.dataset.tripId;
+                userToRemove.userId = removeBtn.dataset.userId;
+                const userName = removeBtn.dataset.userName;
+
+                DOM.removeUserModalText.textContent = `האם להסיר את "${userName}" מהטיול?`;
+                DOM.removeUserModal.classList.remove('hidden');
+            }
+        });
+
+        DOM.cancelRemoveBtn.addEventListener('click', () => {
+            DOM.removeUserModal.classList.add('hidden');
+            userToRemove = { tripId: null, userId: null };
+        });
+
+        DOM.confirmRemoveBtn.addEventListener('click', async () => {
+            const { tripId, userId } = userToRemove;
+            if (!tripId || !userId) return;
+
+            const btn = DOM.confirmRemoveBtn;
+            btn.disabled = true;
+            btn.querySelector('#confirm-remove-text').classList.add('hidden');
+            btn.querySelector('#confirm-remove-spinner').classList.remove('hidden');
+
+            const tripRef = doc(db, "trips", tripId);
+            try {
+                await updateDoc(tripRef, {
+                    editors: arrayRemove(userId)
+                });
+                // The onSnapshot listener on the trip collection will automatically refresh the participant list
+                // so we just need to close the modal.
+                DOM.removeUserModal.classList.add('hidden');
+                loadSharedWithList(tripId); // Manually trigger a refresh of the list
+            } catch (error) {
+                console.error("Error removing user:", error);
+                alert("אירעה שגיאה בעת הסרת המשתמש.");
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('#confirm-remove-text').classList.remove('hidden');
+                btn.querySelector('#confirm-remove-spinner').classList.add('hidden');
+                userToRemove = { tripId: null, userId: null };
+            }
+        });
     </script>
 </body>
 </html>
-
