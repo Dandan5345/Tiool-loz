@@ -200,7 +200,9 @@
                 await handleInviteToken();
                 listenToTrips();
             } else {
-                window.location.href = `login.html?redirect=${encodeURIComponent(window.location.href)}`;
+                // Redirect to login but keep the token if it exists
+                const currentUrl = window.location.href;
+                window.location.href = `login.html?redirect=${encodeURIComponent(currentUrl)}`;
             }
         });
 
@@ -226,11 +228,12 @@
             const { tripId } = inviteDoc.data();
             const tripRef = doc(db, "trips", tripId);
             
-            // Prevent adding user if already an editor
             const tripSnap = await getDoc(tripRef);
             if(tripSnap.exists() && tripSnap.data().editors.includes(currentUser.uid)) {
                  alert("אתה כבר חבר בטיול הזה.");
                  window.history.replaceState({}, document.title, window.location.pathname);
+                 DOM.loadingOverlay.style.opacity = '0';
+                 setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
                  return;
             }
 
@@ -370,7 +373,12 @@
                 await addDoc(collection(db, "invites"), {
                     tripId: activeTripId, token, createdAt: serverTimestamp()
                 });
-                const shareUrl = `${window.location.origin}/join.html?token=${token}`;
+
+                // ================== FIXED LINE ==================
+                // This now points to the correct URL for GitHub Pages, including the repository name.
+                const shareUrl = `${window.location.origin}/Tiool-loz/join.html?token=${token}`;
+                // ================================================
+
                 DOM.shareLinkInput.value = shareUrl;
                 DOM.shareLinkContainer.classList.remove('hidden');
             } catch (error) {
@@ -406,9 +414,6 @@
             DOM.sharedWithList.innerHTML = userDocs.map(userDoc => {
                 if (!userDoc.exists()) return '';
                 const userData = userDoc.data();
-                // *** BUG FIX HERE ***
-                // Was: userData.uid === tripData.ownerId
-                // Now: userDoc.id === tripData.ownerId
                 const isOwner = userDoc.id === tripData.ownerId; 
                 
                 return `<div class="flex items-center justify-between bg-white/5 p-2.5 rounded-lg">
@@ -423,6 +428,3 @@
     </script>
 </body>
 </html>
-
-
-
