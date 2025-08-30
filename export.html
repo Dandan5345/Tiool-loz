@@ -1,405 +1,220 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ייצוא סיכום טיול</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מחולל מסמכים: DOCX / PDF</title>
 
-    <!-- ספריות צד-שלישי ליצירת קבצים -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- שימו לב: הסרתי את jspdf-autotable מכיוון שאנחנו לא משתמשים בו יותר -->
-    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/tomer-panfil/Amiri-Font-for-jsPDF/Amiri-Regular.js"></script>
+  <!-- עיצוב -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+        integrity="sha512-1hct0h9FvH8Qk2p0K8J3K6c9s3TqQm7tCq4a9n4mE9lG0Wwz0qk4O1S8i8qf8Z1O7H8m2iN3m0+0u0yqFh8P8w=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-    <style>
-        body { font-family: 'Assistant', sans-serif; }
-        .export-btn { transition: all 0.3s ease; }
-        .export-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  <!-- יוצר DOCX -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
+  <!-- שמירת קבצים -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <!-- יוצר PDF מ-HTML (טוב לעברית ו-RTL) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f172a;           /* slate-900 */
+      --panel: rgba(255,255,255,0.06);
+      --panel-border: rgba(255,255,255,0.14);
+      --accent: #22d3ee;       /* cyan-400 */
+      --accent-2: #a78bfa;     /* violet-400 */
+    }
+    body { font-family: 'Assistant', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,0.10), transparent 60%), radial-gradient(1000px 500px at -10% 120%, rgba(167,139,250,0.10), transparent 60%), var(--bg); }
+    .glass {
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--panel-border);
+    }
+    /* ל־PDF: לשמר שורות כמו בתיבה */
+    #pdf-preview { white-space: pre-wrap; direction: rtl; text-align: right; }
+  </style>
 </head>
-<body class="bg-slate-100">
+<body class="min-h-screen text-white selection:bg-cyan-300/40">
+  <header class="px-6 pt-10 pb-6 text-center">
+    <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
+      מחולל מסמכים מהיר <span class="text-cyan-300">DOCX</span> / <span class="text-violet-300">PDF</span>
+    </h1>
+    <p class="mt-2 text-white/70">כתבו טקסט, בחרו פורמט, והורידו – הכל בדפדפן, עם תמיכה מלאה בעברית.</p>
+  </header>
 
-    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
-    <div class="fixed inset-0 z-0 bg-black/60"></div>
-    
-    <div class="relative z-10 min-h-screen flex flex-col">
-        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between h-16">
-                    <div class="flex items-center gap-4">
-                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול">
-                            <i class="fas fa-arrow-left fa-lg"></i>
-                        </a>
-                        <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
-                    </div>
-                </div>
-            </div>
-        </header>
+  <main class="max-w-4xl mx-auto px-4 pb-16">
+    <section class="glass rounded-2xl p-5 md:p-7">
+      <div class="grid gap-4 md:gap-5">
+        <div class="grid md:grid-cols-5 gap-3 items-center">
+          <label for="docTitle" class="md:col-span-1 font-semibold">כותרת המסמך</label>
+          <input id="docTitle" type="text" inputmode="text" placeholder="למשל: סיכום טיול / רשימת משימות"
+                 class="md:col-span-4 w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400 placeholder-white/40">
+        </div>
 
-        <main class="flex-grow flex items-center justify-center p-4">
-            <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
-                <i class="fas fa-file-export fa-3x text-blue-500 mb-4"></i>
-                <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                <p class="text-slate-600 mt-2 mb-8">בחר את הפורמט הרצוי כדי ליצור קובץ מסודר עם כל פרטי הטיול.</p>
+        <div class="grid md:grid-cols-5 gap-3">
+          <label for="docText" class="md:col-span-1 font-semibold mt-2">תוכן</label>
+          <textarea id="docText" rows="10" placeholder="כתבו כאן את הטקסט שלכם... (תומך בשורות מרובות)"
+                    class="md:col-span-4 w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder-white/40"></textarea>
+        </div>
 
-                <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                    <button id="generate-pdf-btn" class="export-btn w-full sm:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
-                        <i class="fas fa-file-pdf mr-2"></i> צור קובץ PDF
-                    </button>
-                    <button id="generate-docx-btn" class="export-btn w-full sm:w-auto flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl">
-                        <i class="fas fa-file-word mr-2"></i> צור קובץ Word
-                    </button>
-                </div>
+        <div class="flex flex-wrap gap-3 justify-end pt-2">
+          <button id="btnDocx"
+                  class="inline-flex items-center gap-2 rounded-xl px-4 py-3 bg-cyan-500/90 hover:bg-cyan-400 transition font-semibold">
+            <i class="fa-regular fa-file-word"></i>
+            צור DOCX
+          </button>
+          <button id="btnPdf"
+                  class="inline-flex items-center gap-2 rounded-xl px-4 py-3 bg-violet-500/90 hover:bg-violet-400 transition font-semibold">
+            <i class="fa-regular fa-file-pdf"></i>
+            צור PDF
+          </button>
+        </div>
 
-                <div id="status-container" class="mt-8 min-h-[60px] flex flex-col items-center justify-center">
-                    <div id="loader" class="loader hidden"></div>
-                    <p id="status-message" class="text-slate-500 font-semibold"></p>
-                </div>
-            </div>
-        </main>
-    </div>
+        <!-- תיבה נסתרת לייצוא PDF מ-HTML (html2pdf מטפל יפה בעברית/RTL) -->
+        <div id="pdf-preview" class="hidden glass rounded-xl p-6 leading-8 text-[15px]"></div>
 
-    <script type="module">
-        // FIX: Wrap the entire module in DOMContentLoaded to prevent race conditions with library loading.
-        document.addEventListener('DOMContentLoaded', () => {
-            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-            import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-            import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        <!-- טוסט התראה קטן -->
+        <div id="toast" class="fixed bottom-6 right-6 left-6 md:left-auto z-50 hidden">
+          <div class="glass rounded-xl px-4 py-3 flex items-center gap-3">
+            <i class="fa-solid fa-circle-check text-emerald-300"></i>
+            <span id="toast-text" class="text-sm"></span>
+          </div>
+        </div>
+      </div>
+    </section>
 
-            const firebaseConfig = {
-                apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-                authDomain: "tiool-loz.firebaseapp.com",
-                projectId: "tiool-loz",
-                storageBucket: "tiool-loz.appspot.com",
-                messagingSenderId: "226069823505",
-                appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-            };
-            const app = initializeApp(firebaseConfig);
-            const auth = getAuth(app);
-            const db = getFirestore(app);
-            enableIndexedDbPersistence(db).catch(console.warn);
+    <section class="mt-6 text-xs text-white/60 text-center">
+      טיפ: לשמירה על שורות, פשוט עברו שורה בתיבה. ה־PDF ישמור על מבנה הטקסט, וה־DOCX יפתח יפה בוורד.
+    </section>
+  </main>
 
-            const DOM = {
-                loader: document.getElementById('loader'),
-                statusMessage: document.getElementById('status-message'),
-                generatePdfBtn: document.getElementById('generate-pdf-btn'),
-                generateDocxBtn: document.getElementById('generate-docx-btn'),
-                backToTripBtn: document.getElementById('back-to-trip-btn'),
-                pageTitle: document.getElementById('page-title'),
-                exportTitle: document.getElementById('export-title'),
-            };
+  <script>
+    // ===== עזר: טוסט =====
+    function showToast(msg, ms = 2200) {
+      const el = document.getElementById('toast');
+      const txt = document.getElementById('toast-text');
+      txt.textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), ms);
+    }
 
-            let tripId = null;
-            let isGenerating = false;
+    // ===== עזר: שם קובץ נוח =====
+    function filenameFromTitle(ext) {
+      const title = (document.getElementById('docTitle').value || 'מסמך ללא כותרת').trim();
+      const safe = title.replace(/[\\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+      return (safe || 'document') + ' - ' + stamp + '.' + ext;
+    }
 
-            function initPage() {
-                const urlParams = new URLSearchParams(window.location.search);
-                tripId = urlParams.get('tripId');
-                if (!tripId) {
-                    alert("שגיאה: לא נמצא מזהה טיול.");
-                    window.location.href = 'index.html';
-                    return;
-                }
-                DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        const tripRef = doc(db, "trips", tripId);
-                        const tripSnap = await getDoc(tripRef);
-                        if (tripSnap.exists()) {
-                            const tripData = tripSnap.data();
-                            if (!tripData.editors?.includes(user.uid)) {
-                                alert("אין לך הרשאה לצפות בטיול זה.");
-                                window.location.href = 'index.html';
-                            }
-                            DOM.pageTitle.textContent += ` - ${tripData.name}`;
-                            DOM.exportTitle.textContent += ` "${tripData.name}"`;
-                        } else {
-                            alert("הטיול לא נמצא.");
-                            window.location.href = 'index.html';
-                        }
-                    } else {
-                        window.location.href = 'login.html';
-                    }
-                });
+    // ===== יצירת DOCX עם הספרייה docx =====
+    async function createDocx() {
+      const text = document.getElementById('docText').value;
+      if (!text.trim()) { showToast('אין תוכן. כתבו משהו בתיבה קודם.'); return; }
+
+      const { Document, Packer, Paragraph, TextRun, AlignmentType } = window.docx;
+
+      // הופכים כל שורה לפסקה, עם RTL (bidirectional) ויישור לימין
+      const paragraphs = text.split(/\r?\n/).map(line =>
+        new Paragraph({
+          bidirectional: true,
+          alignment: AlignmentType.RIGHT,
+          children: [
+            new TextRun({ text: line.length ? line : ' ', font: 'Assistant' })
+          ]
+        })
+      );
+
+      const title = (document.getElementById('docTitle').value || '').trim();
+      const sectionChildren = [];
+
+      if (title) {
+        sectionChildren.push(
+          new Paragraph({
+            bidirectional: true,
+            alignment: AlignmentType.RIGHT,
+            children: [
+              new TextRun({ text: title, bold: true, size: 32 }) // ~16pt
+            ],
+            spacing: { after: 200 }
+          })
+        );
+      }
+      sectionChildren.push(...paragraphs);
+
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: { top: 720, right: 720, bottom: 720, left: 720 } // 1 אינץ' = 720
             }
+          },
+          children: sectionChildren
+        }]
+      });
 
-            function setStatus(message, showLoader = false) {
-                DOM.statusMessage.textContent = message;
-                DOM.loader.classList.toggle('hidden', !showLoader);
-                isGenerating = showLoader;
-                DOM.generatePdfBtn.disabled = isGenerating;
-                DOM.generateDocxBtn.disabled = isGenerating;
-            }
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, filenameFromTitle('docx'));
+      showToast('DOCX נוצר והורד בהצלחה!');
+    }
 
-            async function fetchAllTripData() {
-                setStatus('טוען נתונים מהשרת...', true);
-                const tripRef = doc(db, 'trips', tripId);
-                const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
-                const [tripSnap, ...collectionsSnaps] = await Promise.all([
-                    getDoc(tripRef),
-                    ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
-                ]);
-                const allData = {
-                    tripData: tripSnap.data(),
-                    logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
-                    places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
-                    checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
-                    schedules: []
-                };
-                const scheduleDocs = collectionsSnaps[3].docs;
-                for (const scheduleDoc of scheduleDocs) {
-                    const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
-                    const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                    const [itemsSnap] = await Promise.all([ getDocs(itemsQuery) ]);
-                    dayData.items = itemsSnap.docs.map(d => d.data());
-                    allData.schedules.push(dayData);
-                }
-                allData.schedules.sort((a, b) => a.id.localeCompare(b.id));
-                return allData;
-            }
+    // ===== יצירת PDF (html2pdf – תומך יפה בעברית/RTL) =====
+    function createPdf() {
+      const text = document.getElementById('docText').value;
+      if (!text.trim()) { showToast('אין תוכן. כתבו משהו בתיבה קודם.'); return; }
 
-            async function generateDocument(format) {
-                if (isGenerating) return;
-                try {
-                    const allData = await fetchAllTripData();
-                    setStatus(`מייצר קובץ ${format.toUpperCase()}...`, true);
-                    if (format === 'pdf') await buildPdf(allData);
-                    else if (format === 'docx') await buildDocx(allData);
-                    setStatus('ההורדה הושלמה!', false);
-                } catch (error) {
-                    console.error(`Error generating ${format}:`, error);
-                    setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
-                }
-            }
+      const title = (document.getElementById('docTitle').value || '').trim();
+      const preview = document.getElementById('pdf-preview');
 
-            function formatISODate(isoDate) {
-                if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate || '';
-                const [year, month, day] = isoDate.split('-');
-                const dateObj = new Date(year, month - 1, day);
-                return `${dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' })}, ${day}/${month}/${year}`;
-            }
+      // בונים HTML פשוט ליצוא – שומר RTL ושבירת שורות
+      const header = title ? `<h1 style="margin:0 0 10px; font-weight:700; font-size:20px; text-align:right;">${escapeHtml(title)}</h1>` : '';
+      preview.innerHTML = `${header}<div>${escapeHtml(text)}</div>`;
 
-            const reversedText = (text) => String(text || '').split('').reverse().join('');
+      // מראים זמנית כדי שהמנוע יחשב גדלים נכון (אך שומרים שזה "שקוף" ובלי קפיצות)
+      preview.classList.remove('hidden');
 
-            async function buildPdf(data) {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-                doc.addFileToVFS('Amiri-Regular.ttf', window.amiri_regular_base64);
-                doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-                doc.setFont('Amiri');
+      const opt = {
+        filename: filenameFromTitle('pdf'),
+        margin: [15, 15, 15, 15], // pt
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
+      };
 
-                doc.setFontSize(32);
-                doc.text(reversedText(data.tripData.name), 105, 80, { align: 'center' });
-                doc.setFontSize(16);
-                doc.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), 105, 100, { align: 'center' });
+      html2pdf().set(opt).from(preview).save()
+        .then(() => showToast('PDF נוצר והורד בהצלחה!'))
+        .finally(() => preview.classList.add('hidden'));
+    }
 
-                doc.addPage();
-                doc.setFontSize(22);
-                doc.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
+    // הגנת XSS פשוטה לתוכן שמוזרם ל־innerHTML
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'", '&#39;')
+        .replace(/\r?\n/g, '\n'); // נשמר; #pdf-preview מוגדר עם white-space: pre-wrap
+    }
 
-                // FIX: Manual table drawing for PDF to avoid autoTable errors
-                if (data.logistics.length > 0) {
-                    drawLogisticsTable(doc, data.logistics);
-                } else {
-                    doc.setFontSize(12);
-                    doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
-                }
-                
-                for (const day of data.schedules) {
-                    doc.addPage();
-                    doc.setFontSize(22);
-                    doc.text(reversedText(formatISODate(day.id)), 105, 20, { align: 'center' });
-                    let y = 35;
-                    for (const item of day.items) {
-                        if (y > 270) { doc.addPage(); y = 20; }
-                        doc.setFontSize(14);
-                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                        doc.text(reversedText(`${time} - ${item.title}`), 195, y, { align: 'right' });
-                        y += 7;
-                        if (item.summary) {
-                            doc.setFontSize(10);
-                            const summaryLines = doc.splitTextToSize(reversedText(item.summary), 180);
-                            doc.text(summaryLines, 190, y, { align: 'right' });
-                            y += (summaryLines.length * 4) + 2;
-                        }
-                        if (item.refs && item.refs.length > 0) {
-                            for (const ref of item.refs) {
-                                const source = ref.type === 'logistics' ? data.logistics : data.places;
-                                const fullItem = source.find(s => s.id === ref.id);
-                                if (fullItem) {
-                                    doc.setFontSize(10);
-                                    doc.setTextColor(100);
-                                    let refText = `פרטים: ${fullItem.name}. `;
-                                    if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                    const refLines = doc.splitTextToSize(reversedText(refText), 170);
-                                    doc.text(refLines, 185, y, { align: 'right' });
-                                    y += (refLines.length * 4);
-                                    doc.setTextColor(0);
-                                }
-                            }
-                        }
-                        y += 5;
-                    }
-                }
+    // ===== חיבור כפתורים =====
+    document.getElementById('btnDocx').addEventListener('click', createDocx);
+    document.getElementById('btnPdf').addEventListener('click', createPdf);
 
-                if (data.checklists.length > 0) {
-                    doc.addPage();
-                    doc.setFontSize(22);
-                    doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
-                    let y = 30;
-                    data.checklists.forEach(list => {
-                        doc.setFontSize(16);
-                        doc.text(reversedText(list.name), 195, y, { align: 'right' });
-                        y += 8;
-                        list.items.forEach(item => {
-                            if (y > 280) { doc.addPage(); y = 20; }
-                            doc.setFontSize(12);
-                            doc.text(reversedText(`[ ] ${item.text} (x${item.quantity})`), 190, y, { align: 'right' });
-                            y += 6;
-                        });
-                        y += 10;
-                    });
-                }
-                doc.save(`trip_summary_${tripId}.pdf`);
-            }
-            
-            function drawLogisticsTable(doc, logistics) {
-                const startY = 30;
-                const rowHeight = 8;
-                const tableHeaders = ['תיאור', 'יעד/תאריכים', 'מחיר'];
-                const colWidths = [90, 60, 30];
-                const startX = 15;
-                let currentY = startY;
-
-                // Draw header
-                doc.setFillColor(41, 128, 185);
-                doc.rect(startX, currentY, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(12);
-                doc.text(reversedText(tableHeaders[0]), startX + colWidths[0] - 2, currentY + 6, { align: 'right' });
-                doc.text(reversedText(tableHeaders[1]), startX + colWidths[0] + colWidths[1] - 2, currentY + 6, { align: 'right' });
-                doc.text(reversedText(tableHeaders[2]), startX + colWidths[0] + colWidths[1] + colWidths[2] - 2, currentY + 6, { align: 'right' });
-                currentY += rowHeight;
-
-                // Draw rows
-                doc.setTextColor(0, 0, 0);
-                doc.setFontSize(10);
-                logistics.forEach((item, index) => {
-                    doc.setDrawColor(200);
-                    doc.rect(startX, currentY, colWidths.reduce((a,b)=>a+b), rowHeight);
-                    
-                    const price = `$${(item.price || item.price_per_person || 0).toLocaleString()}`;
-                    const destination = item.destination || item.dates || '';
-                    const name = item.name || item.type;
-
-                    doc.text(reversedText(name), startX + colWidths[0] - 2, currentY + 6, { align: 'right' });
-                    doc.text(reversedText(destination), startX + colWidths[0] + colWidths[1] - 2, currentY + 6, { align: 'right' });
-                    doc.text(reversedText(price), startX + colWidths[0] + colWidths[1] + colWidths[2] - 2, currentY + 6, { align: 'right' });
-                    currentY += rowHeight;
-                });
-            }
-
-            async function buildDocx(data) {
-                const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableCell, TableRow, WidthType, AlignmentType } = window.docx;
-                const sections = [];
-                sections.push({
-                    properties: { type: "nextPage" },
-                    children: [
-                        new Paragraph({ text: "", spacing: { before: 4000 } }),
-                        new Paragraph({ text: data.tripData.name, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, bidirectional: true }),
-                        new Paragraph({ text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER, bidirectional: true }),
-                    ]
-                });
-
-                if(data.logistics.length > 0) {
-                    const logisticsRows = data.logistics.map(item => new TableRow({
-                        children: [
-                            new TableCell({ children: [new Paragraph({ text: item.name || item.type, bidirectional: true })] }),
-                            new TableCell({ children: [new Paragraph({ text: item.destination || item.dates || '', bidirectional: true })] }),
-                            new TableCell({ children: [new Paragraph({ text: `$${(item.price || item.price_per_person || 0).toLocaleString()}`, bidirectional: true })] }),
-                        ],
-                    }));
-                    const logisticsTable = new Table({
-                        columnWidths: [4500, 3000, 1500],
-                        rows: [
-                            new TableRow({
-                                children: [
-                                    new TableCell({ children: [new Paragraph({ text: "תיאור", bidirectional: true })] }),
-                                    new TableCell({ children: [new Paragraph({ text: "יעד/תאריכים", bidirectional: true })] }),
-                                    new TableCell({ children: [new Paragraph({ text: "מחיר", bidirectional: true })] }),
-                                ],
-                                tableHeader: true,
-                            }),
-                            ...logisticsRows
-                        ],
-                    });
-                    sections.push({
-                        properties: { type: "nextPage" },
-                        children: [
-                            new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true }),
-                            logisticsTable
-                        ]
-                    });
-                }
-                
-                data.schedules.forEach(day => {
-                    const dayChildren = [new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
-                    day.items.forEach(item => {
-                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                        dayChildren.push(new Paragraph({
-                            bidirectional: true,
-                            children: [new TextRun({ text: `${time} - ${item.title}`, bold: true, rightToLeft: true })],
-                        }));
-                        if (item.summary) {
-                            dayChildren.push(new Paragraph({ text: item.summary, bidirectional: true, style: "IntenseQuote" }));
-                        }
-                        if (item.refs && item.refs.length > 0) {
-                            for (const ref of item.refs) {
-                                const source = ref.type === 'logistics' ? data.logistics : data.places;
-                                const fullItem = source.find(s => s.id === ref.id);
-                                if (fullItem) {
-                                    let refText = `פרטים: ${fullItem.name}. `;
-                                    if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                    dayChildren.push(new Paragraph({ text: refText, bidirectional: true, indentation: { start: 720 } }));
-                                }
-                            }
-                        }
-                    });
-                    sections.push({ properties: { type: "nextPage" }, children: dayChildren });
-                });
-
-                if (data.checklists.length > 0) {
-                    const checklistChildren = [new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
-                    data.checklists.forEach(list => {
-                        checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2, bidirectional: true }));
-                        list.items.forEach(item => {
-                            checklistChildren.push(new Paragraph({ text: `${item.text} (x${item.quantity})`, bullet: { level: 0 }, bidirectional: true }));
-                        });
-                    });
-                    sections.push({ properties: { type: "nextPage" }, children: checklistChildren });
-                }
-
-                const doc = new Document({
-                    creator: "Tiool-Loz App",
-                    title: data.tripData.name,
-                    sections: sections
-                });
-                const blob = await Packer.toBlob(doc);
-                saveAs(blob, `trip_summary_${tripId}.docx`);
-            }
-
-            DOM.generatePdfBtn.addEventListener('click', () => generateDocument('pdf'));
-            DOM.generateDocxBtn.addEventListener('click', () => generateDocument('docx'));
-            initPage();
-        });
-    </script>
+    // מקשי קיצור נחמדים: Ctrl/Cmd+Enter -> PDF, Ctrl/Cmd+S -> DOCX
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        createDocx();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        createPdf();
+      }
+    });
+  </script>
 </body>
 </html>
-
