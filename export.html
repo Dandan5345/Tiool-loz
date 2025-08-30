@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- ספרייה להמרת HTML ל-PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -56,6 +57,8 @@
         .detail-item i {
             color: #888;
             margin-top: 3px;
+            width: 16px; /* for alignment */
+            text-align: center;
         }
         .detail-item .label {
             color: #666;
@@ -64,11 +67,12 @@
         .detail-item .value {
             font-weight: 600;
             color: #111;
+            white-space: pre-wrap; /* To respect newlines in descriptions */
         }
 
         .daily-item { margin-bottom: 15px; break-inside: avoid; }
         .daily-item .time { font-weight: 600; }
-        .daily-item .summary { padding-right: 15px; border-right: 2px solid #eee; margin-top: 5px; }
+        .daily-item .summary { padding-right: 15px; border-right: 2px solid #eee; margin-top: 5px; white-space: pre-wrap; }
         .daily-item .ref-details { font-size: 12px; color: #555; background-color: #f9f9f9; padding: 5px; border-radius: 4px; margin-top: 5px; }
         .checklist ul { list-style: none; padding: 0; }
         .checklist li { margin-bottom: 5px; font-size: 14px; }
@@ -113,6 +117,7 @@
         </main>
     </div>
 
+    <!-- Container for the report content, hidden from view but used for PDF generation -->
     <div id="report-container" class="invisible absolute -top-[9999px] -left-[9999px]"></div>
 
 
@@ -245,10 +250,12 @@
             // Helper function for rendering detail items
             const detailItem = (icon, label, value) => {
                 if (!value && typeof value !== 'number') return '';
+                // Sanitize value to prevent HTML injection issues
+                const sanitizedValue = String(value).replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="detail-item">
                     <i class="fas ${icon} fa-fw"></i>
                     <span class="label">${label}:</span>
-                    <span class="value">${value}</span>
+                    <span class="value">${sanitizedValue}</span>
                 </div>`;
             };
 
@@ -333,42 +340,52 @@
                 }
             }
 
-            // 3. Places of Interest
+            // 3. Places of Interest (Attractions)
             if (data.places.length > 0) {
                 html += `<div class="page-break"></div><h3>אטרקציות ומקומות עניין</h3>`;
                 data.places.forEach(place => {
                      html += `<div class="detail-card">
-                        <h5>${place.name || 'מקום'} (${place.type || ''})</h5>
-                        ${detailItem('fa-location-dot', 'כתובת', place.address)}
-                        ${detailItem('fa-align-left', 'הערות', place.notes)}
+                        <h5>${place.name || 'מקום'} (${place.type || 'לא צוין סוג'})</h5>
+                        ${detailItem('fa-map-marker-alt', 'יעד', place.destination)}
+                        ${detailItem('fa-location-dot', 'כתובת', place.location)}
+                        ${detailItem('fa-clock', 'שעות פתיחה', place.hours)}
+                        ${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}
+                        ${detailItem('fa-align-left', 'תיאור קצר', place.shortDescription)}
+                        ${detailItem('fa-pen-to-square', 'תיאור מלא', place.description)}
+                        ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}
+                        ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}
+                        ${detailItem('fa-link', 'קישור', place.link)}
                      </div>`;
                 });
             }
 
             // 4. Daily Schedule
-            data.schedules.forEach(day => {
-                html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}</h3>`;
-                day.items.forEach(item => {
-                    const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                    html += `<div class="daily-item">
-                                <h5><span class="time">${time}</span> - ${item.title}</h5>`;
-                    if (item.summary) {
-                        html += `<p class="summary">${item.summary}</p>`;
-                    }
-                    if (item.refs && item.refs.length > 0) {
-                        item.refs.forEach(ref => {
-                           const source = ref.type === 'logistics' ? data.logistics : data.places;
-                           const fullItem = source.find(s => s.id === ref.id);
-                           if (fullItem) {
-                               let refText = `<b>מקושר ל:</b> ${fullItem.name}. `;
-                               if (fullItem.location || fullItem.address) refText += `<b>כתובת:</b> ${fullItem.location || fullItem.address}.`;
-                               html += `<div class="ref-details">${refText}</div>`;
-                           }
-                        });
-                    }
-                    html += `</div>`;
+            if (data.schedules.length > 0) {
+                 data.schedules.forEach(day => {
+                    html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}</h3>`;
+                    day.items.forEach(item => {
+                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
+                        html += `<div class="daily-item">
+                                    <h5><span class="time">${time}</span> - ${item.title}</h5>`;
+                        if (item.summary) {
+                            html += `<p class="summary">${item.summary}</p>`;
+                        }
+                        if (item.refs && item.refs.length > 0) {
+                            item.refs.forEach(ref => {
+                               const source = ref.type === 'logistics' ? data.logistics : data.places;
+                               const fullItem = source.find(s => s.id === ref.id);
+                               if (fullItem) {
+                                   let refText = `<b>מקושר ל:</b> ${fullItem.name}. `;
+                                   const address = fullItem.address || fullItem.location;
+                                   if (address) refText += `<b>כתובת:</b> ${address}.`;
+                                   html += `<div class="ref-details">${refText}</div>`;
+                               }
+                            });
+                        }
+                        html += `</div>`;
+                    });
                 });
-            });
+            }
 
             // 5. Checklists
             if (data.checklists.length > 0) {
@@ -387,7 +404,6 @@
             html += '</div>'; // close report-page
             return html;
         }
-
 
         // --- PDF Generation Orchestrator ---
         async function generatePdf() {
@@ -429,3 +445,4 @@
     </script>
 </body>
 </html>
+
