@@ -1,309 +1,322 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מחולל מסמכים: Docs / PDF / Word</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ייצוא סיכום טיול ל-PDF</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-  <!-- Tailwind + Font -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- ספרייה ליצירת PDF מ-HTML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
+    <style>
+        body { font-family: 'Assistant', sans-serif; }
+        .export-btn { transition: all 0.3s ease; }
+        .export-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-  <!-- Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-
-  <!-- jsPDF (PDF) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-  <!-- html2canvas (לרינדור HTML ל-PDF אם תרצה לשדרג בהמשך) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-  <!-- Word (.docx) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <!-- docx UMD (ספריית docx הרשמית) -->
-  <script src="https://cdn.jsdelivr.net/npm/docx@9.5.1/build/index.umd.js"></script>
-
-  <!-- Google APIs (לכפתור Docs) -->
-  <script async defer src="https://apis.google.com/js/api.js"></script>
-  <script async defer src="https://accounts.google.com/gsi/client"></script>
-
-  <style>
-    :root{
-      --bg1:#0f172a; /* slate-900 */
-      --card: rgba(255,255,255,0.06);
-      --card-border: rgba(255,255,255,0.16);
-    }
-    body{ font-family: 'Assistant', system-ui, -apple-system, Segoe UI, sans-serif; }
-    .glass{
-      background: var(--card);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--card-border);
-    }
-    .gradient{
-      background: radial-gradient(1200px 500px at 80% -10%, rgba(59,130,246,0.25), transparent 60%),
-                  radial-gradient(900px 500px at -10% 100%, rgba(16,185,129,0.20), transparent 60%),
-                  linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #0b1220 100%);
-      min-height: 100svh;
-    }
-    textarea{
-      resize: vertical;
-    }
-    .hint small{ opacity:.8 }
-  </style>
+        /* Styles for the hidden report content to be exported */
+        @media print {
+            .page-break { page-break-before: always; }
+        }
+        #report-content .page {
+            page-break-after: always;
+            padding: 20mm;
+            box-sizing: border-box;
+        }
+    </style>
 </head>
-<body class="gradient text-slate-100">
-  <header class="max-w-5xl mx-auto px-4 pt-8 pb-4">
-    <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
-      מחולל מסמכים — כתוב טקסט ולחץ על הכפתור המתאים
-    </h1>
-    <p class="text-slate-300 mt-1">Google Docs / PDF / Word (.docx)</p>
-  </header>
+<body class="bg-slate-100">
 
-  <main class="max-w-5xl mx-auto px-4 pb-16">
-    <section class="glass rounded-2xl p-5 md:p-8">
-      <div class="grid md:grid-cols-3 gap-6">
-        <div class="md:col-span-2 space-y-4">
-          <label class="block">
-            <span class="block mb-1 text-sm text-slate-300">כותרת (לא חובה)</span>
-            <input id="title" type="text" class="w-full rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" placeholder="כותרת המסמך...">
-          </label>
+    <!-- This hidden div will be used to render the report before exporting -->
+    <div id="report-container" class="hidden fixed -left-[9999px] top-0 bg-white text-black" style="width: 210mm;">
+        <div id="report-content"></div>
+    </div>
 
-          <label class="block">
-            <span class="block mb-1 text-sm text-slate-300">הטקסט שלך</span>
-            <textarea id="content" rows="10" class="w-full rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" placeholder="הדבק או כתוב כאן את התוכן..."></textarea>
-          </label>
+    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
+    <div class="fixed inset-0 z-0 bg-black/60"></div>
+    
+    <div class="relative z-10 min-h-screen flex flex-col">
+        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-4">
+                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול">
+                            <i class="fas fa-arrow-left fa-lg"></i>
+                        </a>
+                        <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-          <div class="flex flex-wrap gap-3 pt-2">
-            <button id="btnDocs" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-5 py-3 font-semibold">
-              <i class="fa-brands fa-google-drive"></i> צור Google Docs
-            </button>
-            <button id="btnPdf" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-3 font-semibold">
-              <i class="fa-regular fa-file-pdf"></i> צור PDF
-            </button>
-            <button id="btnDocx" class="inline-flex items-center gap-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 px-5 py-3 font-semibold">
-              <i class="fa-regular fa-file-word"></i> צור Word (.docx)
-            </button>
-          </div>
+        <main class="flex-grow flex items-center justify-center p-4">
+            <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
+                <i class="fas fa-file-export fa-3x text-blue-500 mb-4"></i>
+                <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
+                <p class="text-slate-600 mt-2 mb-8">לחץ על הכפתור כדי ליצור קובץ PDF מסודר עם כל פרטי הטיול, מוכן להדפסה או שמירה.</p>
 
-          <p class="hint text-slate-400 text-sm">
-            טיפ: ל־PDF עברי חלק כדאי להשתמש בפונט יוניקוד מוטמע. הפתרון כאן עובד מצוין לטקסטים פשוטים;
-            ניתן לשדרג לשימוש ברינדור HTML מלא (html2canvas+jsPDF) לפי הצורך.
-          </p>
-        </div>
+                <div class="flex gap-4 justify-center">
+                    <button id="generate-pdf-btn" class="export-btn w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
+                        <i class="fas fa-file-pdf mr-2"></i> צור קובץ PDF
+                    </button>
+                </div>
 
-        <aside class="space-y-4">
-          <div class="rounded-xl border border-slate-700/50 p-4">
-            <h3 class="font-semibold mb-2">התקנה לכפתור Google Docs</h3>
-            <ol class="list-decimal pr-5 space-y-1 text-sm text-slate-300">
-              <li>ב־Google Cloud Console: הפעל את <strong>Docs API</strong> (ואפשרי גם <strong>Drive API</strong>).</li>
-              <li>צור <strong>API Key</strong> ו־<strong>OAuth Client ID — Web</strong> (עם דומיין שלך/localhost).</li>
-              <li>הדבק למטה ב־<code>CONFIG</code> את ה־CLIENT_ID וה־API_KEY שלך.</li>
-              <li>שמור ופתח מ־HTTPS. לחיצה על “צור Google Docs” תפתח מסמך חדש אוטומטית.</li>
-            </ol>
-            <p class="text-xs mt-2 text-slate-400">Docs נוצרים ריקים ואז מקבלים טקסט עם <code>documents.batchUpdate</code>. נדרשות הרשאות <code>documents</code> ו/או <code>drive.file</code>.  [oai_citation:1‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)</p>
-          </div>
+                <div id="status-container" class="mt-8 min-h-[60px] flex flex-col items-center justify-center">
+                    <div id="loader" class="loader hidden"></div>
+                    <p id="status-message" class="text-slate-500 font-semibold"></p>
+                </div>
+            </div>
+        </main>
+    </div>
 
-          <div class="rounded-xl border border-slate-700/50 p-4">
-            <h3 class="font-semibold mb-2">מה כל כפתור עושה?</h3>
-            <ul class="list-disc pr-5 text-sm text-slate-300 space-y-1">
-              <li><b>Google Docs</b>: יצירה ב־Google Docs ישירות בחשבון שלך (OAuth).  [oai_citation:2‡Google for Developers](https://developers.google.com/workspace/docs/api/quickstart/js?utm_source=chatgpt.com)</li>
-              <li><b>PDF</b>: יצירת PDF מקומית עם jsPDF (עטיפת שורות וכו').  [oai_citation:3‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)</li>
-              <li><b>Word (.docx)</b>: יצירת קובץ .docx בדפדפן עם ספריית <code>docx</code>; כולל תמיכה באופציית bidi לפסקאות RTL.  [oai_citation:4‡NPM](https://www.npmjs.com/package/docx?utm_source=chatgpt.com) [oai_citation:5‡docx.js.org](https://docx.js.org/api/types/IParagraphPropertiesOptions.html?utm_source=chatgpt.com)</li>
-            </ul>
-          </div>
-        </aside>
-      </div>
-    </section>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    <section class="mt-6 text-xs text-slate-400">
-      <p>נבנה עם ספריות פתוחות: Google Docs API + Google Identity Services, jsPDF, docx.</p>
-    </section>
-  </main>
+        // --- Firebase Init ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // --- DOM Elements ---
+        const DOM = {
+            loader: document.getElementById('loader'),
+            statusMessage: document.getElementById('status-message'),
+            generatePdfBtn: document.getElementById('generate-pdf-btn'),
+            backToTripBtn: document.getElementById('back-to-trip-btn'),
+            pageTitle: document.getElementById('page-title'),
+            exportTitle: document.getElementById('export-title'),
+            reportContent: document.getElementById('report-content'),
+        };
 
-  <script>
-    // ========================
-    //   הגדרות כלליות
-    // ========================
-    const CONFIG = {
-      CLIENT_ID: "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
-      API_KEY:   "PASTE_YOUR_GOOGLE_API_KEY"
-    };
+        // --- State ---
+        let tripId = null;
+        let isGenerating = false;
 
-    const SCOPES = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"; // הרשאות מומלצות לכתיבה למסמכים שנוצרים על ידי האפליקציה.  [oai_citation:6‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
-    const DISCOVERY_DOCS = ["https://docs.googleapis.com/$discovery/rest?version=v1"]; // טוען את Docs API.  [oai_citation:7‡גוגל](https://google.github.io/google-api-javascript-client/docs/start.html?utm_source=chatgpt.com)
-
-    const $ = (sel) => document.querySelector(sel);
-    const getTitle = () =>
-      ($("#title").value || `מסמך חדש — ${new Date().toLocaleDateString('he-IL')}`).trim();
-    const getText  = () => ($("#content").value || "").replace(/\r\n/g, "\n");
-
-    // ========================
-    //   Google Docs (OAuth)
-    // ========================
-    let gapiInited = false;
-    let tokenClient = null;
-
-    async function ensureGapiLoaded(){
-      if (gapiInited) return;
-      await new Promise(resolve => {
-        gapi.load('client', async () => {
-          await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: DISCOVERY_DOCS });
-          gapiInited = true;
-          resolve();
-        });
-      });
-    }
-
-    function getAccessToken(){
-      return new Promise((resolve, reject) => {
-        if (!tokenClient){
-          tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CONFIG.CLIENT_ID,
-            scope: SCOPES,
-            callback: (resp) => {
-              if (resp && resp.access_token){
-                gapi.client.setToken({ access_token: resp.access_token });
-                resolve(resp.access_token);
-              } else {
-                reject(new Error("OAuth: no access token"));
-              }
+        // --- Initialization ---
+        function initPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('tripId');
+            if (!tripId) {
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
+                return;
             }
-          });
+
+            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    const tripRef = doc(db, "trips", tripId);
+                    const tripSnap = await getDoc(tripRef);
+                    if (tripSnap.exists()) {
+                        const tripData = tripSnap.data();
+                        if (!tripData.editors?.includes(user.uid)) {
+                            alert("אין לך הרשאה לצפות בטיול זה.");
+                            window.location.href = 'index.html';
+                        }
+                        DOM.pageTitle.textContent += ` - ${tripData.name}`;
+                        DOM.exportTitle.textContent += ` "${tripData.name}"`;
+                    } else {
+                        alert("הטיול לא נמצא.");
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'login.html';
+                }
+            });
         }
-        tokenClient.requestAccessToken({ prompt: "" }); // נסה שקט; אם צריך — ייפתח חלון הרשאה.  [oai_citation:8‡Google for Developers](https://developers.google.com/identity/oauth2/web/guides/use-token-model?utm_source=chatgpt.com)
-      });
-    }
 
-    async function createGoogleDoc(){
-      const title = getTitle();
-      const text  = getText();
-      if (!text){
-        alert("כתוב קצת טקסט לפני יצירת המסמך 🙂");
-        return;
-      }
-      if (CONFIG.CLIENT_ID.startsWith("PASTE_") || CONFIG.API_KEY.startsWith("PASTE_")){
-        alert("מלא/י CLIENT_ID ו-API_KEY ב-CONFIG כדי להשתמש בכפתור Google Docs.");
-        return;
-      }
-
-      try{
-        await ensureGapiLoaded();
-        await getAccessToken();
-
-        // 1) יצירת מסמך ריק:
-        const createRes = await gapi.client.docs.documents.create({ title }); // יוצרת מסמך ריק.  [oai_citation:9‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/create?utm_source=chatgpt.com)
-        const docId = createRes.result.documentId;
-
-        // 2) הזרקת הטקסט לסוף הגוף:
-        await gapi.client.docs.documents.batchUpdate({
-          documentId: docId,
-          resource: {
-            requests: [
-              // Insert at end-of-body:
-              { insertText: { text, endOfSegmentLocation: {} } } // שימוש ב-EndOfSegmentLocation כדי לכתוב לסוף.  [oai_citation:10‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
-            ]
-          }
-        });
-
-        // 3) פתיחת המסמך בלשונית חדשה
-        window.open(`https://docs.google.com/document/d/${docId}/edit`, "_blank");
-      }catch(err){
-        console.error(err);
-        alert("ארעה שגיאה ביצירת Google Doc. בדוק הרשאות וכתובת מקור (HTTPS/דומיין מותר).");
-      }
-    }
-
-    // ========================
-    //   PDF עם jsPDF
-    // ========================
-    function createPdf(){
-      const text = getText();
-      if (!text){ alert("אין מה לייצא — כתוב/י טקסט תחילה."); return; }
-      const title = getTitle();
-
-      const { jsPDF } = window.jspdf; // UMD export.  [oai_citation:11‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)
-      const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
-
-      const margin = 56;
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-
-      // כותרת
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.text(title, pageW - margin, margin, { align: "right" });
-
-      // גוף הטקסט
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(12);
-
-      const maxW = pageW - margin * 2;
-      const lines = doc.splitTextToSize(text, maxW); // עטיפת שורות.  [oai_citation:12‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)
-      let y = margin + 24;
-      const lh = 16;
-
-      lines.forEach(line => {
-        if (y > pageH - margin){
-          doc.addPage();
-          y = margin;
+        function setStatus(message, showLoader = false) {
+            DOM.statusMessage.textContent = message;
+            DOM.loader.classList.toggle('hidden', !showLoader);
+            isGenerating = showLoader;
+            DOM.generatePdfBtn.disabled = isGenerating;
         }
-        // יישור לימין יעבוד טוב לטקסט עברי פשוט
-        doc.text(line, pageW - margin, y, { align: "right" });
-        y += lh;
-      });
 
-      doc.save(safeFileName(title) + ".pdf");
-    }
+        // --- Data Fetching ---
+        async function fetchAllTripData() {
+            setStatus('שלב 1/3: טוען נתונים מהשרת...', true);
 
-    // ========================
-    //   Word (.docx) עם 'docx'
-    // ========================
-    function createDocx(){
-      const text = getText();
-      if (!text){ alert("אין מה לייצא — כתוב/י טקסט תחילה."); return; }
-      const title = getTitle();
+            const tripRef = doc(db, 'trips', tripId);
+            const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
 
-      // window.docx הוא UMD namespace
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.docx;
+            const [tripSnap, ...collectionsSnaps] = await Promise.all([
+                getDoc(tripRef),
+                ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
+            ]);
 
-      const titlePara = new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        bidirectional: true, // תמיכה ב־RTL ברמת פסקה.  [oai_citation:13‡docx.js.org](https://docx.js.org/api/types/IParagraphPropertiesOptions.html?utm_source=chatgpt.com)
-        children: [ new TextRun({ text: title, bold: true }) ]
-      });
+            const allData = {
+                tripData: tripSnap.data(),
+                logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
+                places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
+                checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
+                schedules: []
+            };
 
-      const bodyParas = text.split(/\r?\n/).map(line => new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        bidirectional: true, // RTL
-        children: [ new TextRun({ text: line }) ]
-      }));
+            const scheduleDocs = collectionsSnaps[3].docs;
+            for (const scheduleDoc of scheduleDocs) {
+                const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
+                const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
+                dayData.items = (await getDocs(itemsQuery)).docs.map(d => d.data());
+                allData.schedules.push(dayData);
+            }
+            
+            allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
+            return allData;
+        }
 
-      const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: [ titlePara, ...bodyParas ]
-          }
-        ]
-      });
+        // --- Document Generation Orchestrator ---
+        async function generatePdf() {
+            if (isGenerating) return;
+            
+            try {
+                const allData = await fetchAllTripData();
+                
+                setStatus('שלב 2/3: בונה את המסמך...', true);
+                buildHtmlReport(allData);
 
-      Packer.toBlob(doc).then(blob => {
-        saveAs(blob, safeFileName(title) + ".docx");
-      });
-    }
+                setStatus('שלב 3/3: מייצא לקובץ PDF...', true);
+                const element = DOM.reportContent;
+                const opt = {
+                    margin: 10,
+                    filename: `trip_summary_${tripId}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                
+                await html2pdf().set(opt).from(element).save();
+                
+                setStatus('ההורדה הושלמה!', false);
+            } catch (error) {
+                console.error(`Error generating PDF:`, error);
+                setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
+            } finally {
+                DOM.reportContent.innerHTML = ''; // Clean up
+            }
+        }
+        
+        // --- Helper: Date Formatting ---
+        function formatISODate(isoDate) {
+            if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate || '';
+            const [year, month, day] = isoDate.split('-');
+            const dateObj = new Date(year, month - 1, day);
+            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' });
+            return `${weekday}, ${day}/${month}/${year}`;
+        }
+        
+        // --- HTML Report Builder ---
+        function buildHtmlReport(data) {
+            let html = '';
 
-    function safeFileName(s){
-      return s.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80);
-    }
+            // 1. Cover Page
+            html += `
+                <div class="page flex flex-col items-center justify-center text-center" style="height: 277mm;">
+                    <h1 class="text-5xl font-extrabold mb-8">${data.tripData.name}</h1>
+                    <p class="text-2xl text-gray-600">סיכום טיול</p>
+                    <p class="text-xl text-gray-500 mt-4">תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}</p>
+                </div>`;
 
-    // ========================
-    //   אירועים
-    // ========================
-    window.addEventListener("DOMContentLoaded", () => {
-      $("#btnDocs").addEventListener("click", createGoogleDoc);
-      $("#btnPdf").addEventListener("click", createPdf);
-      $("#btnDocx").addEventListener("click", createDocx);
-    });
-  </script>
+            // 2. Logistics Summary
+            if (data.logistics.length > 0) {
+                html += `
+                    <div class="page">
+                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">סיכום לוגיסטיקה</h2>
+                        <table class="w-full text-right border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="p-3 border">תיאור</th>
+                                    <th class="p-3 border">יעד/תאריכים</th>
+                                    <th class="p-3 border">מחיר</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.logistics.map(item => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="p-3 border">${item.name || item.type}</td>
+                                        <td class="p-3 border">${item.destination || item.dates || ''}</td>
+                                        <td class="p-3 border">$${(item.price || item.price_per_person || 0).toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            }
+
+            // 3. Daily Schedule
+            data.schedules.forEach(day => {
+                html += `
+                    <div class="page">
+                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">${formatISODate(day.id)}</h2>
+                        <div class="space-y-6">
+                            ${day.items.map(item => `
+                                <div class="p-4 bg-gray-50 rounded-lg">
+                                    <p class="text-lg font-bold">${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''} - ${item.title}</p>
+                                    ${item.summary ? `<p class="mt-2 text-gray-700 pl-4 border-r-4 border-blue-300">${item.summary}</p>` : ''}
+                                    ${(item.refs && item.refs.length > 0) ? `
+                                        <div class="mt-3 text-sm text-gray-600 space-y-1">
+                                            ${item.refs.map(ref => {
+                                                const source = ref.type === 'logistics' ? data.logistics : data.places;
+                                                const fullItem = source.find(s => s.id === ref.id);
+                                                if (!fullItem) return '';
+                                                let refText = `<strong>פרטים:</strong> ${fullItem.name}. `;
+                                                if (fullItem.location || fullItem.address) refText += `<strong>כתובת:</strong> ${fullItem.location || fullItem.address}.`;
+                                                return `<div>${refText}</div>`;
+                                            }).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`;
+            });
+            
+            // 4. Checklists
+            if (data.checklists.length > 0) {
+                html += `
+                    <div class="page">
+                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">רשימות ציוד</h2>
+                        ${data.checklists.map(list => `
+                            <div class="mb-8">
+                                <h3 class="text-xl font-semibold mb-3">${list.name}</h3>
+                                <ul class="list-none space-y-2">
+                                    ${list.items.map(item => `
+                                        <li class="flex items-center gap-3">
+                                            <span class="w-5 h-5 border-2 border-gray-400 rounded"></span>
+                                            <span>${item.text} (כמות: ${item.quantity})</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        `).join('')}
+                    </div>`;
+            }
+            
+            DOM.reportContent.innerHTML = html;
+        }
+
+
+        // --- Event Listeners ---
+        DOM.generatePdfBtn.addEventListener('click', generatePdf);
+
+        // --- Start the App ---
+        initPage();
+    </script>
 </body>
 </html>
+
