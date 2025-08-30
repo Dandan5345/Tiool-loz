@@ -9,8 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <!-- ספרייה להמרת HTML ל-PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -76,6 +75,35 @@
         .daily-item .ref-details { font-size: 12px; color: #555; background-color: #f9f9f9; padding: 5px; border-radius: 4px; margin-top: 5px; }
         .checklist ul { list-style: none; padding: 0; }
         .checklist li { margin-bottom: 5px; font-size: 14px; }
+        
+        /* --- סגנונות חדשים לדגשים וטיפים --- */
+        .note-item {
+            background-color: #fdfdfd;
+            border: 1px solid #eee;
+            border-right-width: 5px;
+            padding: 10px 12px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            break-inside: avoid;
+        }
+        .note-item strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #2c3e50;
+        }
+        .note-item p {
+            white-space: pre-wrap;
+            font-size: 13px;
+            color: #444;
+            margin: 0;
+        }
+        .note-color-red { border-right-color: #ef4444; }
+        .note-color-green { border-right-color: #22c55e; }
+        .note-color-blue { border-right-color: #3b82f6; }
+        .note-color-yellow { border-right-color: #eab308; }
+        .note-color-orange { border-right-color: #f97316; }
+
     </style>
 </head>
 <body class="bg-slate-100">
@@ -117,7 +145,6 @@
         </main>
     </div>
 
-    <!-- Container for the report content, hidden from view but used for PDF generation -->
     <div id="report-container" class="invisible absolute -top-[9999px] -left-[9999px]"></div>
 
 
@@ -221,8 +248,18 @@
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                const [itemsSnap] = await Promise.all([getDocs(itemsQuery)]);
+                // --- שינוי: הוספת שליפה של 'notes' ---
+                const notesQuery = query(collection(scheduleDoc.ref, 'notes'), orderBy('createdAt'));
+                
+                const [itemsSnap, notesSnap] = await Promise.all([
+                    getDocs(itemsQuery),
+                    getDocs(notesQuery)
+                ]);
+
                 dayData.items = itemsSnap.docs.map(d => d.data());
+                // --- שינוי: שמירת ה-notes בנתונים של היום ---
+                dayData.notes = notesSnap.docs.map(d => d.data());
+                
                 allData.schedules.push(dayData);
             }
             
@@ -253,10 +290,10 @@
                 // Sanitize value to prevent HTML injection issues
                 const sanitizedValue = String(value).replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="detail-item">
-                    <i class="fas ${icon} fa-fw"></i>
-                    <span class="label">${label}:</span>
-                    <span class="value">${sanitizedValue}</span>
-                </div>`;
+                        <i class="fas ${icon} fa-fw"></i>
+                        <span class="label">${label}:</span>
+                        <span class="value">${sanitizedValue}</span>
+                    </div>`;
             };
 
             // 2. Logistics Details
@@ -344,46 +381,65 @@
             if (data.places.length > 0) {
                 html += `<div class="page-break"></div><h3>אטרקציות ומקומות עניין</h3>`;
                 data.places.forEach(place => {
-                     html += `<div class="detail-card">
-                        <h5>${place.name || 'מקום'} (${place.type || 'לא צוין סוג'})</h5>
-                        ${detailItem('fa-map-marker-alt', 'יעד', place.destination)}
-                        ${detailItem('fa-location-dot', 'כתובת', place.location)}
-                        ${detailItem('fa-clock', 'שעות פתיחה', place.hours)}
-                        ${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}
-                        ${detailItem('fa-align-left', 'תיאור קצר', place.shortDescription)}
-                        ${detailItem('fa-pen-to-square', 'תיאור מלא', place.description)}
-                        ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}
-                        ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}
-                        ${detailItem('fa-link', 'קישור', place.link)}
-                     </div>`;
+                       html += `<div class="detail-card">
+                            <h5>${place.name || 'מקום'} (${place.type || 'לא צוין סוג'})</h5>
+                            ${detailItem('fa-map-marker-alt', 'יעד', place.destination)}
+                            ${detailItem('fa-location-dot', 'כתובת', place.location)}
+                            ${detailItem('fa-clock', 'שעות פתיחה', place.hours)}
+                            ${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}
+                            ${detailItem('fa-align-left', 'תיאור קצר', place.shortDescription)}
+                            ${detailItem('fa-pen-to-square', 'תיאור מלא', place.description)}
+                            ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}
+                            ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}
+                            ${detailItem('fa-link', 'קישור', place.link)}
+                           </div>`;
                 });
             }
 
             // 4. Daily Schedule
             if (data.schedules.length > 0) {
                  data.schedules.forEach(day => {
-                    html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}</h3>`;
-                    day.items.forEach(item => {
-                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                        html += `<div class="daily-item">
-                                    <h5><span class="time">${time}</span> - ${item.title}</h5>`;
-                        if (item.summary) {
-                            html += `<p class="summary">${item.summary}</p>`;
-                        }
-                        if (item.refs && item.refs.length > 0) {
-                            item.refs.forEach(ref => {
-                               const source = ref.type === 'logistics' ? data.logistics : data.places;
-                               const fullItem = source.find(s => s.id === ref.id);
-                               if (fullItem) {
-                                   let refText = `<b>מקושר ל:</b> ${fullItem.name}. `;
-                                   const address = fullItem.address || fullItem.location;
-                                   if (address) refText += `<b>כתובת:</b> ${address}.`;
-                                   html += `<div class="ref-details">${refText}</div>`;
-                               }
-                            });
-                        }
-                        html += `</div>`;
-                    });
+                    // --- שינוי: הוספת הכותרת המותאמת של היום ---
+                    const dayTitle = day.title ? ` - ${day.title}` : '';
+                    html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}${dayTitle}</h3>`;
+                    
+                    if (day.items && day.items.length > 0) {
+                        day.items.forEach(item => {
+                            const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
+                            html += `<div class="daily-item">
+                                        <h5><span class="time">${time}</span> - ${item.title}</h5>`;
+                            if (item.summary) {
+                                html += `<p class="summary">${item.summary}</p>`;
+                            }
+                            if (item.refs && item.refs.length > 0) {
+                                item.refs.forEach(ref => {
+                                    const source = ref.type === 'logistics' ? data.logistics : data.places;
+                                    const fullItem = source.find(s => s.id === ref.id);
+                                    if (fullItem) {
+                                        let refText = `<b>מקושר ל:</b> ${fullItem.name}. `;
+                                        const address = fullItem.address || fullItem.location;
+                                        if (address) refText += `<b>כתובת:</b> ${address}.`;
+                                        html += `<div class="ref-details">${refText}</div>`;
+                                    }
+                                });
+                            }
+                            html += `</div>`;
+                        });
+                    } else {
+                        html += `<p style="text-align: center; color: #777; margin-top: 20px;">אין פעילויות מתוכננות ליום זה.</p>`;
+                    }
+
+                    // --- שינוי: הוספת מקטע דגשים וטיפים ---
+                    if (day.notes && day.notes.length > 0) {
+                        html += `<h5 style="margin-top: 25px;">📝 דגשים וטיפים ליום זה</h5>`;
+                        day.notes.forEach(note => {
+                            const sanitizedDetails = note.details ? String(note.details).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+                            html += `<div class="note-item note-color-${note.color || 'yellow'}">
+                                <strong>${note.kind}: ${note.title || ''}</strong>
+                                ${note.details ? `<p>${sanitizedDetails}</p>` : ''}
+                             </div>`;
+                        });
+                    }
                 });
             }
 
@@ -445,4 +501,3 @@
     </script>
 </body>
 </html>
-
