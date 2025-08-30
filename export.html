@@ -19,13 +19,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
 
     <!-- פונט עברי עבור PDF -->
+    <!-- סקריפט זה מגדיר משתנה גלובלי בשם amiri_regular_base64 -->
     <script src="https://cdn.jsdelivr.net/gh/tomer-panfil/Amiri-Font-for-jsPDF/Amiri-Regular.js"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
         .export-btn { transition: all 0.3s ease; }
-        .export-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        .export-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+        .export-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -45,6 +45,7 @@
                         </a>
                         <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
                     </div>
+                    <div id="auth-container"></div>
                 </div>
             </div>
         </header>
@@ -73,10 +74,23 @@
     </div>
 
     <script type="module">
-        // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // --- Firebase Init ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        enableIndexedDbPersistence(db).catch(console.warn);
 
         // --- DOM Elements ---
         const DOM = {
@@ -87,102 +101,62 @@
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             pageTitle: document.getElementById('page-title'),
             exportTitle: document.getElementById('export-title'),
+            authContainer: document.getElementById('auth-container'),
         };
 
         // --- State ---
         let tripId = null;
         let currentUser = null;
         let isGenerating = false;
-        let db;
 
-        // --- Main Initialization Function ---
-        async function initPage() {
-            // 1. Initialize Firebase safely
-            try {
-                // Use environment variables for configuration for better security
-                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                const auth = getAuth(app);
-                
-                // Authenticate the user
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                setStatus("שגיאה בהתחברות לשירות. נסה לרענן את הדף.");
-                return;
-            }
-
-            // 2. Get Trip ID from URL
+        // --- Initialization ---
+        function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                setStatus("שגיאה: לא נמצא מזהה טיול. הנך מועבר לדף הבית.");
-                setTimeout(() => window.location.href = 'index.html', 3000);
+                alert("שגיאה: לא נמצא מזהה טיול.");
+                window.location.href = 'index.html';
                 return;
             }
+
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
-            // 3. Set up Auth Listener and fetch initial data
-            const auth = getAuth();
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     currentUser = user;
-                    await verifyAccessAndLoadTripName();
-                } else {
-                     setStatus("נדרשת התחברות. הנך מועבר לדף ההתחברות.");
-                     setTimeout(() => window.location.href = 'login.html', 3000);
-                }
-            });
-
-            // 4. Attach event listeners
-            DOM.generatePdfBtn.addEventListener('click', () => generateDocument('pdf'));
-            DOM.generateDocxBtn.addEventListener('click', () => generateDocument('docx'));
-        }
-        
-        async function verifyAccessAndLoadTripName() {
-            try {
-                const tripRef = doc(db, "trips", tripId);
-                const tripSnap = await getDoc(tripRef);
-
-                if (tripSnap.exists()) {
-                    const tripData = tripSnap.data();
-                    // IMPORTANT: This is client-side validation. Ensure you have Firestore security rules to enforce this on the server.
-                    const canAccess = tripData.editors?.includes(currentUser.uid); 
-                    if (!canAccess) {
-                        setStatus("אין לך הרשאה לצפות בטיול זה. הנך מועבר לדף הבית.");
-                        setTimeout(() => window.location.href = 'index.html', 3000);
+                    const tripRef = doc(db, "trips", tripId);
+                    const tripSnap = await getDoc(tripRef);
+                    if (tripSnap.exists()) {
+                        const tripData = tripSnap.data();
+                        const canAccess = tripData.editors?.includes(currentUser.uid);
+                        if (!canAccess) {
+                            alert("אין לך הרשאה לצפות בטיול זה.");
+                            window.location.href = 'index.html';
+                        }
+                        DOM.pageTitle.textContent += ` - ${tripData.name}`;
+                        DOM.exportTitle.textContent += ` "${tripData.name}"`;
                     } else {
-                        DOM.pageTitle.textContent = `ייצוא סיכום טיול - ${tripData.name}`;
-                        DOM.exportTitle.textContent = `הפקת סיכום הטיול "${tripData.name}"`;
-                        DOM.generatePdfBtn.disabled = false;
-                        DOM.generateDocxBtn.disabled = false;
+                        alert("הטיול לא נמצא.");
+                        window.location.href = 'index.html';
                     }
                 } else {
-                    setStatus("הטיול לא נמצא. הנך מועבר לדף הבית.");
-                    setTimeout(() => window.location.href = 'index.html', 3000);
+                    window.location.href = 'login.html';
                 }
-            } catch (error) {
-                console.error("Error verifying access:", error);
-                setStatus("שגיאה באימות הרשאות הגישה לטיול.");
-            }
+            });
         }
 
         function setStatus(message, showLoader = false) {
             DOM.statusMessage.textContent = message;
             DOM.loader.classList.toggle('hidden', !showLoader);
-            const shouldDisableButtons = isGenerating || showLoader;
-            DOM.generatePdfBtn.disabled = shouldDisableButtons;
-            DOM.generateDocxBtn.disabled = shouldDisableButtons;
+            isGenerating = showLoader; // Update isGenerating state along with loader
+            DOM.generatePdfBtn.disabled = isGenerating;
+            DOM.generateDocxBtn.disabled = isGenerating;
         }
 
         // --- Data Fetching ---
         async function fetchAllTripData() {
             setStatus('טוען נתונים מהשרת...', true);
+
             const tripRef = doc(db, 'trips', tripId);
             const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
 
@@ -190,8 +164,6 @@
                 getDoc(tripRef),
                 ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
             ]);
-
-            if (!tripSnap.exists()) throw new Error("Trip data not found.");
 
             const allData = {
                 tripData: tripSnap.data(),
@@ -201,27 +173,32 @@
                 schedules: []
             };
 
+            // Fetch nested items and notes for each schedule day
             const scheduleDocs = collectionsSnaps[3].docs;
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
                 const notesQuery = query(collection(scheduleDoc.ref, 'notes'), orderBy('createdAt'));
                 
-                const [itemsSnap, notesSnap] = await Promise.all([ getDocs(itemsQuery), getDocs(notesQuery) ]);
+                const [itemsSnap, notesSnap] = await Promise.all([
+                    getDocs(itemsQuery),
+                    getDocs(notesQuery)
+                ]);
 
                 dayData.items = itemsSnap.docs.map(d => d.data());
                 dayData.notes = notesSnap.docs.map(d => d.data());
                 allData.schedules.push(dayData);
             }
             
+            // Sort schedules by date
             allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
+
             return allData;
         }
 
         // --- Document Generation Orchestrator ---
         async function generateDocument(format) {
             if (isGenerating) return;
-            isGenerating = true;
             
             try {
                 const allData = await fetchAllTripData();
@@ -237,15 +214,14 @@
             } catch (error) {
                 console.error(`Error generating ${format}:`, error);
                 setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
-            } finally {
-                isGenerating = false;
-                setStatus('מוכן לייצוא נוסף.', false);
             }
         }
         
         // --- Helper: Date Formatting ---
         function formatISODate(isoDate) {
-             if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return "תאריך לא תקין";
+            if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+                return isoDate || ''; // Return original string or empty if null/undefined
+            }
             const [year, month, day] = isoDate.split('-');
             const dateObj = new Date(year, month - 1, day);
             const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' });
@@ -255,58 +231,63 @@
         // --- PDF Builder ---
         async function buildPdf(data) {
             const { jsPDF } = window.jspdf;
-            const docPDF = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             
-            docPDF.addFileToVFS('Amiri-Regular.ttf', amiri_regular_base64);
-            docPDF.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-            docPDF.setFont('Amiri');
+            // הגדרת פונט עברי
+            // FIX: Access the global variable from the window object
+            doc.addFileToVFS('Amiri-Regular.ttf', window.amiri_regular_base64);
+            doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+            doc.setFont('Amiri');
             
             const reversedText = (text) => String(text).split('').reverse().join('');
 
-            // Cover Page
-            docPDF.setFontSize(32);
-            docPDF.text(reversedText(data.tripData.name), docPDF.internal.pageSize.getWidth() / 2, 80, { align: 'center' });
-            docPDF.setFontSize(16);
-            docPDF.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), docPDF.internal.pageSize.getWidth() / 2, 100, { align: 'center' });
+            // 1. Cover Page
+            doc.setFontSize(32);
+            doc.text(reversedText(data.tripData.name), doc.internal.pageSize.getWidth() / 2, 80, { align: 'center' });
+            doc.setFontSize(16);
+            doc.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), doc.internal.pageSize.getWidth() / 2, 100, { align: 'center' });
 
-            // Logistics
+            // 2. Logistics Summary
+            doc.addPage();
+            doc.setFontSize(22);
+            doc.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
+            
             if (data.logistics.length > 0) {
-                docPDF.addPage();
-                docPDF.setFontSize(22);
-                docPDF.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
                 const logisticsBody = data.logistics.map(item => [
-                    reversedText(item.name || item.type || 'N/A'),
+                    reversedText(item.name || item.type),
                     reversedText(item.destination || item.dates || ''),
                     `$${(item.price || item.price_per_person || 0).toLocaleString()}`
                 ]);
-                docPDF.autoTable({
+                doc.autoTable({
                     startY: 30,
                     head: [[reversedText('מחיר'), reversedText('יעד/תאריכים'), reversedText('תיאור')]],
                     body: logisticsBody.map(row => row.reverse()),
                     styles: { font: 'Amiri', halign: 'right' },
                     headStyles: { fillColor: [41, 128, 185], halign: 'right' },
                 });
+            } else {
+                 doc.setFontSize(12);
+                 doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
             }
 
-            // Daily Schedule
+            // 3. Daily Schedule
             for (const day of data.schedules) {
-                docPDF.addPage();
-                docPDF.setFontSize(22);
-                docPDF.text(reversedText(formatISODate(day.id)), 105, 20, { align: 'center' });
+                doc.addPage();
+                doc.setFontSize(22);
+                doc.text(reversedText(formatISODate(day.id)), 105, 20, { align: 'center' });
                 let y = 35;
 
                 for (const item of day.items) {
-                    if (y > 270) { docPDF.addPage(); y = 20; }
-                    docPDF.setFontSize(14);
+                    if (y > 270) { doc.addPage(); y = 20; }
+                    doc.setFontSize(14);
                     const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                    docPDF.text(reversedText(`${time} - ${item.title}`), 195, y, { align: 'right' });
+                    doc.text(reversedText(`${time} - ${item.title}`), 195, y, { align: 'right' });
                     y += 7;
 
                     if (item.summary) {
-                        docPDF.setFontSize(10);
-                        const summaryLines = docPDF.splitTextToSize(reversedText(item.summary), 180);
-                        docPDF.text(summaryLines, 190, y, { align: 'right' });
-                        y += (summaryLines.length * 4) + 2;
+                        doc.setFontSize(10);
+                        doc.text(reversedText(item.summary), 190, y, { align: 'right', maxWidth: 180 });
+                        y += (doc.splitTextToSize(reversedText(item.summary), 180).length * 4) + 2;
                     }
                     
                     if (item.refs && item.refs.length > 0) {
@@ -314,14 +295,13 @@
                            const source = ref.type === 'logistics' ? data.logistics : data.places;
                            const fullItem = source.find(s => s.id === ref.id);
                            if (fullItem) {
-                               docPDF.setFontSize(10);
-                               docPDF.setTextColor(100);
+                               doc.setFontSize(10);
+                               doc.setTextColor(100);
                                let refText = `פרטים: ${fullItem.name}. `;
                                if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                               const refLines = docPDF.splitTextToSize(reversedText(refText), 170);
-                               docPDF.text(refLines, 185, y, { align: 'right' });
-                               y += (refLines.length * 4);
-                               docPDF.setTextColor(0);
+                               doc.text(reversedText(refText), 185, y, { align: 'right', maxWidth: 170 });
+                               y += (doc.splitTextToSize(reversedText(refText), 170).length * 4);
+                               doc.setTextColor(0);
                            }
                         }
                     }
@@ -329,91 +309,99 @@
                 }
             }
             
-            // Checklists
+            // 4. Checklists
             if(data.checklists.length > 0) {
-                 docPDF.addPage();
-                 docPDF.setFontSize(22);
-                 docPDF.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
+                 doc.addPage();
+                 doc.setFontSize(22);
+                 doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
                  let checklistY = 30;
                  data.checklists.forEach(list => {
-                     if (checklistY > 260) { docPDF.addPage(); checklistY = 20; }
-                     docPDF.setFontSize(16);
-                     docPDF.text(reversedText(list.name), 195, checklistY, { align: 'right' });
+                     doc.setFontSize(16);
+                     doc.text(reversedText(list.name), 195, checklistY, { align: 'right' });
                      checklistY += 8;
                      list.items.forEach(item => {
-                         if (checklistY > 270) { docPDF.addPage(); checklistY = 20; }
-                         docPDF.setFontSize(12);
+                         doc.setFontSize(12);
                          const itemText = `[ ] ${item.text} (x${item.quantity})`;
-                         docPDF.text(reversedText(itemText), 190, checklistY, { align: 'right' });
+                         doc.text(reversedText(itemText), 190, checklistY, { align: 'right' });
                          checklistY += 6;
                      });
                      checklistY += 10;
                  });
             }
 
-            docPDF.save(`trip_summary_${tripId}.pdf`);
+            doc.save(`trip_summary_${tripId}.pdf`);
         }
         
         // --- Word (.docx) Builder ---
         async function buildDocx(data) {
-             const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableCell, TableRow, WidthType, AlignmentType } = docx;
+             // FIX: Access the global variable from the window object
+             const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableCell, TableRow, WidthType, AlignmentType, BorderStyle } = window.docx;
 
             const sections = [];
 
-            // Cover Page
+            // 1. Cover Page
             sections.push({
+                properties: { type: "nextPage" },
                 children: [
                     new Paragraph({ text: "", spacing: { before: 4000 } }),
-                    new Paragraph({ text: data.tripData.name, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
-                    new Paragraph({ text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
+                    new Paragraph({
+                        text: data.tripData.name,
+                        heading: HeadingLevel.TITLE,
+                        alignment: AlignmentType.CENTER,
+                        bidirectional: true,
+                    }),
+                    new Paragraph({
+                        text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`,
+                        heading: HeadingLevel.HEADING_2,
+                        alignment: AlignmentType.CENTER,
+                        bidirectional: true,
+                    }),
                 ],
             });
 
-            // Logistics
-            if (data.logistics.length > 0) {
-                const logisticsRows = data.logistics.map(item => new TableRow({
-                    children: [
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun(item.name || item.type || 'N/A')]})], width: { size: 3000, type: WidthType.DXA } }),
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun(item.destination || item.dates || '')]})], width: { size: 4000, type: WidthType.DXA } }),
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun(`$${(item.price || item.price_per_person || 0).toLocaleString()}`) ]})], width: { size: 2000, type: WidthType.DXA } }),
-                    ],
-                }));
+            // 2. Logistics Summary
+            const logisticsRows = data.logistics.map(item => new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph({ text: `$${(item.price || item.price_per_person || 0).toLocaleString()}`, bidirectional: true })], width: { size: 2000, type: WidthType.DXA } }),
+                    new TableCell({ children: [new Paragraph({ text: item.destination || item.dates || '', bidirectional: true })], width: { size: 4000, type: WidthType.DXA } }),
+                    new TableCell({ children: [new Paragraph({ text: item.name || item.type, bidirectional: true })], width: { size: 3000, type: WidthType.DXA } }),
+                ],
+            }));
 
-                const logisticsTable = new Table({
-                    rows: [
-                        new TableRow({
-                            children: [
-                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "תיאור", bold: true })]})] }),
-                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "יעד/תאריכים", bold: true })]})] }),
-                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "מחיר", bold: true })]})] }),
-                            ],
-                            tableHeader: true,
-                        }),
-                        ...logisticsRows
-                    ],
-                    width: { size: 9000, type: WidthType.DXA },
-                });
-                
-                sections.push({
-                    properties: { page: {SectPr:{type: "nextPage"}}},
-                    children: [
-                        new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1 }),
-                        logisticsTable
-                    ]
-                });
-            }
+            const logisticsTable = new Table({
+                rows: [
+                    new TableRow({
+                        children: [
+                            new TableCell({ children: [new Paragraph({ text: "מחיר", bidirectional: true })], width: { size: 2000, type: WidthType.DXA } }),
+                            new TableCell({ children: [new Paragraph({ text: "יעד/תאריכים", bidirectional: true })], width: { size: 4000, type: WidthType.DXA } }),
+                            new TableCell({ children: [new Paragraph({ text: "תיאור", bidirectional: true })], width: { size: 3000, type: WidthType.DXA } }),
+                        ],
+                        tableHeader: true,
+                    }),
+                    ...logisticsRows.reverse() // Reverse to keep visual order correct in RTL
+                ],
+                width: { size: 9000, type: WidthType.DXA }
+            });
+            
+            sections.push({
+                properties: { type: "nextPage" },
+                children: [
+                    new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true }),
+                    logisticsTable
+                ]
+            });
 
-
-            // Daily Schedule
+            // 3. Daily Schedule
             data.schedules.forEach(day => {
-                const dayChildren = [new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1 })];
+                const dayChildren = [new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
                 day.items.forEach(item => {
                     const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
                     dayChildren.push(new Paragraph({
-                        children: [ new TextRun({ text: `${time} - ${item.title}`, bold: true })], spacing: { before: 200 }
+                        bidirectional: true,
+                        children: [ new TextRun({ text: `${item.title} - ${time}`, bold: true, rightToLeft: true }) ],
                     }));
                     if(item.summary) {
-                        dayChildren.push(new Paragraph({ text: item.summary, style: "IntenseQuote" }));
+                        dayChildren.push(new Paragraph({ text: item.summary, bidirectional: true, style: "IntenseQuote" }));
                     }
                     if (item.refs && item.refs.length > 0) {
                          for (const ref of item.refs) {
@@ -422,24 +410,24 @@
                             if (fullItem) {
                                 let refText = `פרטים: ${fullItem.name}. `;
                                 if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                dayChildren.push(new Paragraph({ text: refText, indentation: { left: 400 }, style: "Compact" }));
+                                dayChildren.push(new Paragraph({ text: refText, bidirectional: true, indentation: { left: 400 } }));
                             }
                          }
                     }
                 });
-                sections.push({ properties: { page: {SectPr:{type: "nextPage"}}}, children: dayChildren });
+                sections.push({ properties: { type: "nextPage" }, children: dayChildren });
             });
             
-            // Checklists
+            // 4. Checklists
              if(data.checklists.length > 0) {
-                 const checklistChildren = [new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1 })];
+                 const checklistChildren = [new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
                  data.checklists.forEach(list => {
-                     checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2, spacing: { before: 300 }}));
+                     checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2, bidirectional: true }));
                      list.items.forEach(item => {
-                         checklistChildren.push(new Paragraph({ text: `${item.text} (x${item.quantity})`, bullet: { level: 0 } }));
+                         checklistChildren.push(new Paragraph({ text: `(x${item.quantity}) ${item.text}`, bullet: { level: 0 }, bidirectional: true }));
                      });
                  });
-                 sections.push({ properties: { page: {SectPr:{type: "nextPage"}}}, children: checklistChildren });
+                 sections.push({ properties: { type: "nextPage" }, children: checklistChildren });
              }
 
             // Generate and download
@@ -453,9 +441,12 @@
             saveAs(blob, `trip_summary_${tripId}.docx`);
         }
 
-        // --- Start the App after the DOM is fully loaded ---
-        document.addEventListener('DOMContentLoaded', initPage);
+        // --- Event Listeners ---
+        DOM.generatePdfBtn.addEventListener('click', () => generateDocument('pdf'));
+        DOM.generateDocxBtn.addEventListener('click', () => generateDocument('docx'));
 
+        // --- Start the App ---
+        initPage();
     </script>
 </body>
 </html>
