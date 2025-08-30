@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ייצוא סיכום טיול ל-PDF</title>
+    <title>ייצוא סיכום טיול</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <!-- ספרייה ליצירת PDF מ-HTML -->
+    <!-- ספרייה להמרת HTML ל-PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    
+
     <style>
         body { font-family: 'Assistant', sans-serif; }
         .export-btn { transition: all 0.3s ease; }
@@ -19,23 +19,36 @@
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Styles for the hidden report content to be exported */
-        @media print {
-            .page-break { page-break-before: always; }
-        }
-        #report-content .page {
-            page-break-after: always;
+        /* Styles for the generated report (for PDF conversion) */
+        .report-page {
+            width: 210mm;
             padding: 20mm;
+            margin: 0 auto;
+            background: white;
             box-sizing: border-box;
+            color: #333;
         }
+        .report-page h1, .report-page h2, .report-page h3, .report-page h4 {
+            font-family: 'Assistant', sans-serif;
+            font-weight: 700;
+        }
+        .report-page h1 { font-size: 32px; text-align: center; margin-top: 50mm; margin-bottom: 10px; }
+        .report-page h2 { font-size: 18px; text-align: center; margin-bottom: 20mm; }
+        .report-page h3 { font-size: 24px; text-align: center; margin-bottom: 15px; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
+        .report-page h4 { font-size: 18px; margin-top: 15px; margin-bottom: 5px; }
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .report-table th, .report-table td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+        .report-table th { background-color: #f2f2f2; font-weight: 600; }
+        .report-page .page-break { page-break-before: always; }
+        .daily-item { margin-bottom: 15px; }
+        .daily-item .time { font-weight: 600; }
+        .daily-item .summary { padding-right: 15px; border-right: 2px solid #eee; margin-top: 5px; }
+        .daily-item .ref-details { font-size: 12px; color: #555; background-color: #f9f9f9; padding: 5px; border-radius: 4px; margin-top: 5px; }
+        .checklist ul { list-style: none; padding: 0; }
+        .checklist li { margin-bottom: 5px; font-size: 14px; }
     </style>
 </head>
 <body class="bg-slate-100">
-
-    <!-- This hidden div will be used to render the report before exporting -->
-    <div id="report-container" class="hidden fixed -left-[9999px] top-0 bg-white text-black" style="width: 210mm;">
-        <div id="report-content"></div>
-    </div>
 
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/60"></div>
@@ -60,8 +73,8 @@
                 <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
                 <p class="text-slate-600 mt-2 mb-8">לחץ על הכפתור כדי ליצור קובץ PDF מסודר עם כל פרטי הטיול, מוכן להדפסה או שמירה.</p>
 
-                <div class="flex gap-4 justify-center">
-                    <button id="generate-pdf-btn" class="export-btn w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
+                <div class="flex justify-center">
+                    <button id="generate-pdf-btn" class="export-btn w-full sm:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
                         <i class="fas fa-file-pdf mr-2"></i> צור קובץ PDF
                     </button>
                 </div>
@@ -74,10 +87,14 @@
         </main>
     </div>
 
+    <!-- Container for the report content, hidden from view but used for PDF generation -->
+    <div id="report-container" class="invisible absolute -top-[9999px] -left-[9999px]"></div>
+
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         // --- Firebase Init ---
         const firebaseConfig = {
@@ -91,7 +108,8 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        
+        enableIndexedDbPersistence(db).catch(console.warn);
+
         // --- DOM Elements ---
         const DOM = {
             loader: document.getElementById('loader'),
@@ -100,7 +118,7 @@
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             pageTitle: document.getElementById('page-title'),
             exportTitle: document.getElementById('export-title'),
-            reportContent: document.getElementById('report-content'),
+            reportContainer: document.getElementById('report-container'),
         };
 
         // --- State ---
@@ -128,6 +146,7 @@
                         if (!tripData.editors?.includes(user.uid)) {
                             alert("אין לך הרשאה לצפות בטיול זה.");
                             window.location.href = 'index.html';
+                            return;
                         }
                         DOM.pageTitle.textContent += ` - ${tripData.name}`;
                         DOM.exportTitle.textContent += ` "${tripData.name}"`;
@@ -142,15 +161,15 @@
         }
 
         function setStatus(message, showLoader = false) {
+            isGenerating = showLoader;
             DOM.statusMessage.textContent = message;
             DOM.loader.classList.toggle('hidden', !showLoader);
-            isGenerating = showLoader;
             DOM.generatePdfBtn.disabled = isGenerating;
         }
 
         // --- Data Fetching ---
         async function fetchAllTripData() {
-            setStatus('שלב 1/3: טוען נתונים מהשרת...', true);
+            setStatus('טוען נתונים מהשרת...', true);
 
             const tripRef = doc(db, 'trips', tripId);
             const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
@@ -172,145 +191,124 @@
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                dayData.items = (await getDocs(itemsQuery)).docs.map(d => d.data());
+                const [itemsSnap] = await Promise.all([getDocs(itemsQuery)]);
+                dayData.items = itemsSnap.docs.map(d => d.data());
                 allData.schedules.push(dayData);
             }
             
             allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
+
             return allData;
         }
+        
+        // --- Helper: Date Formatting ---
+        function formatISODate(isoDate) {
+            const [year, month, day] = isoDate.split('-');
+            const dateObj = new Date(year, month - 1, day);
+            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
+            return `${weekday}, ${day}/${month}/${year}`;
+        }
 
-        // --- Document Generation Orchestrator ---
+        // --- HTML Report Builder ---
+        function renderReportHtml(data) {
+            let html = '<div class="report-page">';
+
+            // 1. Cover Page
+            html += `<h1>${data.tripData.name}</h1>`;
+            html += `<h2>תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}</h2>`;
+
+            // 2. Logistics
+            if (data.logistics.length > 0) {
+                html += `<div class="page-break"></div><h3>סיכום לוגיסטיקה</h3>`;
+                html += `<table class="report-table">
+                            <thead><tr><th>תיאור</th><th>יעד/תאריכים</th><th>מחיר</th></tr></thead>
+                            <tbody>`;
+                data.logistics.forEach(item => {
+                    html += `<tr>
+                                <td>${item.name || item.type}</td>
+                                <td>${item.destination || item.dates || ''}</td>
+                                <td>$${(item.price || item.price_per_person || 0).toLocaleString()}</td>
+                            </tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+
+            // 3. Daily Schedule
+            data.schedules.forEach(day => {
+                html += `<div class="page-break"></div><h3>${formatISODate(day.id)}</h3>`;
+                day.items.forEach(item => {
+                    const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
+                    html += `<div class="daily-item">
+                                <h4><span class="time">${time}</span> - ${item.title}</h4>`;
+                    if (item.summary) {
+                        html += `<p class="summary">${item.summary}</p>`;
+                    }
+                    if (item.refs && item.refs.length > 0) {
+                        item.refs.forEach(ref => {
+                           const source = ref.type === 'logistics' ? data.logistics : data.places;
+                           const fullItem = source.find(s => s.id === ref.id);
+                           if (fullItem) {
+                               let refText = `<b>פרטים:</b> ${fullItem.name}. `;
+                               if (fullItem.location || fullItem.address) refText += `<b>כתובת:</b> ${fullItem.location || fullItem.address}.`;
+                               html += `<div class="ref-details">${refText}</div>`;
+                           }
+                        });
+                    }
+                    html += `</div>`;
+                });
+            });
+
+            // 4. Checklists
+            if (data.checklists.length > 0) {
+                html += `<div class="page-break"></div><h3>רשימות ציוד</h3>`;
+                data.checklists.forEach(list => {
+                    html += `<div class="checklist">
+                                <h4>${list.name}</h4>
+                                <ul>`;
+                    list.items.forEach(item => {
+                        html += `<li>☐ ${item.text} (כמות: ${item.quantity})</li>`;
+                    });
+                    html += `</ul></div>`;
+                });
+            }
+
+            html += '</div>'; // close report-page
+            return html;
+        }
+
+        // --- PDF Generation Orchestrator ---
         async function generatePdf() {
             if (isGenerating) return;
             
             try {
                 const allData = await fetchAllTripData();
-                
-                setStatus('שלב 2/3: בונה את המסמך...', true);
-                buildHtmlReport(allData);
+                setStatus('מייצר קובץ PDF...', true);
 
-                setStatus('שלב 3/3: מייצא לקובץ PDF...', true);
-                const element = DOM.reportContent;
-                const opt = {
-                    margin: 10,
-                    filename: `trip_summary_${tripId}.pdf`,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, logging: false },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
+                DOM.reportContainer.innerHTML = renderReportHtml(allData);
                 
+                const element = DOM.reportContainer.querySelector('.report-page');
+                const opt = {
+                    margin:       [15, 10, 15, 10], // top, left, bottom, right
+                    filename:     `Trip_Summary_${tripId}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'] }
+                };
+
+                // Use a promise to know when generation is complete
                 await html2pdf().set(opt).from(element).save();
                 
                 setStatus('ההורדה הושלמה!', false);
+
             } catch (error) {
-                console.error(`Error generating PDF:`, error);
+                console.error("Error generating PDF:", error);
                 setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
             } finally {
-                DOM.reportContent.innerHTML = ''; // Clean up
+                DOM.reportContainer.innerHTML = ''; // Clean up
             }
         }
         
-        // --- Helper: Date Formatting ---
-        function formatISODate(isoDate) {
-            if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate || '';
-            const [year, month, day] = isoDate.split('-');
-            const dateObj = new Date(year, month - 1, day);
-            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' });
-            return `${weekday}, ${day}/${month}/${year}`;
-        }
-        
-        // --- HTML Report Builder ---
-        function buildHtmlReport(data) {
-            let html = '';
-
-            // 1. Cover Page
-            html += `
-                <div class="page flex flex-col items-center justify-center text-center" style="height: 277mm;">
-                    <h1 class="text-5xl font-extrabold mb-8">${data.tripData.name}</h1>
-                    <p class="text-2xl text-gray-600">סיכום טיול</p>
-                    <p class="text-xl text-gray-500 mt-4">תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}</p>
-                </div>`;
-
-            // 2. Logistics Summary
-            if (data.logistics.length > 0) {
-                html += `
-                    <div class="page">
-                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">סיכום לוגיסטיקה</h2>
-                        <table class="w-full text-right border-collapse">
-                            <thead>
-                                <tr class="bg-gray-100">
-                                    <th class="p-3 border">תיאור</th>
-                                    <th class="p-3 border">יעד/תאריכים</th>
-                                    <th class="p-3 border">מחיר</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.logistics.map(item => `
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="p-3 border">${item.name || item.type}</td>
-                                        <td class="p-3 border">${item.destination || item.dates || ''}</td>
-                                        <td class="p-3 border">$${(item.price || item.price_per_person || 0).toLocaleString()}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>`;
-            }
-
-            // 3. Daily Schedule
-            data.schedules.forEach(day => {
-                html += `
-                    <div class="page">
-                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">${formatISODate(day.id)}</h2>
-                        <div class="space-y-6">
-                            ${day.items.map(item => `
-                                <div class="p-4 bg-gray-50 rounded-lg">
-                                    <p class="text-lg font-bold">${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''} - ${item.title}</p>
-                                    ${item.summary ? `<p class="mt-2 text-gray-700 pl-4 border-r-4 border-blue-300">${item.summary}</p>` : ''}
-                                    ${(item.refs && item.refs.length > 0) ? `
-                                        <div class="mt-3 text-sm text-gray-600 space-y-1">
-                                            ${item.refs.map(ref => {
-                                                const source = ref.type === 'logistics' ? data.logistics : data.places;
-                                                const fullItem = source.find(s => s.id === ref.id);
-                                                if (!fullItem) return '';
-                                                let refText = `<strong>פרטים:</strong> ${fullItem.name}. `;
-                                                if (fullItem.location || fullItem.address) refText += `<strong>כתובת:</strong> ${fullItem.location || fullItem.address}.`;
-                                                return `<div>${refText}</div>`;
-                                            }).join('')}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>`;
-            });
-            
-            // 4. Checklists
-            if (data.checklists.length > 0) {
-                html += `
-                    <div class="page">
-                        <h2 class="text-3xl font-bold mb-6 border-b pb-2">רשימות ציוד</h2>
-                        ${data.checklists.map(list => `
-                            <div class="mb-8">
-                                <h3 class="text-xl font-semibold mb-3">${list.name}</h3>
-                                <ul class="list-none space-y-2">
-                                    ${list.items.map(item => `
-                                        <li class="flex items-center gap-3">
-                                            <span class="w-5 h-5 border-2 border-gray-400 rounded"></span>
-                                            <span>${item.text} (כמות: ${item.quantity})</span>
-                                        </li>
-                                    `).join('')}
-                                </ul>
-                            </div>
-                        `).join('')}
-                    </div>`;
-            }
-            
-            DOM.reportContent.innerHTML = html;
-        }
-
-
         // --- Event Listeners ---
         DOM.generatePdfBtn.addEventListener('click', generatePdf);
 
@@ -319,4 +317,3 @@
     </script>
 </body>
 </html>
-
