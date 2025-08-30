@@ -70,7 +70,7 @@
             border-bottom: 1px solid #e2e8f0;
         }
         .dest-item .name { font-weight: 700; }
-        .dest-item .dates { font-weight: 400; color: #475569; }
+        .dest-item .dates { font-weight: 400; color: #475569; direction: ltr; }
 
         /* --- Card Styles (for Flights, Hotels, etc.) --- */
         .info-card {
@@ -105,8 +105,25 @@
             width: 16px;
             text-align: center;
         }
-        .detail-item .value { font-weight: 600; }
-        .detail-item.full-width { grid-column: 1 / -1; white-space: pre-wrap; }
+        .detail-item > div {
+             flex: 1;
+        }
+        .detail-item .value { 
+            font-weight: 600; 
+            /* שינוי: הוספת כללים לטיפול בטקסט דו-כיווני */
+            unicode-bidi: isolate;
+            direction: ltr;
+            text-align: right;
+        }
+        .detail-item .value-rtl {
+            direction: rtl;
+        }
+        
+        .detail-item.full-width { grid-column: 1 / -1; }
+        .detail-item.full-width .value {
+             white-space: pre-wrap;
+             direction: rtl; /* Base direction for descriptions is RTL */
+        }
         
         /* Flight Card Specifics */
         .flight-card h4 {
@@ -155,10 +172,10 @@
         }
         .timeline-item .time {
             font-weight: 700; font-size: 11pt; color: #0ea5e9;
-            flex-shrink: 0; width: 80px;
+            flex-shrink: 0; width: 80px; direction: ltr;
         }
         .timeline-item .content {
-            border-right: 2px solid #e2e8f0; padding-right: 15px;
+            border-right: 2px solid #e2e8f0; padding-right: 15px; flex-grow: 1;
         }
         .timeline-item h5 { font-size: 12pt; font-weight: 700; margin: 0 0 5px 0; }
         .timeline-item p { margin: 0; white-space: pre-wrap; }
@@ -171,7 +188,7 @@
             border-radius: 4px; break-inside: avoid; border: 1px solid #e2e8f0;
         }
         .note-item strong { display: block; margin-bottom: 4px; font-size: 11pt; }
-        .note-item p { white-space: pre-wrap; font-size: 10pt; margin: 0; }
+        .note-item p { white-space: pre-wrap; font-size: 10pt; margin: 0; direction: rtl; }
         .note-color-red { border-right-color: #ef4444; } .note-color-green { border-right-color: #22c55e; }
         .note-color-blue { border-right-color: #3b82f6; } .note-color-yellow { border-right-color: #eab308; }
         .note-color-orange { border-right-color: #f97316; }
@@ -320,7 +337,6 @@
             return allData;
         }
         
-        // --- Helpers ---
         const sanitize = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
         const formatISODate = (isoDate) => {
             if (!isoDate) return '';
@@ -331,29 +347,25 @@
         const parseDDMMYYYY = (d) => { const [day, month, year] = d.split('/').map(Number); return new Date(year, month - 1, day); };
         const groupBy = (arr, key, fallback='כללי') => arr.reduce((r,v)=>{ const k=v[key]||fallback; (r[k]=r[k]||[]).push(v); return r; },{});
 
-        // --- NEW, REBUILT HTML Report Builder ---
         function renderReportHtml(data) {
             let html = '<div class="report-page">';
             const { tripData, logistics, places, checklists, schedules } = data;
 
-            // --- Data Preparation & Sorting ---
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
             const flights = logistics.filter(i => i.type === 'flight');
             const hotels = logistics.filter(i => i.type === 'hotel');
             const transportation = logistics.filter(i => ['car_rental', 'ferry', 'train'].includes(i.type));
             const attractionsByType = groupBy(places, 'type');
             
-            // --- Helper for rendering info-card details ---
-            const detailItem = (icon, label, value) => {
+            const detailItem = (icon, label, value, valueClass = '') => {
                 if (!value && typeof value !== 'number') return '';
-                return `<div class="detail-item"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value">${sanitize(value)}</span></div></div>`;
+                return `<div class="detail-item"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value ${valueClass}">${sanitize(value)}</span></div></div>`;
             };
             const detailItemFull = (icon, label, value) => {
-                 if (!value && typeof value !== 'number') return '';
+                if (!value && typeof value !== 'number') return '';
                 return `<div class="detail-item full-width"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value">${sanitize(value)}</span></div></div>`;
             }
 
-            // --- 1. Cover Page: Trip Overview ---
             html += `<div class="cover-page">
                         <h1>${sanitize(tripData.name)}</h1>
                         <h2>${sanitize(tripData.startDate)} - ${sanitize(tripData.endDate)}</h2>
@@ -363,9 +375,8 @@
             });
             html += `</div></div>`;
 
-            // --- 2. Flights ---
             if (flights.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-plane-departure"></i>טיסות</h3>`;
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-plane-departure"></i><span>טיסות</span></h3>`;
                 flights.forEach(item => {
                     const from = item.from || {}; const to = item.to || {};
                     const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
@@ -380,34 +391,32 @@
                             ${detailItem('fa-plane-arrival', 'שעת נחיתה', item.arrival_time)}
                             ${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}
                             ${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}
-                            ${detailItem('fa-suitcase', 'כבודה', luggage)}
+                            ${detailItem('fa-suitcase', 'כבודה', luggage, 'value-rtl')}
                             ${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}
                         </div>
                     </div>`;
                 });
             }
 
-            // --- 3. Accommodations (Hotels) ---
             if (hotels.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i>מקומות לינה</h3>`;
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i><span>מקומות לינה</span></h3>`;
                 hotels.forEach(item => {
                     html += `<div class="info-card">
                         <h4>${sanitize(item.name)}</h4>
                         <div class="card-grid">
                             ${detailItem('fa-calendar-days', 'תאריכים', item.dates)}
-                            ${detailItem('fa-map-marker-alt', 'יעד', item.destination)}
+                            ${detailItem('fa-map-marker-alt', 'יעד', item.destination, 'value-rtl')}
                             ${detailItem('fa-location-dot', 'כתובת', item.address)}
                             ${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}
-                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}
+                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via, 'value-rtl')}
                             ${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}
                         </div>
                     </div>`;
                 });
             }
             
-            // --- 4. Transportation (Cars, Ferries, etc.) ---
              if (transportation.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-car"></i>תחבורה והתניידות</h3>`;
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-car"></i><span>תחבורה והתניידות</span></h3>`;
                 transportation.forEach(item => {
                     let cardHtml = `<div class="info-card">`;
                     if (item.type === 'car_rental') {
@@ -418,13 +427,13 @@
                             ${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}
                             ${detailItem('fa-car-side', 'סוג רכב', item.car_type)}
                             ${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}
-                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}
+                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via, 'value-rtl')}
                         </div>`;
-                    } else { // Ferry or Train
+                    } else {
                          const isFerry = item.type === 'ferry';
                          const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
                          cardHtml += `<h4>${title}</h4><div class="card-grid">
-                            ${detailItem('fa-building', 'חברה', item.company)}
+                            ${detailItem('fa-building', 'חברה', item.company, 'value-rtl')}
                             ${detailItem('fa-calendar-day', 'תאריך', item.date)}
                             ${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}
                             ${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}
@@ -436,21 +445,20 @@
                 });
             }
 
-            // --- 5. Attractions ---
             if (places.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i>אטרקציות ומקומות עניין</h3>`;
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i><span>אטרקציות ומקומות עניין</span></h3>`;
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
                     attractionsByType[type].forEach(place => {
                          html += `<div class="info-card">
                             <h4>${sanitize(place.name)}</h4>
                             <div class="card-grid">
-                                ${detailItem('fa-map-marker-alt', 'יעד', place.destination)}
+                                ${detailItem('fa-map-marker-alt', 'יעד', place.destination, 'value-rtl')}
                                 ${detailItem('fa-location-dot', 'כתובת', place.location)}
                                 ${detailItem('fa-clock', 'שעות פתיחה', place.hours)}
                                 ${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}
-                                ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}
-                                ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}
+                                ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher, 'value-rtl') : ''}
+                                ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType, 'value-rtl') : ''}
                                 ${detailItem('fa-link', 'קישור', place.link)}
                                 ${detailItemFull('fa-align-left', 'תיאור', place.description)}
                            </div></div>`;
@@ -458,9 +466,8 @@
                 });
             }
 
-            // --- 6. Checklists ---
             if (checklists.length > 0) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i>רשימות ציוד</h3>`;
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i><span>רשימות ציוד</span></h3>`;
                 const byType = groupBy(checklists, 'type');
                 Object.keys(byType).sort().forEach(type => {
                     html += `<div class="checklist-type-title">${sanitize(type)}</div>`;
@@ -488,10 +495,9 @@
                 });
             }
 
-            // --- 7. Daily Schedule ---
             if (schedules.length) {
                 schedules.forEach(day => {
-                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-calendar-day"></i>לו"ז יומי</h3>
+                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-calendar-day"></i><span>לו"ז יומי</span></h3>
                              <div class="daily-schedule-header">
                                 <div class="date">${formatISODate(day.id)}</div>
                                 ${day.title ? `<div class="title">${sanitize(day.title)}</div>` : ''}
@@ -529,7 +535,7 @@
                 });
             }
 
-            html += '</div>'; // close report-page
+            html += '</div>';
             return html;
         }
 
@@ -555,13 +561,11 @@
                     setStatus('יוצר את קובץ ה-PDF, זה לוקח רגע...', true);
                     await html2pdf().set(opt).from(element).save();
                     setStatus('ההורדה הושלמה!', false);
-                }, 500); // Small delay to allow browser to render complex DOM before PDF generation
+                }, 500);
 
             } catch (error) {
                 console.error("Error generating PDF:", error);
                 setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
-            } finally {
-                // DOM.reportContainer.innerHTML = ''; // Keep content for debugging if needed
             }
         }
         
