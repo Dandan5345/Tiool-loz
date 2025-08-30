@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -73,10 +73,7 @@
         .daily-item .time { font-weight: 600; }
         .daily-item .summary { padding-right: 15px; border-right: 2px solid #eee; margin-top: 5px; white-space: pre-wrap; }
         .daily-item .ref-details { font-size: 12px; color: #555; background-color: #f9f9f9; padding: 5px; border-radius: 4px; margin-top: 5px; }
-        .checklist ul { list-style: none; padding: 0; }
-        .checklist li { margin-bottom: 5px; font-size: 14px; }
         
-        /* --- סגנונות חדשים לדגשים וטיפים --- */
         .note-item {
             background-color: #fdfdfd;
             border: 1px solid #eee;
@@ -103,6 +100,33 @@
         .note-color-blue { border-right-color: #3b82f6; }
         .note-color-yellow { border-right-color: #eab308; }
         .note-color-orange { border-right-color: #f97316; }
+
+        /* --- שינוי: סגנונות חדשים ומורחבים לרשימות ציוד --- */
+        .checklist-container { break-inside: avoid; margin-bottom: 20px; }
+        .checklist-group { margin-bottom: 15px; }
+        .checklist-group h4 { font-size: 18px; font-weight: 700; color: #1e3a8a; background-color: #e0f2fe; padding: 8px; border-radius: 6px; }
+        .checklist-group h5 { font-size: 16px; font-weight: 600; color: #1e40af; margin-top: 10px; padding-right: 8px; border-right: 2px solid #93c5fd; }
+        .checklist-list-title { font-size: 15px; font-weight: bold; color: #1d4ed8; margin-top: 10px; margin-bottom: 5px; }
+
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 4px;
+            border-right: 4px solid transparent;
+            border-radius: 4px;
+            background-color: #f8fafc;
+        }
+        .checklist-item .checkbox { font-size: 18px; color: #333; line-height: 1.2; }
+        .checklist-item .item-details { flex-grow: 1; }
+        .checklist-item .item-text { font-weight: 600; }
+        .checklist-item .item-description { font-size: 12px; color: #555; margin-top: 2px; white-space: pre-wrap; }
+        .item-checked .item-text, .item-checked .item-description { text-decoration: line-through; color: #999; }
+        
+        .priority-3 { border-right-color: #f43f5e; } /* High */
+        .priority-2 { border-right-color: #f97316; } /* Medium */
+        .priority-1 { border-right-color: #eab308; } /* Low */
 
     </style>
 </head>
@@ -248,7 +272,6 @@
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                // --- שינוי: הוספת שליפה של 'notes' ---
                 const notesQuery = query(collection(scheduleDoc.ref, 'notes'), orderBy('createdAt'));
                 
                 const [itemsSnap, notesSnap] = await Promise.all([
@@ -257,7 +280,6 @@
                 ]);
 
                 dayData.items = itemsSnap.docs.map(d => d.data());
-                // --- שינוי: שמירת ה-notes בנתונים של היום ---
                 dayData.notes = notesSnap.docs.map(d => d.data());
                 
                 allData.schedules.push(dayData);
@@ -268,13 +290,28 @@
             return allData;
         }
         
-        // --- Helper: Date Formatting ---
+        // --- Helpers ---
         function formatISODate(isoDate) {
+            if (!isoDate) return '';
             const [year, month, day] = isoDate.split('-');
             const dateObj = new Date(year, month - 1, day);
             const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
             return `${weekday}, ${day}/${month}/${year}`;
         }
+        
+        // --- שינוי: הוספת פונקציית עזר לקיבוץ כמו בדף הרשימות ---
+        const groupBy = (arr, key, fallback='כללי') => arr.reduce((r,v)=>{
+            const k = v[key] || fallback; (r[k] = r[k] || []).push(v); return r;
+        },{});
+        
+        const getEmoji = (category, value)=>{
+            const map = {
+                types: {'לפני הטיול':'✈️','לפני יעד':'🗺️','לפני מעבר':'🚚','אחר':'📋'},
+            };
+            if (!value || !map[category]) return '';
+            const key = Object.keys(map[category]).find(k => value.includes(k));
+            return key ? map[category][key] : '';
+        };
 
         // --- HTML Report Builder ---
         function renderReportHtml(data) {
@@ -287,7 +324,6 @@
             // Helper function for rendering detail items
             const detailItem = (icon, label, value) => {
                 if (!value && typeof value !== 'number') return '';
-                // Sanitize value to prevent HTML injection issues
                 const sanitizedValue = String(value).replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="detail-item">
                         <i class="fas ${icon} fa-fw"></i>
@@ -399,7 +435,6 @@
             // 4. Daily Schedule
             if (data.schedules.length > 0) {
                  data.schedules.forEach(day => {
-                    // --- שינוי: הוספת הכותרת המותאמת של היום ---
                     const dayTitle = day.title ? ` - ${day.title}` : '';
                     html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}${dayTitle}</h3>`;
                     
@@ -429,7 +464,6 @@
                         html += `<p style="text-align: center; color: #777; margin-top: 20px;">אין פעילויות מתוכננות ליום זה.</p>`;
                     }
 
-                    // --- שינוי: הוספת מקטע דגשים וטיפים ---
                     if (day.notes && day.notes.length > 0) {
                         html += `<h5 style="margin-top: 25px;">📝 דגשים וטיפים ליום זה</h5>`;
                         day.notes.forEach(note => {
@@ -443,19 +477,68 @@
                 });
             }
 
-            // 5. Checklists
+            // --- שינוי: החלפת כל הלוגיקה של הצגת רשימות הציוד ---
+            // 5. Checklists - New detailed version
             if (data.checklists.length > 0) {
                 html += `<div class="page-break"></div><h3>רשימות ציוד</h3>`;
-                data.checklists.forEach(list => {
-                    html += `<div class="checklist">
-                                <h4>${list.name}</h4>
-                                <ul>`;
-                    list.items.forEach(item => {
-                        html += `<li>☐ ${item.text} (כמות: ${item.quantity})</li>`;
-                    });
-                    html += `</ul></div>`;
-                });
+                
+                const byType = groupBy(data.checklists, 'type');
+                const typeKeys = Object.keys(byType).sort();
+
+                for (const type of typeKeys) {
+                    const listsInType = byType[type];
+                    const typeEmoji = getEmoji('types', type);
+                    html += `<div class="checklist-group"><h4>${typeEmoji} ${type || 'כללי'}</h4>`;
+                    
+                    const byDest = groupBy(listsInType, 'destination');
+                    const destKeys = Object.keys(byDest).sort();
+
+                    for (const dest of destKeys) {
+                        const listsInDest = byDest[dest];
+                        if (dest !== 'כללי') {
+                            html += `<h5>יעד: ${dest}</h5>`;
+                        }
+
+                        const byTopic = groupBy(listsInDest, 'subType');
+                        const topicKeys = Object.keys(byTopic).sort();
+
+                        for (const topic of topicKeys) {
+                             if (topic !== 'כללי') {
+                                html += `<h5>נושא: ${topic}</h5>`;
+                            }
+                            
+                            listsInTopic.forEach(list => {
+                                html += `<div class="checklist-container">`;
+                                html += `<div class="checklist-list-title">${list.name}</div>`;
+                                
+                                const sortedItems = (list.items || []).slice().sort((a,b) => (b.priority || 0) - (a.priority || 0));
+
+                                if (sortedItems.length > 0) {
+                                    sortedItems.forEach(item => {
+                                        const checkbox = item.checked ? '☑' : '☐';
+                                        const checkedClass = item.checked ? 'item-checked' : '';
+                                        const descriptionHtml = item.description ? `<p class="item-description">${item.description.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : '';
+                                        
+                                        html += `
+                                        <div class="checklist-item priority-${item.priority || 1} ${checkedClass}">
+                                            <span class="checkbox">${checkbox}</span>
+                                            <div class="item-details">
+                                                <span class="item-text">${item.text} (כמות: ${item.quantity || 1})</span>
+                                                ${descriptionHtml}
+                                            </div>
+                                        </div>`;
+                                    });
+                                } else {
+                                    html += `<p style="font-size: 12px; color: #888;">אין פריטים ברשימה זו.</p>`;
+                                }
+                                html += `</div>`;
+                            });
+                        }
+                    }
+                    html += `</div>`; // close checklist-group
+                }
             }
+            // --- סוף השינוי ---
 
             html += '</div>'; // close report-page
             return html;
@@ -474,7 +557,7 @@
                 const element = DOM.reportContainer.querySelector('.report-page');
                 const opt = {
                     margin:       [15, 10, 15, 10],
-                    filename:     `Trip_Summary_${tripId}.pdf`,
+                    filename:     `Trip_Summary_${allData.tripData.name || tripId}.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
