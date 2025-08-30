@@ -4,22 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ייצוא סיכום טיול</title>
-
-    <!-- UI -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <!-- יצירת קבצים -->
-    <!-- jsPDF + AutoTable -->
+    <!-- ספריות צד-שלישי ליצירת קבצים -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <!-- DOCX (UMD – יחשוף window.docx) -->
+    <!-- שימו לב: הסרתי את jspdf-autotable מכיוון שאנחנו לא משתמשים בו יותר -->
     <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-    <!-- FileSaver (saveAs גלובלי) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
-
-    <!-- פונט עברי/ערבי ל-PDF (מכיל מחרוזת base64 גלובלית) -->
     <script src="https://cdn.jsdelivr.net/gh/tomer-panfil/Amiri-Font-for-jsPDF/Amiri-Regular.js"></script>
 
     <style>
@@ -34,7 +28,7 @@
 
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/60"></div>
-
+    
     <div class="relative z-10 min-h-screen flex flex-col">
         <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -45,7 +39,6 @@
                         </a>
                         <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
                     </div>
-                    <div id="auth-container"></div>
                 </div>
             </div>
         </header>
@@ -54,7 +47,7 @@
             <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
                 <i class="fas fa-file-export fa-3x text-blue-500 mb-4"></i>
                 <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                <p class="text-slate-600 mt-2 mb-8">בחר את הפורמט הרצוי כדי ליצור קובץ מסודר עם כל פרטי הטיול, מוכן להדפסה או שמירה.</p>
+                <p class="text-slate-600 mt-2 mb-8">בחר את הפורמט הרצוי כדי ליצור קובץ מסודר עם כל פרטי הטיול.</p>
 
                 <div class="flex flex-col sm:flex-row gap-4 justify-center">
                     <button id="generate-pdf-btn" class="export-btn w-full sm:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
@@ -74,409 +67,339 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        // FIX: Wrap the entire module in DOMContentLoaded to prevent race conditions with library loading.
+        document.addEventListener('DOMContentLoaded', () => {
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+            import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+            import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // --- Firebase Init ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        enableIndexedDbPersistence(db).catch(console.warn);
+            const firebaseConfig = {
+                apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+                authDomain: "tiool-loz.firebaseapp.com",
+                projectId: "tiool-loz",
+                storageBucket: "tiool-loz.appspot.com",
+                messagingSenderId: "226069823505",
+                appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+            };
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            enableIndexedDbPersistence(db).catch(console.warn);
 
-        // --- DOM Elements ---
-        const DOM = {
-            loader: document.getElementById('loader'),
-            statusMessage: document.getElementById('status-message'),
-            generatePdfBtn: document.getElementById('generate-pdf-btn'),
-            generateDocxBtn: document.getElementById('generate-docx-btn'),
-            backToTripBtn: document.getElementById('back-to-trip-btn'),
-            pageTitle: document.getElementById('page-title'),
-            exportTitle: document.getElementById('export-title'),
-            authContainer: document.getElementById('auth-container'),
-        };
-
-        // --- State ---
-        let tripId = null;
-        let currentUser = null;
-        let isGenerating = false;
-
-        // --- Initialization ---
-        function initPage() {
-            const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('tripId');
-            if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
-                window.location.href = 'index.html';
-                return;
-            }
-
-            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
-
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUser = user;
-                    const tripRef = doc(db, "trips", tripId);
-                    const tripSnap = await getDoc(tripRef);
-                    if (tripSnap.exists()) {
-                        const tripData = tripSnap.data();
-                        const canAccess = tripData.editors?.includes(currentUser.uid);
-                        if (!canAccess) {
-                            alert("אין לך הרשאה לצפות בטיול זה.");
-                            window.location.href = 'index.html';
-                            return;
-                        }
-                        DOM.pageTitle.textContent += ` - ${tripData.name}`;
-                        DOM.exportTitle.textContent += ` "${tripData.name}"`;
-                    } else {
-                        alert("הטיול לא נמצא.");
-                        window.location.href = 'index.html';
-                    }
-                } else {
-                    window.location.href = 'login.html';
-                }
-            });
-        }
-
-        function setStatus(message, showLoader = false) {
-            DOM.statusMessage.textContent = message;
-            DOM.loader.classList.toggle('hidden', !showLoader);
-            DOM.generatePdfBtn.disabled = isGenerating;
-            DOM.generateDocxBtn.disabled = isGenerating;
-        }
-
-        // --- Data Fetching ---
-        async function fetchAllTripData() {
-            setStatus('טוען נתונים מהשרת...', true);
-
-            const tripRef = doc(db, 'trips', tripId);
-            const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
-
-            const [tripSnap, ...collectionsSnaps] = await Promise.all([
-                getDoc(tripRef),
-                ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
-            ]);
-
-            const allData = {
-                tripData: tripSnap.data(),
-                logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
-                places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
-                checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
-                schedules: []
+            const DOM = {
+                loader: document.getElementById('loader'),
+                statusMessage: document.getElementById('status-message'),
+                generatePdfBtn: document.getElementById('generate-pdf-btn'),
+                generateDocxBtn: document.getElementById('generate-docx-btn'),
+                backToTripBtn: document.getElementById('back-to-trip-btn'),
+                pageTitle: document.getElementById('page-title'),
+                exportTitle: document.getElementById('export-title'),
             };
 
-            // Fetch nested items and notes for each schedule day
-            const scheduleDocs = collectionsSnaps[3].docs;
-            for (const scheduleDoc of scheduleDocs) {
-                const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
-                const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
-                const notesQuery = query(collection(scheduleDoc.ref, 'notes'), orderBy('createdAt'));
+            let tripId = null;
+            let isGenerating = false;
 
-                const [itemsSnap, notesSnap] = await Promise.all([
-                    getDocs(itemsQuery),
-                    getDocs(notesQuery)
-                ]);
-
-                dayData.items = itemsSnap.docs.map(d => d.data());
-                dayData.notes = notesSnap.docs.map(d => d.data());
-                allData.schedules.push(dayData);
+            function initPage() {
+                const urlParams = new URLSearchParams(window.location.search);
+                tripId = urlParams.get('tripId');
+                if (!tripId) {
+                    alert("שגיאה: לא נמצא מזהה טיול.");
+                    window.location.href = 'index.html';
+                    return;
+                }
+                DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        const tripRef = doc(db, "trips", tripId);
+                        const tripSnap = await getDoc(tripRef);
+                        if (tripSnap.exists()) {
+                            const tripData = tripSnap.data();
+                            if (!tripData.editors?.includes(user.uid)) {
+                                alert("אין לך הרשאה לצפות בטיול זה.");
+                                window.location.href = 'index.html';
+                            }
+                            DOM.pageTitle.textContent += ` - ${tripData.name}`;
+                            DOM.exportTitle.textContent += ` "${tripData.name}"`;
+                        } else {
+                            alert("הטיול לא נמצא.");
+                            window.location.href = 'index.html';
+                        }
+                    } else {
+                        window.location.href = 'login.html';
+                    }
+                });
             }
 
-            // Sort schedules by date
-            allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
-
-            return allData;
-        }
-
-        // --- Document Generation Orchestrator ---
-        async function generateDocument(format) {
-            if (isGenerating) return;
-            isGenerating = true;
-
-            try {
-                const allData = await fetchAllTripData();
-                setStatus(`מייצר קובץ ${format.toUpperCase()}...`, true);
-
-                if (format === 'pdf') {
-                    await buildPdf(allData);
-                } else if (format === 'docx') {
-                    await buildDocx(allData);
-                }
-
-                setStatus('ההורדה הושלמה!', false);
-            } catch (error) {
-                console.error(`Error generating ${format}:`, error);
-                setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
-            } finally {
-                isGenerating = false;
+            function setStatus(message, showLoader = false) {
+                DOM.statusMessage.textContent = message;
+                DOM.loader.classList.toggle('hidden', !showLoader);
+                isGenerating = showLoader;
                 DOM.generatePdfBtn.disabled = isGenerating;
                 DOM.generateDocxBtn.disabled = isGenerating;
             }
-        }
 
-        // --- Helper: Date Formatting ---
-        function formatISODate(isoDate) {
-            const [year, month, day] = isoDate.split('-');
-            const dateObj = new Date(year, month - 1, day);
-            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
-            return `${weekday}, ${day}/${month}/${year}`;
-        }
-
-        // --- PDF Builder ---
-        async function buildPdf(data) {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-
-            // הגדרת פונט עברי/RTL – קח את משתנה הבסיס64 מהגלובל
-            const amiriBase64 =
-                window.amiri_regular_base64 ||
-                window.amiriRegularBase64 ||
-                window.AmiriRegular ||
-                window.amiriRegular ||
-                null;
-
-            if (!amiriBase64) {
-                throw new Error("לא נטען הפונט Amiri (בדוק שהסקריפט Amiri-Regular.js נטען לפני המודול).");
-            }
-
-            // רישום הפונט ב-jsPDF
-            doc.addFileToVFS('Amiri-Regular.ttf', amiriBase64);
-            doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-            doc.setFont('Amiri');
-
-            // פונקציה פשוטה ל-RTL
-            const reversedText = (text) => String(text ?? '').split('').reverse().join('');
-
-            // 1) שער
-            doc.setFontSize(32);
-            doc.text(reversedText(data.tripData.name), doc.internal.pageSize.getWidth() / 2, 80, { align: 'center' });
-            doc.setFontSize(16);
-            doc.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), doc.internal.pageSize.getWidth() / 2, 100, { align: 'center' });
-
-            // 2) לוגיסטיקה
-            doc.addPage();
-            doc.setFontSize(22);
-            doc.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
-
-            if (data.logistics.length > 0) {
-                const logisticsBody = data.logistics.map(item => [
-                    reversedText(item.name || item.type || ''),
-                    reversedText(item.destination || item.dates || ''),
-                    `$${Number(item.price ?? item.price_per_person ?? 0).toLocaleString()}`
+            async function fetchAllTripData() {
+                setStatus('טוען נתונים מהשרת...', true);
+                const tripRef = doc(db, 'trips', tripId);
+                const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
+                const [tripSnap, ...collectionsSnaps] = await Promise.all([
+                    getDoc(tripRef),
+                    ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
                 ]);
-                doc.autoTable({
-                    startY: 30,
-                    head: [[reversedText('תיאור'), reversedText('יעד/תאריכים'), reversedText('מחיר')].reverse()],
-                    body: logisticsBody.map(row => row.reverse()),
-                    styles: { font: 'Amiri', halign: 'right' },
-                    headStyles: { fillColor: [41, 128, 185], halign: 'right' },
-                });
-            } else {
-                doc.setFontSize(12);
-                doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
+                const allData = {
+                    tripData: tripSnap.data(),
+                    logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
+                    places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
+                    checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
+                    schedules: []
+                };
+                const scheduleDocs = collectionsSnaps[3].docs;
+                for (const scheduleDoc of scheduleDocs) {
+                    const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
+                    const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
+                    const [itemsSnap] = await Promise.all([ getDocs(itemsQuery) ]);
+                    dayData.items = itemsSnap.docs.map(d => d.data());
+                    allData.schedules.push(dayData);
+                }
+                allData.schedules.sort((a, b) => a.id.localeCompare(b.id));
+                return allData;
             }
 
-            // 3) לו"ז יומי
-            for (const day of data.schedules) {
-                doc.addPage();
-                doc.setFontSize(22);
-                doc.text(reversedText(formatISODate(day.id)), 105, 20, { align: 'center' });
-                let y = 35;
-
-                for (const item of day.items) {
-                    if (y > 270) { doc.addPage(); y = 20; }
-                    doc.setFontSize(14);
-                    const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                    doc.text(reversedText(`${time} - ${item.title ?? ''}`), 195, y, { align: 'right' });
-                    y += 7;
-
-                    if (item.summary) {
-                        doc.setFontSize(10);
-                        const wrapped = doc.splitTextToSize(reversedText(item.summary), 180);
-                        doc.text(wrapped, 190, y, { align: 'right', maxWidth: 180 });
-                        y += (wrapped.length * 4) + 2;
-                    }
-
-                    if (Array.isArray(item.refs) && item.refs.length) {
-                        for (const ref of item.refs) {
-                            const source = ref.type === 'logistics' ? data.logistics : data.places;
-                            const fullItem = source.find(s => s.id === ref.id);
-                            if (fullItem) {
-                                doc.setFontSize(10);
-                                doc.setTextColor(100);
-                                let refText = `פרטים: ${fullItem.name ?? ''}. `;
-                                if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                const wrappedRef = doc.splitTextToSize(reversedText(refText), 170);
-                                doc.text(wrappedRef, 185, y, { align: 'right', maxWidth: 170 });
-                                y += wrappedRef.length * 4;
-                                doc.setTextColor(0);
-                            }
-                        }
-                    }
-                    y += 5;
+            async function generateDocument(format) {
+                if (isGenerating) return;
+                try {
+                    const allData = await fetchAllTripData();
+                    setStatus(`מייצר קובץ ${format.toUpperCase()}...`, true);
+                    if (format === 'pdf') await buildPdf(allData);
+                    else if (format === 'docx') await buildDocx(allData);
+                    setStatus('ההורדה הושלמה!', false);
+                } catch (error) {
+                    console.error(`Error generating ${format}:`, error);
+                    setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
                 }
             }
 
-            // 4) צ'ק-ליסטים
-            if (data.checklists.length > 0) {
+            function formatISODate(isoDate) {
+                if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate || '';
+                const [year, month, day] = isoDate.split('-');
+                const dateObj = new Date(year, month - 1, day);
+                return `${dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' })}, ${day}/${month}/${year}`;
+            }
+
+            const reversedText = (text) => String(text || '').split('').reverse().join('');
+
+            async function buildPdf(data) {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+                doc.addFileToVFS('Amiri-Regular.ttf', window.amiri_regular_base64);
+                doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+                doc.setFont('Amiri');
+
+                doc.setFontSize(32);
+                doc.text(reversedText(data.tripData.name), 105, 80, { align: 'center' });
+                doc.setFontSize(16);
+                doc.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), 105, 100, { align: 'center' });
+
                 doc.addPage();
                 doc.setFontSize(22);
-                doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
-                let checklistY = 30;
-                data.checklists.forEach(list => {
-                    doc.setFontSize(16);
-                    doc.text(reversedText(list.name ?? ''), 195, checklistY, { align: 'right' });
-                    checklistY += 8;
-                    (list.items ?? []).forEach(it => {
-                        doc.setFontSize(12);
-                        const qty = Number(it.quantity ?? 1);
-                        const itemText = `[ ] ${it.text ?? ''} (x${qty})`;
-                        doc.text(reversedText(itemText), 190, checklistY, { align: 'right' });
-                        checklistY += 6;
-                    });
-                    checklistY += 10;
-                });
-            }
+                doc.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
 
-            doc.save(`trip_summary_${tripId}.pdf`);
-        }
-
-        // --- Word (.docx) Builder ---
-        async function buildDocx(data) {
-            // לפרק אובייקטים מתוך window.docx (UMD)
-            const {
-                Document, Packer, Paragraph, TextRun,
-                HeadingLevel, Table, TableCell, TableRow,
-                WidthType, AlignmentType, BorderStyle
-            } = window.docx || {};
-
-            if (!Document) {
-                throw new Error("ספריית docx לא נטענה (window.docx ריק). ודא שהסקрипט של docx נטען לפני המודול.");
-            }
-
-            // עזר: תא טבלה מטקסט
-            const cell = (text, widthDxa) => new TableCell({
-                width: widthDxa ? { size: widthDxa, type: WidthType.DXA } : undefined,
-                children: [ new Paragraph(String(text ?? "")) ],
-            });
-
-            const sections = [];
-
-            // 1) שער
-            sections.push({
-                children: [
-                    new Paragraph({ text: "", spacing: { before: 4000 } }),
-                    new Paragraph({
-                        children: [ new TextRun({ text: data.tripData.name, bold: true }) ],
-                        heading: HeadingLevel.TITLE,
-                        alignment: AlignmentType.CENTER,
-                    }),
-                    new Paragraph({
-                        children: [ new TextRun({ text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}` }) ],
-                        heading: HeadingLevel.HEADING_2,
-                        alignment: AlignmentType.CENTER,
-                    }),
-                ],
-            });
-
-            // 2) לוגיסטיקה
-            const headerRow = new TableRow({
-                children: [
-                    cell("תיאור", 3000),
-                    cell("יעד/תאריכים", 4000),
-                    cell("מחיר", 2000),
-                ],
-                tableHeader: true,
-            });
-
-            const logisticsRows = data.logistics.map(item =>
-                new TableRow({
-                    children: [
-                        cell(item.name || item.type, 3000),
-                        cell(item.destination || item.dates || "", 4000),
-                        cell(`$${Number(item.price ?? item.price_per_person ?? 0).toLocaleString()}`, 2000),
-                    ],
-                })
-            );
-
-            const logisticsTable = new Table({
-                rows: [headerRow, ...logisticsRows],
-            });
-
-            sections.push({
-                children: [
-                    new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, pageBreakBefore: true }),
-                    logisticsTable
-                ]
-            });
-
-            // 3) לו"ז יומי
-            data.schedules.forEach(day => {
-                const dayChildren = [
-                    new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, pageBreakBefore: true })
-                ];
-
-                day.items.forEach(item => {
-                    const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                    dayChildren.push(new Paragraph({
-                        children: [ new TextRun({ text: `${time} - ${item.title ?? ""}`, bold: true }) ],
-                    }));
-
-                    if (item.summary) dayChildren.push(new Paragraph({ text: item.summary }));
-
-                    if (Array.isArray(item.refs) && item.refs.length) {
-                        for (const ref of item.refs) {
-                            const source = ref.type === 'logistics' ? data.logistics : data.places;
-                            const fullItem = source.find(s => s.id === ref.id);
-                            if (fullItem) {
-                                let refText = `פרטים: ${fullItem.name ?? ''}. `;
-                                if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                dayChildren.push(new Paragraph({ text: refText }));
+                // FIX: Manual table drawing for PDF to avoid autoTable errors
+                if (data.logistics.length > 0) {
+                    drawLogisticsTable(doc, data.logistics);
+                } else {
+                    doc.setFontSize(12);
+                    doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
+                }
+                
+                for (const day of data.schedules) {
+                    doc.addPage();
+                    doc.setFontSize(22);
+                    doc.text(reversedText(formatISODate(day.id)), 105, 20, { align: 'center' });
+                    let y = 35;
+                    for (const item of day.items) {
+                        if (y > 270) { doc.addPage(); y = 20; }
+                        doc.setFontSize(14);
+                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
+                        doc.text(reversedText(`${time} - ${item.title}`), 195, y, { align: 'right' });
+                        y += 7;
+                        if (item.summary) {
+                            doc.setFontSize(10);
+                            const summaryLines = doc.splitTextToSize(reversedText(item.summary), 180);
+                            doc.text(summaryLines, 190, y, { align: 'right' });
+                            y += (summaryLines.length * 4) + 2;
+                        }
+                        if (item.refs && item.refs.length > 0) {
+                            for (const ref of item.refs) {
+                                const source = ref.type === 'logistics' ? data.logistics : data.places;
+                                const fullItem = source.find(s => s.id === ref.id);
+                                if (fullItem) {
+                                    doc.setFontSize(10);
+                                    doc.setTextColor(100);
+                                    let refText = `פרטים: ${fullItem.name}. `;
+                                    if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
+                                    const refLines = doc.splitTextToSize(reversedText(refText), 170);
+                                    doc.text(refLines, 185, y, { align: 'right' });
+                                    y += (refLines.length * 4);
+                                    doc.setTextColor(0);
+                                }
                             }
                         }
+                        y += 5;
                     }
-                });
+                }
 
-                sections.push({ children: dayChildren });
-            });
-
-            // 4) צ'ק-ליסטים
-            if (data.checklists.length > 0) {
-                const checklistChildren = [ new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, pageBreakBefore: true }) ];
-                data.checklists.forEach(list => {
-                    checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2 }));
-                    (list.items ?? []).forEach(it => {
-                        const qty = Number(it.quantity ?? 1);
-                        checklistChildren.push(new Paragraph({ text: `☐ ${it.text ?? ""} (x${qty})` }));
+                if (data.checklists.length > 0) {
+                    doc.addPage();
+                    doc.setFontSize(22);
+                    doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
+                    let y = 30;
+                    data.checklists.forEach(list => {
+                        doc.setFontSize(16);
+                        doc.text(reversedText(list.name), 195, y, { align: 'right' });
+                        y += 8;
+                        list.items.forEach(item => {
+                            if (y > 280) { doc.addPage(); y = 20; }
+                            doc.setFontSize(12);
+                            doc.text(reversedText(`[ ] ${item.text} (x${item.quantity})`), 190, y, { align: 'right' });
+                            y += 6;
+                        });
+                        y += 10;
                     });
+                }
+                doc.save(`trip_summary_${tripId}.pdf`);
+            }
+            
+            function drawLogisticsTable(doc, logistics) {
+                const startY = 30;
+                const rowHeight = 8;
+                const tableHeaders = ['תיאור', 'יעד/תאריכים', 'מחיר'];
+                const colWidths = [90, 60, 30];
+                const startX = 15;
+                let currentY = startY;
+
+                // Draw header
+                doc.setFillColor(41, 128, 185);
+                doc.rect(startX, currentY, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(12);
+                doc.text(reversedText(tableHeaders[0]), startX + colWidths[0] - 2, currentY + 6, { align: 'right' });
+                doc.text(reversedText(tableHeaders[1]), startX + colWidths[0] + colWidths[1] - 2, currentY + 6, { align: 'right' });
+                doc.text(reversedText(tableHeaders[2]), startX + colWidths[0] + colWidths[1] + colWidths[2] - 2, currentY + 6, { align: 'right' });
+                currentY += rowHeight;
+
+                // Draw rows
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(10);
+                logistics.forEach((item, index) => {
+                    doc.setDrawColor(200);
+                    doc.rect(startX, currentY, colWidths.reduce((a,b)=>a+b), rowHeight);
+                    
+                    const price = `$${(item.price || item.price_per_person || 0).toLocaleString()}`;
+                    const destination = item.destination || item.dates || '';
+                    const name = item.name || item.type;
+
+                    doc.text(reversedText(name), startX + colWidths[0] - 2, currentY + 6, { align: 'right' });
+                    doc.text(reversedText(destination), startX + colWidths[0] + colWidths[1] - 2, currentY + 6, { align: 'right' });
+                    doc.text(reversedText(price), startX + colWidths[0] + colWidths[1] + colWidths[2] - 2, currentY + 6, { align: 'right' });
+                    currentY += rowHeight;
                 });
-                sections.push({ children: checklistChildren });
             }
 
-            const doc = new Document({
-                creator: "Tiool-Loz App",
-                title: data.tripData.name,
-                sections
-            });
+            async function buildDocx(data) {
+                const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableCell, TableRow, WidthType, AlignmentType } = window.docx;
+                const sections = [];
+                sections.push({
+                    properties: { type: "nextPage" },
+                    children: [
+                        new Paragraph({ text: "", spacing: { before: 4000 } }),
+                        new Paragraph({ text: data.tripData.name, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, bidirectional: true }),
+                        new Paragraph({ text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER, bidirectional: true }),
+                    ]
+                });
 
-            const blob = await Packer.toBlob(doc);
-            window.saveAs(blob, `trip_summary_${tripId}.docx`);
-        }
+                if(data.logistics.length > 0) {
+                    const logisticsRows = data.logistics.map(item => new TableRow({
+                        children: [
+                            new TableCell({ children: [new Paragraph({ text: item.name || item.type, bidirectional: true })] }),
+                            new TableCell({ children: [new Paragraph({ text: item.destination || item.dates || '', bidirectional: true })] }),
+                            new TableCell({ children: [new Paragraph({ text: `$${(item.price || item.price_per_person || 0).toLocaleString()}`, bidirectional: true })] }),
+                        ],
+                    }));
+                    const logisticsTable = new Table({
+                        columnWidths: [4500, 3000, 1500],
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    new TableCell({ children: [new Paragraph({ text: "תיאור", bidirectional: true })] }),
+                                    new TableCell({ children: [new Paragraph({ text: "יעד/תאריכים", bidirectional: true })] }),
+                                    new TableCell({ children: [new Paragraph({ text: "מחיר", bidirectional: true })] }),
+                                ],
+                                tableHeader: true,
+                            }),
+                            ...logisticsRows
+                        ],
+                    });
+                    sections.push({
+                        properties: { type: "nextPage" },
+                        children: [
+                            new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true }),
+                            logisticsTable
+                        ]
+                    });
+                }
+                
+                data.schedules.forEach(day => {
+                    const dayChildren = [new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
+                    day.items.forEach(item => {
+                        const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
+                        dayChildren.push(new Paragraph({
+                            bidirectional: true,
+                            children: [new TextRun({ text: `${time} - ${item.title}`, bold: true, rightToLeft: true })],
+                        }));
+                        if (item.summary) {
+                            dayChildren.push(new Paragraph({ text: item.summary, bidirectional: true, style: "IntenseQuote" }));
+                        }
+                        if (item.refs && item.refs.length > 0) {
+                            for (const ref of item.refs) {
+                                const source = ref.type === 'logistics' ? data.logistics : data.places;
+                                const fullItem = source.find(s => s.id === ref.id);
+                                if (fullItem) {
+                                    let refText = `פרטים: ${fullItem.name}. `;
+                                    if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
+                                    dayChildren.push(new Paragraph({ text: refText, bidirectional: true, indentation: { start: 720 } }));
+                                }
+                            }
+                        }
+                    });
+                    sections.push({ properties: { type: "nextPage" }, children: dayChildren });
+                });
 
-        // --- Event Listeners ---
-        DOM.generatePdfBtn.addEventListener('click', () => generateDocument('pdf'));
-        DOM.generateDocxBtn.addEventListener('click', () => generateDocument('docx'));
+                if (data.checklists.length > 0) {
+                    const checklistChildren = [new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
+                    data.checklists.forEach(list => {
+                        checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2, bidirectional: true }));
+                        list.items.forEach(item => {
+                            checklistChildren.push(new Paragraph({ text: `${item.text} (x${item.quantity})`, bullet: { level: 0 }, bidirectional: true }));
+                        });
+                    });
+                    sections.push({ properties: { type: "nextPage" }, children: checklistChildren });
+                }
 
-        // --- Start the App ---
-        initPage();
+                const doc = new Document({
+                    creator: "Tiool-Loz App",
+                    title: data.tripData.name,
+                    sections: sections
+                });
+                const blob = await Packer.toBlob(doc);
+                saveAs(blob, `trip_summary_${tripId}.docx`);
+            }
+
+            DOM.generatePdfBtn.addEventListener('click', () => generateDocument('pdf'));
+            DOM.generateDocxBtn.addEventListener('click', () => generateDocument('docx'));
+            initPage();
+        });
     </script>
 </body>
 </html>
+
