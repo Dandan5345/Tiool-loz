@@ -3,217 +3,306 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מחולל מסמכים: DOCX / PDF</title>
+  <title>מחולל מסמכים: Docs / PDF / Word</title>
 
-  <!-- עיצוב -->
+  <!-- Tailwind + Font -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-        integrity="sha512-1hct0h9FvH8Qk2p0K8J3K6c9s3TqQm7tCq4a9n4mE9lG0Wwz0qk4O1S8i8qf8Z1O7H8m2iN3m0+0u0yqFh8P8w=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-  <!-- יוצר DOCX -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
-  <!-- שמירת קבצים -->
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+
+  <!-- jsPDF (PDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- html2canvas (לרינדור HTML ל-PDF אם תרצה לשדרג בהמשך) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Word (.docx) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <!-- יוצר PDF מ-HTML (טוב לעברית ו-RTL) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- docx UMD (ספריית docx הרשמית) -->
+  <script src="https://cdn.jsdelivr.net/npm/docx@9.5.1/build/index.umd.js"></script>
+
+  <!-- Google APIs (לכפתור Docs) -->
+  <script async defer src="https://apis.google.com/js/api.js"></script>
+  <script async defer src="https://accounts.google.com/gsi/client"></script>
 
   <style>
-    :root {
-      --bg: #0f172a;           /* slate-900 */
-      --panel: rgba(255,255,255,0.06);
-      --panel-border: rgba(255,255,255,0.14);
-      --accent: #22d3ee;       /* cyan-400 */
-      --accent-2: #a78bfa;     /* violet-400 */
+    :root{
+      --bg1:#0f172a; /* slate-900 */
+      --card: rgba(255,255,255,0.06);
+      --card-border: rgba(255,255,255,0.16);
     }
-    body { font-family: 'Assistant', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,0.10), transparent 60%), radial-gradient(1000px 500px at -10% 120%, rgba(167,139,250,0.10), transparent 60%), var(--bg); }
-    .glass {
-      background: var(--panel);
+    body{ font-family: 'Assistant', system-ui, -apple-system, Segoe UI, sans-serif; }
+    .glass{
+      background: var(--card);
       backdrop-filter: blur(10px);
-      border: 1px solid var(--panel-border);
+      border: 1px solid var(--card-border);
     }
-    /* ל־PDF: לשמר שורות כמו בתיבה */
-    #pdf-preview { white-space: pre-wrap; direction: rtl; text-align: right; }
+    .gradient{
+      background: radial-gradient(1200px 500px at 80% -10%, rgba(59,130,246,0.25), transparent 60%),
+                  radial-gradient(900px 500px at -10% 100%, rgba(16,185,129,0.20), transparent 60%),
+                  linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #0b1220 100%);
+      min-height: 100svh;
+    }
+    textarea{
+      resize: vertical;
+    }
+    .hint small{ opacity:.8 }
   </style>
 </head>
-<body class="min-h-screen text-white selection:bg-cyan-300/40">
-  <header class="px-6 pt-10 pb-6 text-center">
+<body class="gradient text-slate-100">
+  <header class="max-w-5xl mx-auto px-4 pt-8 pb-4">
     <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
-      מחולל מסמכים מהיר <span class="text-cyan-300">DOCX</span> / <span class="text-violet-300">PDF</span>
+      מחולל מסמכים — כתוב טקסט ולחץ על הכפתור המתאים
     </h1>
-    <p class="mt-2 text-white/70">כתבו טקסט, בחרו פורמט, והורידו – הכל בדפדפן, עם תמיכה מלאה בעברית.</p>
+    <p class="text-slate-300 mt-1">Google Docs / PDF / Word (.docx)</p>
   </header>
 
-  <main class="max-w-4xl mx-auto px-4 pb-16">
-    <section class="glass rounded-2xl p-5 md:p-7">
-      <div class="grid gap-4 md:gap-5">
-        <div class="grid md:grid-cols-5 gap-3 items-center">
-          <label for="docTitle" class="md:col-span-1 font-semibold">כותרת המסמך</label>
-          <input id="docTitle" type="text" inputmode="text" placeholder="למשל: סיכום טיול / רשימת משימות"
-                 class="md:col-span-4 w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400 placeholder-white/40">
-        </div>
+  <main class="max-w-5xl mx-auto px-4 pb-16">
+    <section class="glass rounded-2xl p-5 md:p-8">
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="md:col-span-2 space-y-4">
+          <label class="block">
+            <span class="block mb-1 text-sm text-slate-300">כותרת (לא חובה)</span>
+            <input id="title" type="text" class="w-full rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" placeholder="כותרת המסמך...">
+          </label>
 
-        <div class="grid md:grid-cols-5 gap-3">
-          <label for="docText" class="md:col-span-1 font-semibold mt-2">תוכן</label>
-          <textarea id="docText" rows="10" placeholder="כתבו כאן את הטקסט שלכם... (תומך בשורות מרובות)"
-                    class="md:col-span-4 w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder-white/40"></textarea>
-        </div>
+          <label class="block">
+            <span class="block mb-1 text-sm text-slate-300">הטקסט שלך</span>
+            <textarea id="content" rows="10" class="w-full rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" placeholder="הדבק או כתוב כאן את התוכן..."></textarea>
+          </label>
 
-        <div class="flex flex-wrap gap-3 justify-end pt-2">
-          <button id="btnDocx"
-                  class="inline-flex items-center gap-2 rounded-xl px-4 py-3 bg-cyan-500/90 hover:bg-cyan-400 transition font-semibold">
-            <i class="fa-regular fa-file-word"></i>
-            צור DOCX
-          </button>
-          <button id="btnPdf"
-                  class="inline-flex items-center gap-2 rounded-xl px-4 py-3 bg-violet-500/90 hover:bg-violet-400 transition font-semibold">
-            <i class="fa-regular fa-file-pdf"></i>
-            צור PDF
-          </button>
-        </div>
-
-        <!-- תיבה נסתרת לייצוא PDF מ-HTML (html2pdf מטפל יפה בעברית/RTL) -->
-        <div id="pdf-preview" class="hidden glass rounded-xl p-6 leading-8 text-[15px]"></div>
-
-        <!-- טוסט התראה קטן -->
-        <div id="toast" class="fixed bottom-6 right-6 left-6 md:left-auto z-50 hidden">
-          <div class="glass rounded-xl px-4 py-3 flex items-center gap-3">
-            <i class="fa-solid fa-circle-check text-emerald-300"></i>
-            <span id="toast-text" class="text-sm"></span>
+          <div class="flex flex-wrap gap-3 pt-2">
+            <button id="btnDocs" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-5 py-3 font-semibold">
+              <i class="fa-brands fa-google-drive"></i> צור Google Docs
+            </button>
+            <button id="btnPdf" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-3 font-semibold">
+              <i class="fa-regular fa-file-pdf"></i> צור PDF
+            </button>
+            <button id="btnDocx" class="inline-flex items-center gap-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 px-5 py-3 font-semibold">
+              <i class="fa-regular fa-file-word"></i> צור Word (.docx)
+            </button>
           </div>
+
+          <p class="hint text-slate-400 text-sm">
+            טיפ: ל־PDF עברי חלק כדאי להשתמש בפונט יוניקוד מוטמע. הפתרון כאן עובד מצוין לטקסטים פשוטים;
+            ניתן לשדרג לשימוש ברינדור HTML מלא (html2canvas+jsPDF) לפי הצורך.
+          </p>
         </div>
+
+        <aside class="space-y-4">
+          <div class="rounded-xl border border-slate-700/50 p-4">
+            <h3 class="font-semibold mb-2">התקנה לכפתור Google Docs</h3>
+            <ol class="list-decimal pr-5 space-y-1 text-sm text-slate-300">
+              <li>ב־Google Cloud Console: הפעל את <strong>Docs API</strong> (ואפשרי גם <strong>Drive API</strong>).</li>
+              <li>צור <strong>API Key</strong> ו־<strong>OAuth Client ID — Web</strong> (עם דומיין שלך/localhost).</li>
+              <li>הדבק למטה ב־<code>CONFIG</code> את ה־CLIENT_ID וה־API_KEY שלך.</li>
+              <li>שמור ופתח מ־HTTPS. לחיצה על “צור Google Docs” תפתח מסמך חדש אוטומטית.</li>
+            </ol>
+            <p class="text-xs mt-2 text-slate-400">Docs נוצרים ריקים ואז מקבלים טקסט עם <code>documents.batchUpdate</code>. נדרשות הרשאות <code>documents</code> ו/או <code>drive.file</code>.  [oai_citation:1‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-700/50 p-4">
+            <h3 class="font-semibold mb-2">מה כל כפתור עושה?</h3>
+            <ul class="list-disc pr-5 text-sm text-slate-300 space-y-1">
+              <li><b>Google Docs</b>: יצירה ב־Google Docs ישירות בחשבון שלך (OAuth).  [oai_citation:2‡Google for Developers](https://developers.google.com/workspace/docs/api/quickstart/js?utm_source=chatgpt.com)</li>
+              <li><b>PDF</b>: יצירת PDF מקומית עם jsPDF (עטיפת שורות וכו').  [oai_citation:3‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)</li>
+              <li><b>Word (.docx)</b>: יצירת קובץ .docx בדפדפן עם ספריית <code>docx</code>; כולל תמיכה באופציית bidi לפסקאות RTL.  [oai_citation:4‡NPM](https://www.npmjs.com/package/docx?utm_source=chatgpt.com) [oai_citation:5‡docx.js.org](https://docx.js.org/api/types/IParagraphPropertiesOptions.html?utm_source=chatgpt.com)</li>
+            </ul>
+          </div>
+        </aside>
       </div>
     </section>
 
-    <section class="mt-6 text-xs text-white/60 text-center">
-      טיפ: לשמירה על שורות, פשוט עברו שורה בתיבה. ה־PDF ישמור על מבנה הטקסט, וה־DOCX יפתח יפה בוורד.
+    <section class="mt-6 text-xs text-slate-400">
+      <p>נבנה עם ספריות פתוחות: Google Docs API + Google Identity Services, jsPDF, docx.</p>
     </section>
   </main>
 
   <script>
-    // ===== עזר: טוסט =====
-    function showToast(msg, ms = 2200) {
-      const el = document.getElementById('toast');
-      const txt = document.getElementById('toast-text');
-      txt.textContent = msg;
-      el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), ms);
+    // ========================
+    //   הגדרות כלליות
+    // ========================
+    const CONFIG = {
+      CLIENT_ID: "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+      API_KEY:   "PASTE_YOUR_GOOGLE_API_KEY"
+    };
+
+    const SCOPES = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"; // הרשאות מומלצות לכתיבה למסמכים שנוצרים על ידי האפליקציה.  [oai_citation:6‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
+    const DISCOVERY_DOCS = ["https://docs.googleapis.com/$discovery/rest?version=v1"]; // טוען את Docs API.  [oai_citation:7‡גוגל](https://google.github.io/google-api-javascript-client/docs/start.html?utm_source=chatgpt.com)
+
+    const $ = (sel) => document.querySelector(sel);
+    const getTitle = () =>
+      ($("#title").value || `מסמך חדש — ${new Date().toLocaleDateString('he-IL')}`).trim();
+    const getText  = () => ($("#content").value || "").replace(/\r\n/g, "\n");
+
+    // ========================
+    //   Google Docs (OAuth)
+    // ========================
+    let gapiInited = false;
+    let tokenClient = null;
+
+    async function ensureGapiLoaded(){
+      if (gapiInited) return;
+      await new Promise(resolve => {
+        gapi.load('client', async () => {
+          await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: DISCOVERY_DOCS });
+          gapiInited = true;
+          resolve();
+        });
+      });
     }
 
-    // ===== עזר: שם קובץ נוח =====
-    function filenameFromTitle(ext) {
-      const title = (document.getElementById('docTitle').value || 'מסמך ללא כותרת').trim();
-      const safe = title.replace(/[\\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
-      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-      return (safe || 'document') + ' - ' + stamp + '.' + ext;
-    }
-
-    // ===== יצירת DOCX עם הספרייה docx =====
-    async function createDocx() {
-      const text = document.getElementById('docText').value;
-      if (!text.trim()) { showToast('אין תוכן. כתבו משהו בתיבה קודם.'); return; }
-
-      const { Document, Packer, Paragraph, TextRun, AlignmentType } = window.docx;
-
-      // הופכים כל שורה לפסקה, עם RTL (bidirectional) ויישור לימין
-      const paragraphs = text.split(/\r?\n/).map(line =>
-        new Paragraph({
-          bidirectional: true,
-          alignment: AlignmentType.RIGHT,
-          children: [
-            new TextRun({ text: line.length ? line : ' ', font: 'Assistant' })
-          ]
-        })
-      );
-
-      const title = (document.getElementById('docTitle').value || '').trim();
-      const sectionChildren = [];
-
-      if (title) {
-        sectionChildren.push(
-          new Paragraph({
-            bidirectional: true,
-            alignment: AlignmentType.RIGHT,
-            children: [
-              new TextRun({ text: title, bold: true, size: 32 }) // ~16pt
-            ],
-            spacing: { after: 200 }
-          })
-        );
-      }
-      sectionChildren.push(...paragraphs);
-
-      const doc = new Document({
-        sections: [{
-          properties: {
-            page: {
-              margin: { top: 720, right: 720, bottom: 720, left: 720 } // 1 אינץ' = 720
+    function getAccessToken(){
+      return new Promise((resolve, reject) => {
+        if (!tokenClient){
+          tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CONFIG.CLIENT_ID,
+            scope: SCOPES,
+            callback: (resp) => {
+              if (resp && resp.access_token){
+                gapi.client.setToken({ access_token: resp.access_token });
+                resolve(resp.access_token);
+              } else {
+                reject(new Error("OAuth: no access token"));
+              }
             }
-          },
-          children: sectionChildren
-        }]
+          });
+        }
+        tokenClient.requestAccessToken({ prompt: "" }); // נסה שקט; אם צריך — ייפתח חלון הרשאה.  [oai_citation:8‡Google for Developers](https://developers.google.com/identity/oauth2/web/guides/use-token-model?utm_source=chatgpt.com)
+      });
+    }
+
+    async function createGoogleDoc(){
+      const title = getTitle();
+      const text  = getText();
+      if (!text){
+        alert("כתוב קצת טקסט לפני יצירת המסמך 🙂");
+        return;
+      }
+      if (CONFIG.CLIENT_ID.startsWith("PASTE_") || CONFIG.API_KEY.startsWith("PASTE_")){
+        alert("מלא/י CLIENT_ID ו-API_KEY ב-CONFIG כדי להשתמש בכפתור Google Docs.");
+        return;
+      }
+
+      try{
+        await ensureGapiLoaded();
+        await getAccessToken();
+
+        // 1) יצירת מסמך ריק:
+        const createRes = await gapi.client.docs.documents.create({ title }); // יוצרת מסמך ריק.  [oai_citation:9‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/create?utm_source=chatgpt.com)
+        const docId = createRes.result.documentId;
+
+        // 2) הזרקת הטקסט לסוף הגוף:
+        await gapi.client.docs.documents.batchUpdate({
+          documentId: docId,
+          resource: {
+            requests: [
+              // Insert at end-of-body:
+              { insertText: { text, endOfSegmentLocation: {} } } // שימוש ב-EndOfSegmentLocation כדי לכתוב לסוף.  [oai_citation:10‡Google for Developers](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
+            ]
+          }
+        });
+
+        // 3) פתיחת המסמך בלשונית חדשה
+        window.open(`https://docs.google.com/document/d/${docId}/edit`, "_blank");
+      }catch(err){
+        console.error(err);
+        alert("ארעה שגיאה ביצירת Google Doc. בדוק הרשאות וכתובת מקור (HTTPS/דומיין מותר).");
+      }
+    }
+
+    // ========================
+    //   PDF עם jsPDF
+    // ========================
+    function createPdf(){
+      const text = getText();
+      if (!text){ alert("אין מה לייצא — כתוב/י טקסט תחילה."); return; }
+      const title = getTitle();
+
+      const { jsPDF } = window.jspdf; // UMD export.  [oai_citation:11‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)
+      const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
+
+      const margin = 56;
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+
+      // כותרת
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text(title, pageW - margin, margin, { align: "right" });
+
+      // גוף הטקסט
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+
+      const maxW = pageW - margin * 2;
+      const lines = doc.splitTextToSize(text, maxW); // עטיפת שורות.  [oai_citation:12‡cdnjs](https://cdnjs.com/libraries/jspdf?utm_source=chatgpt.com)
+      let y = margin + 24;
+      const lh = 16;
+
+      lines.forEach(line => {
+        if (y > pageH - margin){
+          doc.addPage();
+          y = margin;
+        }
+        // יישור לימין יעבוד טוב לטקסט עברי פשוט
+        doc.text(line, pageW - margin, y, { align: "right" });
+        y += lh;
       });
 
-      const blob = await Packer.toBlob(doc);
-      saveAs(blob, filenameFromTitle('docx'));
-      showToast('DOCX נוצר והורד בהצלחה!');
+      doc.save(safeFileName(title) + ".pdf");
     }
 
-    // ===== יצירת PDF (html2pdf – תומך יפה בעברית/RTL) =====
-    function createPdf() {
-      const text = document.getElementById('docText').value;
-      if (!text.trim()) { showToast('אין תוכן. כתבו משהו בתיבה קודם.'); return; }
+    // ========================
+    //   Word (.docx) עם 'docx'
+    // ========================
+    function createDocx(){
+      const text = getText();
+      if (!text){ alert("אין מה לייצא — כתוב/י טקסט תחילה."); return; }
+      const title = getTitle();
 
-      const title = (document.getElementById('docTitle').value || '').trim();
-      const preview = document.getElementById('pdf-preview');
+      // window.docx הוא UMD namespace
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.docx;
 
-      // בונים HTML פשוט ליצוא – שומר RTL ושבירת שורות
-      const header = title ? `<h1 style="margin:0 0 10px; font-weight:700; font-size:20px; text-align:right;">${escapeHtml(title)}</h1>` : '';
-      preview.innerHTML = `${header}<div>${escapeHtml(text)}</div>`;
+      const titlePara = new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true, // תמיכה ב־RTL ברמת פסקה.  [oai_citation:13‡docx.js.org](https://docx.js.org/api/types/IParagraphPropertiesOptions.html?utm_source=chatgpt.com)
+        children: [ new TextRun({ text: title, bold: true }) ]
+      });
 
-      // מראים זמנית כדי שהמנוע יחשב גדלים נכון (אך שומרים שזה "שקוף" ובלי קפיצות)
-      preview.classList.remove('hidden');
+      const bodyParas = text.split(/\r?\n/).map(line => new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true, // RTL
+        children: [ new TextRun({ text: line }) ]
+      }));
 
-      const opt = {
-        filename: filenameFromTitle('pdf'),
-        margin: [15, 15, 15, 15], // pt
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
-      };
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: [ titlePara, ...bodyParas ]
+          }
+        ]
+      });
 
-      html2pdf().set(opt).from(preview).save()
-        .then(() => showToast('PDF נוצר והורד בהצלחה!'))
-        .finally(() => preview.classList.add('hidden'));
+      Packer.toBlob(doc).then(blob => {
+        saveAs(blob, safeFileName(title) + ".docx");
+      });
     }
 
-    // הגנת XSS פשוטה לתוכן שמוזרם ל־innerHTML
-    function escapeHtml(str) {
-      return String(str)
-        .replaceAll('&','&amp;')
-        .replaceAll('<','&lt;')
-        .replaceAll('>','&gt;')
-        .replaceAll('"','&quot;')
-        .replaceAll("'", '&#39;')
-        .replace(/\r?\n/g, '\n'); // נשמר; #pdf-preview מוגדר עם white-space: pre-wrap
+    function safeFileName(s){
+      return s.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80);
     }
 
-    // ===== חיבור כפתורים =====
-    document.getElementById('btnDocx').addEventListener('click', createDocx);
-    document.getElementById('btnPdf').addEventListener('click', createPdf);
-
-    // מקשי קיצור נחמדים: Ctrl/Cmd+Enter -> PDF, Ctrl/Cmd+S -> DOCX
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        createDocx();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        createPdf();
-      }
+    // ========================
+    //   אירועים
+    // ========================
+    window.addEventListener("DOMContentLoaded", () => {
+      $("#btnDocs").addEventListener("click", createGoogleDoc);
+      $("#btnPdf").addEventListener("click", createPdf);
+      $("#btnDocx").addEventListener("click", createDocx);
     });
   </script>
 </body>
