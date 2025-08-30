@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
+    <!-- --- ADDED FOR MAPS: LeafletJS CSS --- -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
         /* --- General PDF & Body Styles --- */
         body { font-family: 'Assistant', sans-serif; }
@@ -190,7 +194,22 @@
         .note-color-blue { border-right-color: #3b82f6; } .note-color-yellow { border-right-color: #eab308; }
         .note-color-orange { border-right-color: #f97316; }
 
-        /* --- FIX 1: Responsive styles for mobile screen preview --- */
+        /* --- ADDED FOR MAPS: Map container styles --- */
+        .map-container {
+            height: 350px;
+            border-radius: 8px;
+            margin-top: 10px;
+            margin-bottom: 16px;
+            background-color: #f1f5f9;
+            z-index: 1;
+            break-inside: avoid;
+        }
+        .attraction-map-container {
+             height: 250px;
+        }
+        .leaflet-container { z-index: 1; }
+
+        /* --- Responsive styles for mobile screen preview --- */
         @media screen and (max-width: 768px) {
             #preview-wrapper {
                 padding: 0;
@@ -242,6 +261,10 @@
             .page-break {
                 page-break-before: always;
             }
+            /* --- ADDED FOR MAPS: Hide maps during print --- */
+            .map-container {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -269,7 +292,13 @@
                 <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
                     <i class="fas fa-file-export fa-3x text-sky-500 mb-4"></i>
                     <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                    <p class="text-slate-600 mt-2 mb-8">תחילה, צור תצוגה מקדימה של סיכום הטיול. לאחר מכן תוכל להדפיס או לשמור אותו לקובץ PDF.</p>
+                    <p class="text-slate-600 mt-2 mb-6">תחילה, צור תצוגה מקדימה של סיכום הטיול. לאחר מכן תוכל להדפיס או לשמור אותו לקובץ PDF.</p>
+
+                    <!-- --- ADDED FOR MAPS: Checkbox to include maps --- -->
+                    <div class="mb-6 flex justify-center items-center gap-3 bg-slate-100 p-3 rounded-lg">
+                        <input type="checkbox" id="include-maps-checkbox" class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300">
+                        <label for="include-maps-checkbox" class="font-semibold text-slate-700">הכללת מפות בסיכום</label>
+                    </div>
 
                     <div class="flex justify-center">
                         <button id="start-preview-btn" class="action-btn w-full sm:w-auto flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-xl">
@@ -288,13 +317,11 @@
     
     <div id="preview-wrapper" class="hidden relative z-20">
          <div id="preview-container"></div>
-         <!-- FIX 2: Bigger, more clickable floating action button -->
          <button id="floating-action-btn" class="hidden action-btn fixed bottom-6 left-6 bg-red-500 hover:bg-red-600 text-white font-bold w-16 h-16 rounded-full shadow-lg z-50 flex items-center justify-center" title="הדפסה או שמירה כקובץ">
             <i class="fas fa-print fa-xl"></i>
         </button>
     </div>
 
-    <!-- FIX 3: Smaller, scrollable modal with reordered button -->
     <div id="print-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md text-slate-800 p-6 flex flex-col">
             <div class="flex-shrink-0">
@@ -306,7 +333,6 @@
                     <h3 class="text-2xl font-bold mb-2">שמירת סיכום הטיול</h3>
                     <p class="text-slate-600 mb-4">כדי לקבל PDF מדויק, השתמש באפשרות ההדפסה של הדפדפן.</p>
                 </div>
-                <!-- Button moved up -->
                 <div class="mb-6 text-center">
                     <button id="trigger-print-btn" class="action-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg">
                         <i class="fas fa-file-import mr-2"></i> המשך להדפסה / שמירה
@@ -314,7 +340,6 @@
                 </div>
             </div>
 
-            <!-- Scrollable content area -->
             <div class="flex-grow overflow-y-auto max-h-[50vh] pr-2">
                 <div class="space-y-4 text-right text-base">
                     <p><strong>אפשרות 1: הדפסה רגילה</strong><br>אם ברצונך להדפיס את הסיכום, פשוט בחר את המדפסת שלך ולחץ "הדפס".</p>
@@ -369,6 +394,8 @@
             printModal: document.getElementById('print-modal'),
             closeModalBtn: document.getElementById('close-modal-btn'),
             triggerPrintBtn: document.getElementById('trigger-print-btn'),
+            // ADDED FOR MAPS
+            includeMapsCheckbox: document.getElementById('include-maps-checkbox'),
         };
 
         let tripId = null;
@@ -465,7 +492,8 @@
         const parseDDMMYYYY = (d) => { if (!d) return new Date(0); const [day, month, year] = d.split('/').map(Number); return new Date(year, month - 1, day); };
         const groupBy = (arr, key, fallback='כללי') => arr.reduce((r,v)=>{ const k=v[key]||fallback; (r[k]=r[k]||[]).push(v); return r; },{});
 
-        function renderReportHtml(data) {
+        // --- UPDATED to accept includeMaps parameter ---
+        function renderReportHtml(data, includeMaps) {
             let html = '<div class="report-page">';
             const { tripData, logistics, places, checklists, schedules } = data;
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
@@ -486,6 +514,12 @@
             html += `<div class="cover-page"><h1>${sanitize(tripData.name)}</h1><h2>${sanitize(tripData.startDate)} - ${sanitize(tripData.endDate)}</h2><div class="destinations-summary">`;
             sortedDestinations.forEach(dest => { html += `<div class="dest-item"><span class="name">${sanitize(dest.nameHe)}</span><span class="dates">${sanitize(dest.dates)}</span></div>`; });
             html += `</div></div>`;
+
+            // --- ADDED FOR MAPS: Trip route map section ---
+            if (includeMaps) {
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> מפת המסע הכללית</h3>`;
+                html += `<div id="trip-route-map" class="map-container"></div>`;
+            }
 
             if (flights.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-plane-departure"></i> טיסות</h3>`;
@@ -521,7 +555,14 @@
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
-                    attractionsByType[type].forEach(place => { html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">${detailItem('fa-map-marker-alt', 'יעד', place.destination)}${detailItem('fa-location-dot', 'כתובת', place.location)}${detailItem('fa-clock', 'שעות פתיחה', place.hours)}${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}${detailItem('fa-link', 'קישור', place.link)}${detailItemFull('fa-align-left', 'תיאור', place.description)}</div></div>`; });
+                    attractionsByType[type].forEach(place => {
+                        html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">${detailItem('fa-map-marker-alt', 'יעד', place.destination)}${detailItem('fa-location-dot', 'כתובת', place.location)}${detailItem('fa-clock', 'שעות פתיחה', place.hours)}${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}${detailItem('fa-link', 'קישור', place.link)}${detailItemFull('fa-align-left', 'תיאור', place.description)}</div>`;
+                        // --- ADDED FOR MAPS: Individual attraction map container ---
+                        if (includeMaps && place.coords) {
+                            html += `<div id="map-${place.id}" class="map-container attraction-map-container" data-lat="${place.coords.lat}" data-lng="${place.coords.lng}" data-name="${sanitize(place.name)}"></div>`;
+                        }
+                        html += `</div>`;
+                    });
                 });
             }
 
@@ -577,16 +618,72 @@
             return html;
         }
 
+        // --- ADDED FOR MAPS: Function to initialize all maps after render ---
+        function initializeMaps() {
+            // 1. Initialize Trip Route Map
+            const tripMapContainer = document.getElementById('trip-route-map');
+            if (tripMapContainer) {
+                const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
+                
+                const points = (tripDataCache.tripData.destinations || [])
+                    .filter(d => d.coords)
+                    .map(d => [d.coords.lat, d.coords.lng]);
+
+                (tripDataCache.tripData.destinations || []).forEach(dest => {
+                    if (dest.coords) {
+                        L.marker([dest.coords.lat, dest.coords.lng])
+                            .addTo(tripMap)
+                            .bindTooltip(dest.nameHe, {permanent: true, direction: 'top', offset: [0, -10]}).openTooltip();
+                    }
+                });
+
+                if (points.length > 1) {
+                    L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
+                    tripMap.fitBounds(points, { padding: [50, 50] });
+                } else if (points.length === 1) {
+                    tripMap.setView(points[0], 8);
+                }
+                 setTimeout(() => tripMap.invalidateSize(), 100);
+            }
+
+            // 2. Initialize Individual Attraction Maps
+            document.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
+                const lat = parseFloat(mapDiv.dataset.lat);
+                const lng = parseFloat(mapDiv.dataset.lng);
+                const name = mapDiv.dataset.name;
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    const map = L.map(mapDiv).setView([lat, lng], 15);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CARTO'
+                    }).addTo(map);
+                    L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
+                    setTimeout(() => map.invalidateSize(), 100);
+                }
+            });
+        }
+
         async function showPreview() {
             if (isGenerating) return;
             try {
                 const allData = await fetchAllTripData();
                 setStatus('מעצב ומסדר את כל המידע...', true);
-                DOM.previewContainer.innerHTML = renderReportHtml(allData);
+                
+                // --- MODIFIED to check checkbox state and pass to render function ---
+                const includeMaps = DOM.includeMapsCheckbox.checked;
+                DOM.previewContainer.innerHTML = renderReportHtml(allData, includeMaps);
+                
                 setTimeout(() => {
                     DOM.mainContent.classList.add('hidden');
                     DOM.previewWrapper.classList.remove('hidden');
                     DOM.floatingActionBtn.classList.remove('hidden');
+                    
+                    // --- ADDED FOR MAPS: Initialize maps if checkbox was checked ---
+                    if (includeMaps) {
+                        initializeMaps();
+                    }
+
                     setStatus('התצוגה המקדימה מוכנה.', false);
                     window.scrollTo(0, 0); // Crucial for preventing zoom issue
                 }, 100);
@@ -625,4 +722,3 @@
     </script>
 </body>
 </html>
-
