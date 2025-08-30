@@ -4,21 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ייצוא סיכום טיול</title>
-    
+
+    <!-- UI -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <!-- ספריות צד-שלישי ליצירת קבצים -->
-    <!-- PDF -->
+    <!-- יצירת קבצים -->
+    <!-- jsPDF + AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    
-    <!-- Word (.docx) -->
+    <!-- DOCX (UMD – יחשוף window.docx) -->
     <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+    <!-- FileSaver (saveAs גלובלי) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
 
-    <!-- פונט עברי עבור PDF -->
+    <!-- פונט עברי/ערבי ל-PDF (מכיל מחרוזת base64 גלובלית) -->
     <script src="https://cdn.jsdelivr.net/gh/tomer-panfil/Amiri-Font-for-jsPDF/Amiri-Regular.js"></script>
 
     <style>
@@ -33,7 +34,7 @@
 
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/60"></div>
-    
+
     <div class="relative z-10 min-h-screen flex flex-col">
         <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -131,6 +132,7 @@
                         if (!canAccess) {
                             alert("אין לך הרשאה לצפות בטיול זה.");
                             window.location.href = 'index.html';
+                            return;
                         }
                         DOM.pageTitle.textContent += ` - ${tripData.name}`;
                         DOM.exportTitle.textContent += ` "${tripData.name}"`;
@@ -147,7 +149,6 @@
         function setStatus(message, showLoader = false) {
             DOM.statusMessage.textContent = message;
             DOM.loader.classList.toggle('hidden', !showLoader);
-            isGenerating = showLoader;
             DOM.generatePdfBtn.disabled = isGenerating;
             DOM.generateDocxBtn.disabled = isGenerating;
         }
@@ -172,22 +173,24 @@
                 schedules: []
             };
 
+            // Fetch nested items and notes for each schedule day
             const scheduleDocs = collectionsSnaps[3].docs;
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const itemsQuery = query(collection(scheduleDoc.ref, 'items'), orderBy('sort'));
                 const notesQuery = query(collection(scheduleDoc.ref, 'notes'), orderBy('createdAt'));
-                
+
                 const [itemsSnap, notesSnap] = await Promise.all([
                     getDocs(itemsQuery),
-                    getDocs(notesSnap)
+                    getDocs(notesQuery)
                 ]);
 
                 dayData.items = itemsSnap.docs.map(d => d.data());
                 dayData.notes = notesSnap.docs.map(d => d.data());
                 allData.schedules.push(dayData);
             }
-            
+
+            // Sort schedules by date
             allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
 
             return allData;
@@ -196,7 +199,8 @@
         // --- Document Generation Orchestrator ---
         async function generateDocument(format) {
             if (isGenerating) return;
-            
+            isGenerating = true;
+
             try {
                 const allData = await fetchAllTripData();
                 setStatus(`מייצר קובץ ${format.toUpperCase()}...`, true);
@@ -206,73 +210,81 @@
                 } else if (format === 'docx') {
                     await buildDocx(allData);
                 }
-                
+
                 setStatus('ההורדה הושלמה!', false);
             } catch (error) {
                 console.error(`Error generating ${format}:`, error);
                 setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
+            } finally {
+                isGenerating = false;
+                DOM.generatePdfBtn.disabled = isGenerating;
+                DOM.generateDocxBtn.disabled = isGenerating;
             }
         }
-        
+
         // --- Helper: Date Formatting ---
         function formatISODate(isoDate) {
-            if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
-                return isoDate || '';
-            }
             const [year, month, day] = isoDate.split('-');
             const dateObj = new Date(year, month - 1, day);
-            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' });
+            const weekday = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
             return `${weekday}, ${day}/${month}/${year}`;
         }
-        
-        const reversedText = (text) => String(text).split('').reverse().join('');
 
         // --- PDF Builder ---
         async function buildPdf(data) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            
-            doc.addFileToVFS('Amiri-Regular.ttf', window.amiri_regular_base64);
+
+            // הגדרת פונט עברי/RTL – קח את משתנה הבסיס64 מהגלובל
+            const amiriBase64 =
+                window.amiri_regular_base64 ||
+                window.amiriRegularBase64 ||
+                window.AmiriRegular ||
+                window.amiriRegular ||
+                null;
+
+            if (!amiriBase64) {
+                throw new Error("לא נטען הפונט Amiri (בדוק שהסקריפט Amiri-Regular.js נטען לפני המודול).");
+            }
+
+            // רישום הפונט ב-jsPDF
+            doc.addFileToVFS('Amiri-Regular.ttf', amiriBase64);
             doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
             doc.setFont('Amiri');
 
-            // 1. Cover Page
+            // פונקציה פשוטה ל-RTL
+            const reversedText = (text) => String(text ?? '').split('').reverse().join('');
+
+            // 1) שער
             doc.setFontSize(32);
             doc.text(reversedText(data.tripData.name), doc.internal.pageSize.getWidth() / 2, 80, { align: 'center' });
             doc.setFontSize(16);
             doc.text(reversedText(`תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`), doc.internal.pageSize.getWidth() / 2, 100, { align: 'center' });
 
-            // 2. Logistics Summary
+            // 2) לוגיסטיקה
             doc.addPage();
             doc.setFontSize(22);
             doc.text(reversedText('סיכום לוגיסטיקה'), 105, 20, { align: 'center' });
-            
+
             if (data.logistics.length > 0) {
-                // FIX: Use didParseCell hook to reverse text, avoiding width calculation errors
-                const logisticsHead = [['מחיר', 'יעד/תאריכים', 'תיאור']];
                 const logisticsBody = data.logistics.map(item => [
-                    `$${(item.price || item.price_per_person || 0).toLocaleString()}`,
-                    item.destination || item.dates || '',
-                    item.name || item.type
+                    reversedText(item.name || item.type || ''),
+                    reversedText(item.destination || item.dates || ''),
+                    `$${Number(item.price ?? item.price_per_person ?? 0).toLocaleString()}`
                 ]);
-                
                 doc.autoTable({
                     startY: 30,
-                    head: logisticsHead,
-                    body: logisticsBody,
+                    head: [[reversedText('תיאור'), reversedText('יעד/תאריכים'), reversedText('מחיר')].reverse()],
+                    body: logisticsBody.map(row => row.reverse()),
                     styles: { font: 'Amiri', halign: 'right' },
                     headStyles: { fillColor: [41, 128, 185], halign: 'right' },
-                    didParseCell: (hookData) => {
-                        // Reverse text content for RTL display
-                        hookData.cell.text = hookData.cell.text.map(str => reversedText(str));
-                    }
                 });
             } else {
-                 doc.setFontSize(12);
-                 doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
+                doc.setFontSize(12);
+                doc.text(reversedText('לא נמצאו פריטי לוגיסטיקה.'), 105, 40, { align: 'center' });
             }
 
-            // 3. Daily Schedule
+            // 3) לו"ז יומי
             for (const day of data.schedules) {
                 doc.addPage();
                 doc.setFontSize(22);
@@ -283,167 +295,180 @@
                     if (y > 270) { doc.addPage(); y = 20; }
                     doc.setFontSize(14);
                     const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                    doc.text(reversedText(`${time} - ${item.title}`), 195, y, { align: 'right' });
+                    doc.text(reversedText(`${time} - ${item.title ?? ''}`), 195, y, { align: 'right' });
                     y += 7;
 
                     if (item.summary) {
                         doc.setFontSize(10);
-                        doc.text(reversedText(item.summary), 190, y, { align: 'right', maxWidth: 180 });
-                        y += (doc.splitTextToSize(reversedText(item.summary), 180).length * 4) + 2;
+                        const wrapped = doc.splitTextToSize(reversedText(item.summary), 180);
+                        doc.text(wrapped, 190, y, { align: 'right', maxWidth: 180 });
+                        y += (wrapped.length * 4) + 2;
                     }
-                    
-                    if (item.refs && item.refs.length > 0) {
+
+                    if (Array.isArray(item.refs) && item.refs.length) {
                         for (const ref of item.refs) {
-                           const source = ref.type === 'logistics' ? data.logistics : data.places;
-                           const fullItem = source.find(s => s.id === ref.id);
-                           if (fullItem) {
-                               doc.setFontSize(10);
-                               doc.setTextColor(100);
-                               let refText = `פרטים: ${fullItem.name}. `;
-                               if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                               doc.text(reversedText(refText), 185, y, { align: 'right', maxWidth: 170 });
-                               y += (doc.splitTextToSize(reversedText(refText), 170).length * 4);
-                               doc.setTextColor(0);
-                           }
+                            const source = ref.type === 'logistics' ? data.logistics : data.places;
+                            const fullItem = source.find(s => s.id === ref.id);
+                            if (fullItem) {
+                                doc.setFontSize(10);
+                                doc.setTextColor(100);
+                                let refText = `פרטים: ${fullItem.name ?? ''}. `;
+                                if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
+                                const wrappedRef = doc.splitTextToSize(reversedText(refText), 170);
+                                doc.text(wrappedRef, 185, y, { align: 'right', maxWidth: 170 });
+                                y += wrappedRef.length * 4;
+                                doc.setTextColor(0);
+                            }
                         }
                     }
-                     y += 5;
+                    y += 5;
                 }
             }
-            
-            // 4. Checklists
-            if(data.checklists.length > 0) {
-                 doc.addPage();
-                 doc.setFontSize(22);
-                 doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
-                 let checklistY = 30;
-                 data.checklists.forEach(list => {
-                     doc.setFontSize(16);
-                     doc.text(reversedText(list.name), 195, checklistY, { align: 'right' });
-                     checklistY += 8;
-                     list.items.forEach(item => {
-                         doc.setFontSize(12);
-                         const itemText = `[ ] ${item.text} (x${item.quantity})`;
-                         doc.text(reversedText(itemText), 190, checklistY, { align: 'right' });
-                         checklistY += 6;
-                     });
-                     checklistY += 10;
-                 });
+
+            // 4) צ'ק-ליסטים
+            if (data.checklists.length > 0) {
+                doc.addPage();
+                doc.setFontSize(22);
+                doc.text(reversedText('רשימות וצ\'ק-ליסטים'), 105, 20, { align: 'center' });
+                let checklistY = 30;
+                data.checklists.forEach(list => {
+                    doc.setFontSize(16);
+                    doc.text(reversedText(list.name ?? ''), 195, checklistY, { align: 'right' });
+                    checklistY += 8;
+                    (list.items ?? []).forEach(it => {
+                        doc.setFontSize(12);
+                        const qty = Number(it.quantity ?? 1);
+                        const itemText = `[ ] ${it.text ?? ''} (x${qty})`;
+                        doc.text(reversedText(itemText), 190, checklistY, { align: 'right' });
+                        checklistY += 6;
+                    });
+                    checklistY += 10;
+                });
             }
 
             doc.save(`trip_summary_${tripId}.pdf`);
         }
-        
+
         // --- Word (.docx) Builder ---
         async function buildDocx(data) {
-             // FIX: Add a guard clause to ensure the docx library is loaded
-             if (!window.docx) {
-                throw new Error("ספריית Word (docx) לא נטענה כראוי. נסה לרענן את הדף.");
-             }
-             const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableCell, TableRow, WidthType, AlignmentType } = window.docx;
+            // לפרק אובייקטים מתוך window.docx (UMD)
+            const {
+                Document, Packer, Paragraph, TextRun,
+                HeadingLevel, Table, TableCell, TableRow,
+                WidthType, AlignmentType, BorderStyle
+            } = window.docx || {};
+
+            if (!Document) {
+                throw new Error("ספריית docx לא נטענה (window.docx ריק). ודא שהסקрипט של docx נטען לפני המודול.");
+            }
+
+            // עזר: תא טבלה מטקסט
+            const cell = (text, widthDxa) => new TableCell({
+                width: widthDxa ? { size: widthDxa, type: WidthType.DXA } : undefined,
+                children: [ new Paragraph(String(text ?? "")) ],
+            });
 
             const sections = [];
 
-            // 1. Cover Page
+            // 1) שער
             sections.push({
-                properties: { type: "nextPage" },
                 children: [
                     new Paragraph({ text: "", spacing: { before: 4000 } }),
                     new Paragraph({
-                        text: data.tripData.name,
+                        children: [ new TextRun({ text: data.tripData.name, bold: true }) ],
                         heading: HeadingLevel.TITLE,
                         alignment: AlignmentType.CENTER,
-                        bidirectional: true,
                     }),
                     new Paragraph({
-                        text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}`,
+                        children: [ new TextRun({ text: `תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}` }) ],
                         heading: HeadingLevel.HEADING_2,
                         alignment: AlignmentType.CENTER,
-                        bidirectional: true,
                     }),
                 ],
             });
 
-            // 2. Logistics Summary
-            const logisticsRows = data.logistics.map(item => new TableRow({
+            // 2) לוגיסטיקה
+            const headerRow = new TableRow({
                 children: [
-                    new TableCell({ children: [new Paragraph({ text: item.name || item.type, bidirectional: true })], width: { size: 3000, type: WidthType.DXA } }),
-                    new TableCell({ children: [new Paragraph({ text: item.destination || item.dates || '', bidirectional: true })], width: { size: 4000, type: WidthType.DXA } }),
-                    new TableCell({ children: [new Paragraph({ text: `$${(item.price || item.price_per_person || 0).toLocaleString()}`, bidirectional: true })], width: { size: 2000, type: WidthType.DXA } }),
+                    cell("תיאור", 3000),
+                    cell("יעד/תאריכים", 4000),
+                    cell("מחיר", 2000),
                 ],
-            }));
+                tableHeader: true,
+            });
+
+            const logisticsRows = data.logistics.map(item =>
+                new TableRow({
+                    children: [
+                        cell(item.name || item.type, 3000),
+                        cell(item.destination || item.dates || "", 4000),
+                        cell(`$${Number(item.price ?? item.price_per_person ?? 0).toLocaleString()}`, 2000),
+                    ],
+                })
+            );
 
             const logisticsTable = new Table({
-                 columnWidths: [3000, 4000, 2000],
-                rows: [
-                    new TableRow({
-                        children: [
-                            new TableCell({ children: [new Paragraph({ text: "תיאור", bidirectional: true })] }),
-                            new TableCell({ children: [new Paragraph({ text: "יעד/תאריכים", bidirectional: true })] }),
-                            new TableCell({ children: [new Paragraph({ text: "מחיר", bidirectional: true })] }),
-                        ],
-                        tableHeader: true,
-                    }),
-                    ...logisticsRows
-                ],
+                rows: [headerRow, ...logisticsRows],
             });
-            
+
             sections.push({
-                properties: { type: "nextPage" },
                 children: [
-                    new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true }),
+                    new Paragraph({ text: "סיכום לוגיסטיקה", heading: HeadingLevel.HEADING_1, pageBreakBefore: true }),
                     logisticsTable
                 ]
             });
 
-            // 3. Daily Schedule
+            // 3) לו"ז יומי
             data.schedules.forEach(day => {
-                const dayChildren = [new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
+                const dayChildren = [
+                    new Paragraph({ text: formatISODate(day.id), heading: HeadingLevel.HEADING_1, pageBreakBefore: true })
+                ];
+
                 day.items.forEach(item => {
                     const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
                     dayChildren.push(new Paragraph({
-                        bidirectional: true,
-                        children: [ new TextRun({ text: `${time} - ${item.title}`, bold: true, rightToLeft: true }) ],
+                        children: [ new TextRun({ text: `${time} - ${item.title ?? ""}`, bold: true }) ],
                     }));
-                    if(item.summary) {
-                        dayChildren.push(new Paragraph({ text: item.summary, bidirectional: true, style: "IntenseQuote" }));
-                    }
-                    if (item.refs && item.refs.length > 0) {
-                         for (const ref of item.refs) {
-                           const source = ref.type === 'logistics' ? data.logistics : data.places;
-                           const fullItem = source.find(s => s.id === ref.id);
+
+                    if (item.summary) dayChildren.push(new Paragraph({ text: item.summary }));
+
+                    if (Array.isArray(item.refs) && item.refs.length) {
+                        for (const ref of item.refs) {
+                            const source = ref.type === 'logistics' ? data.logistics : data.places;
+                            const fullItem = source.find(s => s.id === ref.id);
                             if (fullItem) {
-                                let refText = `פרטים: ${fullItem.name}. `;
+                                let refText = `פרטים: ${fullItem.name ?? ''}. `;
                                 if (fullItem.location || fullItem.address) refText += `כתובת: ${fullItem.location || fullItem.address}.`;
-                                dayChildren.push(new Paragraph({ text: refText, bidirectional: true, indentation: { start: 720 } }));
+                                dayChildren.push(new Paragraph({ text: refText }));
                             }
-                         }
+                        }
                     }
                 });
-                sections.push({ properties: { type: "nextPage" }, children: dayChildren });
-            });
-            
-            // 4. Checklists
-             if(data.checklists.length > 0) {
-                 const checklistChildren = [new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, bidirectional: true, pageBreakBefore: true })];
-                 data.checklists.forEach(list => {
-                     checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2, bidirectional: true }));
-                     list.items.forEach(item => {
-                         checklistChildren.push(new Paragraph({ text: `${item.text} (x${item.quantity})`, bullet: { level: 0 }, bidirectional: true }));
-                     });
-                 });
-                 sections.push({ properties: { type: "nextPage" }, children: checklistChildren });
-             }
 
-            // Generate and download
+                sections.push({ children: dayChildren });
+            });
+
+            // 4) צ'ק-ליסטים
+            if (data.checklists.length > 0) {
+                const checklistChildren = [ new Paragraph({ text: "רשימות וצ'ק-ליסטים", heading: HeadingLevel.HEADING_1, pageBreakBefore: true }) ];
+                data.checklists.forEach(list => {
+                    checklistChildren.push(new Paragraph({ text: list.name, heading: HeadingLevel.HEADING_2 }));
+                    (list.items ?? []).forEach(it => {
+                        const qty = Number(it.quantity ?? 1);
+                        checklistChildren.push(new Paragraph({ text: `☐ ${it.text ?? ""} (x${qty})` }));
+                    });
+                });
+                sections.push({ children: checklistChildren });
+            }
+
             const doc = new Document({
                 creator: "Tiool-Loz App",
                 title: data.tripData.name,
-                sections: sections
+                sections
             });
 
             const blob = await Packer.toBlob(doc);
-            saveAs(blob, `trip_summary_${tripId}.docx`);
+            window.saveAs(blob, `trip_summary_${tripId}.docx`);
         }
 
         // --- Event Listeners ---
@@ -455,6 +480,3 @@
     </script>
 </body>
 </html>
-
-    
-
