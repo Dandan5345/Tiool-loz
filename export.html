@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -201,22 +201,11 @@
             <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
                 <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between h-16">
-                        <div id="header-main-controls" class="flex items-center gap-4">
+                        <div class="flex items-center gap-4">
                             <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול">
                                 <i class="fas fa-arrow-left fa-lg"></i>
                             </a>
                             <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
-                        </div>
-                        <div id="header-preview-controls" class="hidden flex items-center gap-4 w-full">
-                            <button id="back-from-preview-btn" class="action-btn bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-lg">
-                                <i class="fas fa-arrow-right mr-2"></i> חזור אחורה
-                            </button>
-                            <div class="flex-grow text-center">
-                               <h1 class="text-xl font-bold text-slate-800">תצוגה מקדימה</h1>
-                            </div>
-                            <button id="download-pdf-from-preview-btn" class="action-btn bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">
-                                <i class="fas fa-file-pdf mr-2"></i> הורד קובץ PDF
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -226,14 +215,11 @@
                 <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
                     <i class="fas fa-file-export fa-3x text-sky-500 mb-4"></i>
                     <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                    <p class="text-slate-600 mt-2 mb-8">בחר כיצד להמשיך: הצג תצוגה מקדימה לפני ההורדה, או הורד את קובץ ה-PDF ישירות.</p>
+                    <p class="text-slate-600 mt-2 mb-8">צור תצוגה מקדימה של סיכום הטיול, ולאחר מכן תוכל לייצא אותו לקובץ PDF.</p>
 
-                    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <div class="flex justify-center">
                         <button id="start-preview-btn" class="action-btn w-full sm:w-auto flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-xl">
                             <i class="fas fa-eye mr-2"></i> הצג תצוגה מקדימה
-                        </button>
-                         <button id="direct-download-btn" class="action-btn w-full sm:w-auto flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-6 rounded-xl">
-                            <i class="fas fa-file-download mr-2"></i> הורד PDF ישירות
                         </button>
                     </div>
 
@@ -247,7 +233,12 @@
     </div>
     
     <div id="preview-wrapper" class="hidden relative z-20">
-         <div id="preview-container"></div>
+         <!-- NEW: Floating PDF Button -->
+         <button id="generate-pdf-btn" class="action-btn hidden fixed bottom-8 left-8 z-50 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-5 rounded-full shadow-lg">
+            <i class="fas fa-file-pdf mr-2"></i>
+            <span>הורד כ-PDF</span>
+        </button>
+        <div id="preview-container"></div>
     </div>
 
     <script type="module">
@@ -272,17 +263,13 @@
             loader: document.getElementById('loader'),
             statusMessage: document.getElementById('status-message'),
             startPreviewBtn: document.getElementById('start-preview-btn'),
-            directDownloadBtn: document.getElementById('direct-download-btn'),
-            downloadFromPreviewBtn: document.getElementById('download-pdf-from-preview-btn'),
-            backFromPreviewBtn: document.getElementById('back-from-preview-btn'),
+            generatePdfBtn: document.getElementById('generate-pdf-btn'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             pageTitle: document.getElementById('page-title'),
             exportTitle: document.getElementById('export-title'),
             previewContainer: document.getElementById('preview-container'),
             previewWrapper: document.getElementById('preview-wrapper'),
             mainContent: document.getElementById('main-content'),
-            headerMainControls: document.getElementById('header-main-controls'),
-            headerPreviewControls: document.getElementById('header-preview-controls'),
         };
 
         let tripId = null;
@@ -325,9 +312,23 @@
             isGenerating = showLoader;
             DOM.statusMessage.textContent = message;
             DOM.loader.classList.toggle('hidden', !showLoader);
-            [DOM.startPreviewBtn, DOM.directDownloadBtn, DOM.downloadFromPreviewBtn, DOM.backFromPreviewBtn].forEach(btn => btn.disabled = isGenerating);
+            DOM.startPreviewBtn.disabled = isGenerating;
+            DOM.generatePdfBtn.disabled = isGenerating;
+
+            // Show/hide a spinner inside the PDF button when generating
+            const btnIcon = DOM.generatePdfBtn.querySelector('i');
+            const btnText = DOM.generatePdfBtn.querySelector('span');
+            if (btnIcon && btnText) {
+                if (isGenerating && DOM.generatePdfBtn.disabled) {
+                    btnIcon.className = "fas fa-spinner fa-spin mr-2";
+                    btnText.textContent = "יוצר קובץ...";
+                } else {
+                     btnIcon.className = "fas fa-file-pdf mr-2";
+                     btnText.textContent = "הורד כ-PDF";
+                }
+            }
         }
-        
+
         async function fetchAllTripData() {
             if (tripDataCache) return tripDataCache;
 
@@ -372,7 +373,7 @@
         const groupBy = (arr, key, fallback='כללי') => arr.reduce((r,v)=>{ const k=v[key]||fallback; (r[k]=r[k]||[]).push(v); return r; },{});
 
         function renderReportHtml(data) {
-             let html = '<div class="report-page">';
+            let html = '<div class="report-page">';
             const { tripData, logistics, places, checklists, schedules } = data;
 
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
@@ -405,10 +406,12 @@
 
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
-                hotels.forEach(item => { html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; });
+                hotels.forEach(item => {
+                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`;
+                });
             }
             
-             if (transportation.length) {
+            if (transportation.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-car"></i> תחבורה והתניידות</h3>`;
                 transportation.forEach(item => {
                     let cardHtml = `<div class="info-card">`;
@@ -428,7 +431,9 @@
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
-                    attractionsByType[type].forEach(place => { html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">${detailItem('fa-map-marker-alt', 'יעד', place.destination)}${detailItem('fa-location-dot', 'כתובת', place.location)}${detailItem('fa-clock', 'שעות פתיחה', place.hours)}${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}${detailItem('fa-link', 'קישור', place.link)}${detailItemFull('fa-align-left', 'תיאור', place.description)}</div></div>`; });
+                    attractionsByType[type].forEach(place => {
+                         html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">${detailItem('fa-map-marker-alt', 'יעד', place.destination)}${detailItem('fa-location-dot', 'כתובת', place.location)}${detailItem('fa-clock', 'שעות פתיחה', place.hours)}${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}${detailItem('fa-link', 'קישור', place.link)}${detailItemFull('fa-align-left', 'תיאור', place.description)}</div></div>`;
+                    });
                 });
             }
 
@@ -475,7 +480,9 @@
                     } else { html += `<p>אין פעילויות מתוכננות ליום זה.</p>`; }
                     if (day.notes?.length > 0) {
                         html += `<div class="notes-section"><h4>📝 דגשים וטיפים ליום זה</h4>`;
-                        day.notes.forEach(note => { html += `<div class="note-item note-color-${note.color || 'yellow'}"><strong class="rtl-force">${sanitize(note.kind)}: ${sanitize(note.title)}</strong>${note.details ? `<p class="rtl-force">${sanitize(note.details)}</p>` : ''}</div>`; });
+                        day.notes.forEach(note => {
+                            html += `<div class="note-item note-color-${note.color || 'yellow'}"><strong class="rtl-force">${sanitize(note.kind)}: ${sanitize(note.title)}</strong>${note.details ? `<p class="rtl-force">${sanitize(note.details)}</p>` : ''}</div>`;
+                        });
                         html += `</div>`;
                     }
                 });
@@ -496,9 +503,8 @@
                 setTimeout(() => {
                     DOM.mainContent.classList.add('hidden');
                     DOM.previewWrapper.classList.remove('hidden');
-                    DOM.headerMainControls.classList.add('hidden');
-                    DOM.headerPreviewControls.classList.remove('hidden');
-                    setStatus('התצוגה המקדימה מוכנה.', false);
+                    DOM.generatePdfBtn.classList.remove('hidden');
+                    setStatus('', false); // Clear status
                     window.scrollTo(0, 0);
                 }, 100);
 
@@ -507,30 +513,14 @@
                 setStatus(`שגיאה בהצגת התצוגה: ${error.message}`, false);
             }
         }
-        
-        function hidePreview() {
-            DOM.previewWrapper.classList.add('hidden');
-            DOM.mainContent.classList.remove('hidden');
-            DOM.headerPreviewControls.classList.add('hidden');
-            DOM.headerMainControls.classList.remove('hidden');
-            DOM.previewContainer.innerHTML = ''; // Clear content to save memory
-        }
 
         async function generatePdf() {
             if (isGenerating) return;
+            setStatus('יוצר את קובץ ה-PDF...', true);
             
             try {
-                const isPreviewAlreadyVisible = !DOM.previewWrapper.classList.contains('hidden');
-                
-                setStatus('מכין את קובץ ה-PDF...', true);
-                const allData = await fetchAllTripData();
-
-                if (!isPreviewAlreadyVisible) {
-                    DOM.previewContainer.innerHTML = renderReportHtml(allData);
-                }
-                
                 const element = DOM.previewContainer.querySelector('.report-page');
-                const tripName = allData.tripData.name || tripId;
+                const tripName = tripDataCache?.tripData?.name || tripId;
                 
                 const opt = {
                     margin:       [10, 5, 10, 5],
@@ -544,10 +534,6 @@
                 await html2pdf().set(opt).from(element).save();
                 setStatus('ההורדה הושלמה!', false);
                 
-                if (!isPreviewAlreadyVisible) {
-                    DOM.previewContainer.innerHTML = ''; // Clean up if we rendered just for PDF
-                }
-
             } catch (error) {
                 console.error("Error generating PDF:", error);
                 setStatus(`שגיאה ביצירת הקובץ: ${error.message}`, false);
@@ -555,11 +541,10 @@
         }
         
         DOM.startPreviewBtn.addEventListener('click', showPreview);
-        DOM.directDownloadBtn.addEventListener('click', generatePdf);
-        DOM.downloadFromPreviewBtn.addEventListener('click', generatePdf);
-        DOM.backFromPreviewBtn.addEventListener('click', hidePreview);
+        DOM.generatePdfBtn.addEventListener('click', generatePdf);
         initPage();
     </script>
 </body>
 </html>
+
 
