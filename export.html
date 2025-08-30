@@ -9,8 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <!-- ספרייה להמרת HTML ל-PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -19,28 +18,55 @@
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Styles for the generated report (for PDF conversion) */
+        /* סגנונות עבור דוח ה-PDF שנוצר */
         .report-page {
             width: 210mm;
-            padding: 20mm;
+            padding: 15mm;
             margin: 0 auto;
             background: white;
             box-sizing: border-box;
             color: #333;
+            font-size: 14px;
         }
-        .report-page h1, .report-page h2, .report-page h3, .report-page h4 {
+        .report-page h1, .report-page h2, .report-page h3, .report-page h4, .report-page h5 {
             font-family: 'Assistant', sans-serif;
             font-weight: 700;
         }
         .report-page h1 { font-size: 32px; text-align: center; margin-top: 50mm; margin-bottom: 10px; }
-        .report-page h2 { font-size: 18px; text-align: center; margin-bottom: 20mm; }
+        .report-page h2 { font-size: 18px; text-align: center; margin-bottom: 20mm; color: #555; }
         .report-page h3 { font-size: 24px; text-align: center; margin-bottom: 15px; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
-        .report-page h4 { font-size: 18px; margin-top: 15px; margin-bottom: 5px; }
-        .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .report-table th, .report-table td { border: 1px solid #ddd; padding: 8px; text-align: right; }
-        .report-table th { background-color: #f2f2f2; font-weight: 600; }
+        .report-page h4 { font-size: 20px; margin-top: 20px; margin-bottom: 10px; color: #2c3e50; border-right: 3px solid #3498db; padding-right: 10px;}
+        .report-page h5 { font-size: 16px; font-weight: 600; margin-top: 15px; margin-bottom: 5px; }
         .report-page .page-break { page-break-before: always; }
-        .daily-item { margin-bottom: 15px; }
+
+        .detail-card {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            break-inside: avoid;
+        }
+        .detail-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 4px 0;
+        }
+        .detail-item i {
+            color: #888;
+            margin-top: 3px;
+        }
+        .detail-item .label {
+            color: #666;
+            min-width: 90px;
+        }
+        .detail-item .value {
+            font-weight: 600;
+            color: #111;
+        }
+
+        .daily-item { margin-bottom: 15px; break-inside: avoid; }
         .daily-item .time { font-weight: 600; }
         .daily-item .summary { padding-right: 15px; border-right: 2px solid #eee; margin-top: 5px; }
         .daily-item .ref-details { font-size: 12px; color: #555; background-color: #f9f9f9; padding: 5px; border-radius: 4px; margin-top: 5px; }
@@ -87,7 +113,6 @@
         </main>
     </div>
 
-    <!-- Container for the report content, hidden from view but used for PDF generation -->
     <div id="report-container" class="invisible absolute -top-[9999px] -left-[9999px]"></div>
 
 
@@ -169,7 +194,7 @@
 
         // --- Data Fetching ---
         async function fetchAllTripData() {
-            setStatus('טוען נתונים מהשרת...', true);
+            setStatus('טוען את כל נתוני הטיול...', true);
 
             const tripRef = doc(db, 'trips', tripId);
             const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
@@ -215,31 +240,118 @@
 
             // 1. Cover Page
             html += `<h1>${data.tripData.name}</h1>`;
-            html += `<h2>תאריכים: ${data.tripData.startDate} - ${data.tripData.endDate}</h2>`;
+            html += `<h2>${data.tripData.startDate} - ${data.tripData.endDate}</h2>`;
 
-            // 2. Logistics
+            // Helper function for rendering detail items
+            const detailItem = (icon, label, value) => {
+                if (!value && typeof value !== 'number') return '';
+                return `<div class="detail-item">
+                    <i class="fas ${icon} fa-fw"></i>
+                    <span class="label">${label}:</span>
+                    <span class="value">${value}</span>
+                </div>`;
+            };
+
+            // 2. Logistics Details
             if (data.logistics.length > 0) {
                 html += `<div class="page-break"></div><h3>סיכום לוגיסטיקה</h3>`;
-                html += `<table class="report-table">
-                            <thead><tr><th>תיאור</th><th>יעד/תאריכים</th><th>מחיר</th></tr></thead>
-                            <tbody>`;
-                data.logistics.forEach(item => {
-                    html += `<tr>
-                                <td>${item.name || item.type}</td>
-                                <td>${item.destination || item.dates || ''}</td>
-                                <td>$${(item.price || item.price_per_person || 0).toLocaleString()}</td>
-                            </tr>`;
-                });
-                html += `</tbody></table>`;
+                
+                const hotels = data.logistics.filter(i => i.type === 'hotel');
+                const flights = data.logistics.filter(i => i.type === 'flight');
+                const cars = data.logistics.filter(i => i.type === 'car_rental');
+                const others = data.logistics.filter(i => ['ferry', 'train'].includes(i.type));
+
+                if(hotels.length) {
+                    html += `<h4>🏨 מלונות</h4>`;
+                    hotels.forEach(item => {
+                        html += `<div class="detail-card">
+                            <h5>${item.name || 'מלון'}</h5>
+                            ${detailItem('fa-calendar-days', 'תאריכים', item.dates)}
+                            ${detailItem('fa-map-marker-alt', 'יעד', item.destination)}
+                            ${detailItem('fa-location-dot', 'כתובת', item.address)}
+                            ${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}
+                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}
+                            ${detailItem('fa-info-circle', 'פרטים נוספים', item.additional_details)}
+                        </div>`;
+                    });
+                }
+                if(flights.length) {
+                    html += `<h4>✈️ טיסות</h4>`;
+                    flights.forEach(item => {
+                        const from = item.from || {};
+                        const to = item.to || {};
+                        const luggage = `תיקי יד: ${item.hand_bag_count || 0}, טרולי: ${item.trolley_count || 0}, מזוודות: ${item.checked_bags_count || 0}`;
+                        html += `<div class="detail-card">
+                            <h5>${from.destination || 'מקור'} ← ${to.destination || 'יעד'}</h5>
+                            ${detailItem('fa-building', 'חברת תעופה', item.airline)}
+                            ${detailItem('fa-hashtag', 'מספר טיסה', item.flight_number)}
+                            ${detailItem('fa-calendar-day', 'תאריך', item.dates)}
+                            ${detailItem('fa-clock', 'שעת המראה', item.departure_time)}
+                            ${detailItem('fa-clock', 'שעת נחיתה', item.arrival_time)}
+                            ${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}
+                            ${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}
+                            ${detailItem('fa-suitcase', 'כבודה', luggage)}
+                            ${detailItem('fa-info-circle', 'פרטים נוספים', item.additional_details)}
+                        </div>`;
+                    });
+                }
+                if(cars.length) {
+                    html += `<h4>🚗 רכבים שכורים</h4>`;
+                    cars.forEach(item => {
+                        html += `<div class="detail-card">
+                            <h5>רכב שכור ב${item.destination || ''}</h5>
+                             ${detailItem('fa-calendar-days', 'תאריכים', item.dates)}
+                            ${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}
+                            ${detailItem('fa-clock', 'שעת החזרה', item.return_time)}
+                            ${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}
+                            ${detailItem('fa-car-side', 'סוג רכב', item.car_type)}
+                            ${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}
+                            ${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}
+                        </div>`;
+                    });
+                }
+                if(others.length) {
+                    html += `<h4>🚢 רכבות ומעבורות</h4>`;
+                    others.forEach(item => {
+                        const isFerry = item.type === 'ferry';
+                        const title = isFerry ? `מעבורת: ${item.from_destination} ← ${item.to_destination}` : `רכבת: ${item.from_station} ← ${item.to_station}`;
+                        const fromLabel = isFerry ? 'נמל יציאה' : 'תחנת יציאה';
+                        const toLabel = isFerry ? 'נמל הגעה' : 'תחנת הגעה';
+                        const fromVal = item.from_destination || item.from_station;
+                        const toVal = item.to_destination || item.to_station;
+                        html += `<div class="detail-card">
+                            <h5>${title}</h5>
+                            ${detailItem('fa-building', 'חברה', item.company)}
+                            ${detailItem('fa-map-pin', fromLabel, fromVal)}
+                            ${detailItem('fa-map-pin', toLabel, toVal)}
+                            ${detailItem('fa-calendar-day', 'תאריך', item.date)}
+                            ${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}
+                            ${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}
+                            ${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}
+                        </div>`;
+                    });
+                }
             }
 
-            // 3. Daily Schedule
+            // 3. Places of Interest
+            if (data.places.length > 0) {
+                html += `<div class="page-break"></div><h3>אטרקציות ומקומות עניין</h3>`;
+                data.places.forEach(place => {
+                     html += `<div class="detail-card">
+                        <h5>${place.name || 'מקום'} (${place.type || ''})</h5>
+                        ${detailItem('fa-location-dot', 'כתובת', place.address)}
+                        ${detailItem('fa-align-left', 'הערות', place.notes)}
+                     </div>`;
+                });
+            }
+
+            // 4. Daily Schedule
             data.schedules.forEach(day => {
-                html += `<div class="page-break"></div><h3>${formatISODate(day.id)}</h3>`;
+                html += `<div class="page-break"></div><h3>לו"ז יומי: ${formatISODate(day.id)}</h3>`;
                 day.items.forEach(item => {
                     const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
                     html += `<div class="daily-item">
-                                <h4><span class="time">${time}</span> - ${item.title}</h4>`;
+                                <h5><span class="time">${time}</span> - ${item.title}</h5>`;
                     if (item.summary) {
                         html += `<p class="summary">${item.summary}</p>`;
                     }
@@ -248,7 +360,7 @@
                            const source = ref.type === 'logistics' ? data.logistics : data.places;
                            const fullItem = source.find(s => s.id === ref.id);
                            if (fullItem) {
-                               let refText = `<b>פרטים:</b> ${fullItem.name}. `;
+                               let refText = `<b>מקושר ל:</b> ${fullItem.name}. `;
                                if (fullItem.location || fullItem.address) refText += `<b>כתובת:</b> ${fullItem.location || fullItem.address}.`;
                                html += `<div class="ref-details">${refText}</div>`;
                            }
@@ -258,7 +370,7 @@
                 });
             });
 
-            // 4. Checklists
+            // 5. Checklists
             if (data.checklists.length > 0) {
                 html += `<div class="page-break"></div><h3>רשימות ציוד</h3>`;
                 data.checklists.forEach(list => {
@@ -276,19 +388,20 @@
             return html;
         }
 
+
         // --- PDF Generation Orchestrator ---
         async function generatePdf() {
             if (isGenerating) return;
             
             try {
                 const allData = await fetchAllTripData();
-                setStatus('מייצר קובץ PDF...', true);
+                setStatus('מייצר את קובץ ה-PDF...', true);
 
                 DOM.reportContainer.innerHTML = renderReportHtml(allData);
                 
                 const element = DOM.reportContainer.querySelector('.report-page');
                 const opt = {
-                    margin:       [15, 10, 15, 10], // top, left, bottom, right
+                    margin:       [15, 10, 15, 10],
                     filename:     `Trip_Summary_${tripId}.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
@@ -296,7 +409,6 @@
                     pagebreak:    { mode: ['css', 'legacy'] }
                 };
 
-                // Use a promise to know when generation is complete
                 await html2pdf().set(opt).from(element).save();
                 
                 setStatus('ההורדה הושלמה!', false);
