@@ -207,6 +207,9 @@
         .attraction-map-container {
              height: 250px;
         }
+        .logistics-map-container { /* NEW */
+            height: 250px;
+        }
         .leaflet-container { z-index: 1; }
 
         /* --- Responsive styles for mobile screen preview --- */
@@ -527,12 +530,24 @@
                     const from = item.from || {}; const to = item.to || {};
                     const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
                     html += `<div class="info-card flight-card"><h4><span>${sanitize(item.airline)} - ${sanitize(item.flight_number)}</span><span class="flight-path">${sanitize(from.destination)} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination)}</span></h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.dates)}${detailItem('fa-plane-departure', 'שעת המראה', item.departure_time)}${detailItem('fa-plane-arrival', 'שעת נחיתה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}${detailItem('fa-suitcase', 'כבודה', luggage)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`;
+                    
+                    if (includeMaps && from.coords && to.coords) {
+                        html += `<div id="map-flight-${item.id}" class="map-container logistics-map-container"
+                                        data-from-lat="${from.coords.lat}" data-from-lng="${from.coords.lng}" data-from-name="${sanitize(from.destination || 'Origin')}"
+                                        data-to-lat="${to.coords.lat}" data-to-lng="${to.coords.lng}" data-to-name="${sanitize(to.destination || 'Destination')}"></div>`;
+                    }
                 });
             }
 
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
-                hotels.forEach(item => { html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; });
+                hotels.forEach(item => { 
+                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; 
+                    if (includeMaps && item.coords) {
+                         html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container"
+                                        data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
+                    }
+                });
             }
             
              if (transportation.length) {
@@ -541,10 +556,21 @@
                     let cardHtml = `<div class="info-card">`;
                     if (item.type === 'car_rental') {
                         cardHtml += `<h4>רכב שכור ב${sanitize(item.destination)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-clock', 'שעת החזרה', item.return_time)}${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}${detailItem('fa-car-side', 'סוג רכב', item.car_type)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}</div>`;
+                         if (includeMaps && item.coords) {
+                            cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
+                                        data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location || 'Pickup')}"></div>`;
+                        }
                     } else {
-                         const isFerry = item.type === 'ferry';
-                         const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
-                         cardHtml += `<h4>${title}</h4><div class="card-grid">${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}</div>`;
+                          const isFerry = item.type === 'ferry';
+                          const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
+                          cardHtml += `<h4>${title}</h4><div class="card-grid">${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}</div>`;
+                         if (includeMaps && item.from_coords && item.to_coords) {
+                            const fromName = isFerry ? item.from_destination : item.from_station;
+                            const toName = isFerry ? item.to_destination : item.to_station;
+                            cardHtml += `<div id="map-transport-${item.id}" class="map-container logistics-map-container"
+                                            data-from-lat="${item.from_coords.lat}" data-from-lng="${item.from_coords.lng}" data-from-name="${sanitize(fromName)}"
+                                            data-to-lat="${item.to_coords.lat}" data-to-lng="${item.to_coords.lng}" data-to-name="${sanitize(toName)}"></div>`;
+                        }
                     }
                     cardHtml += `</div>`;
                     html += cardHtml;
@@ -659,6 +685,51 @@
                         attribution: '&copy; OpenStreetMap &copy; CARTO'
                     }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
+                    setTimeout(() => map.invalidateSize(), 100);
+                }
+            });
+            
+            // 3. Initialize Single-Point Logistics Maps (Hotels, Car Rentals)
+            document.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
+                const lat = parseFloat(mapDiv.dataset.lat);
+                const lng = parseFloat(mapDiv.dataset.lng);
+                const name = mapDiv.dataset.name;
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    const map = L.map(mapDiv).setView([lat, lng], 14); // Zoom in a bit more for single locations
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CARTO'
+                    }).addTo(map);
+                    L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
+                    setTimeout(() => map.invalidateSize(), 100);
+                }
+            });
+
+            // 4. Initialize Route-Based Logistics Maps (Flights, Ferries, etc.)
+            document.querySelectorAll('.logistics-map-container[data-from-lat]').forEach(mapDiv => {
+                const fromLat = parseFloat(mapDiv.dataset.fromLat);
+                const fromLng = parseFloat(mapDiv.dataset.fromLng);
+                const fromName = mapDiv.dataset.fromName;
+                const toLat = parseFloat(mapDiv.dataset.toLat);
+                const toLng = parseFloat(mapDiv.dataset.toLng);
+                const toName = mapDiv.dataset.toName;
+
+                if (!isNaN(fromLat) && !isNaN(toLat)) {
+                    const map = L.map(mapDiv);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CARTO'
+                    }).addTo(map);
+
+                    const fromPoint = [fromLat, fromLng];
+                    const toPoint = [toLat, toLng];
+                    const bounds = L.latLngBounds([fromPoint, toPoint]);
+
+                    L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName}`);
+                    L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName}`);
+
+                    L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+
+                    map.fitBounds(bounds, { padding: [40, 40] });
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
