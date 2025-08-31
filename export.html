@@ -208,7 +208,7 @@
         .attraction-map-container {
              height: 250px;
         }
-        .logistics-map-container {
+        .logistics-map-container { /* NEW */
             height: 250px;
         }
         .leaflet-container { z-index: 1; }
@@ -266,16 +266,18 @@
                 page-break-before: always;
             }
             
-            /* --- *** NEW: Fix for blue lines on print --- */
-            .info-card,
-            .attraction-category,
-            .checklist-dest-title,
-            .note-item {
-                border-right: none !important;
+            /* --- FIX: Limit map size during printing to prevent gray areas --- */
+            .map-container {
+                max-width: 170mm; /* Limit width to prevent stretching */
+                max-height: 120mm; /* Limit height */
+                margin-left: auto;
+                margin-right: auto;
+                page-break-inside: avoid !important;
             }
-            .checklist-item {
-                border-right-color: transparent !important;
+            .logistics-map-container, .attraction-map-container {
+                max-height: 80mm;
             }
+            /* --- END FIX --- */
         }
     </style>
 </head>
@@ -306,7 +308,7 @@
                     <p class="text-slate-600 mt-2 mb-6">תחילה, צור תצוגה מקדימה של סיכום הטיול. לאחר מכן תוכל להדפיס או לשמור אותו לקובץ PDF.</p>
 
                     <div class="mb-6 flex justify-center items-center gap-3 bg-slate-100 p-3 rounded-lg">
-                        <input type="checkbox" id="include-maps-checkbox" class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300" checked>
+                        <input type="checkbox" id="include-maps-checkbox" class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300">
                         <label for="include-maps-checkbox" class="font-semibold text-slate-700">הכללת מפות בסיכום</label>
                     </div>
 
@@ -374,8 +376,7 @@
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
                 <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה, אנא המתן...</p>
-                <!-- --- *** NEW: Updated user message for longer wait --- -->
-                <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת עד 10 שניות, תלוי במהירות החיבור.</p>
+                <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת מספר שניות.</p>
             </div>
         </div>
     </div>
@@ -410,16 +411,18 @@
             previewContainer: document.getElementById('preview-container'),
             previewWrapper: document.getElementById('preview-wrapper'),
             mainContent: document.getElementById('main-content'),
+            // Modal elements
             printModal: document.getElementById('print-modal'),
             closeModalBtn: document.getElementById('close-modal-btn'),
             triggerPrintBtn: document.getElementById('trigger-print-btn'),
+            // ADDED FOR MAPS
             includeMapsCheckbox: document.getElementById('include-maps-checkbox'),
         };
 
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
-        let mapInstances = [];
+        let mapInstances = []; // <-- NEW: To hold all map objects
 
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -433,22 +436,17 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    try {
-                        const tripSnap = await getDoc(doc(db, "trips", tripId));
-                        if (tripSnap.exists()) {
-                            const tripData = tripSnap.data();
-                            if (!tripData.editors?.includes(user.uid)) {
-                                showErrorModal("אין לך הרשאה לצפות בטיול זה.", true);
-                                return;
-                            }
-                            DOM.pageTitle.textContent += ` - ${tripData.name}`;
-                            DOM.exportTitle.textContent += ` "${tripData.name}"`;
-                        } else {
-                            showErrorModal("הטיול לא נמצא.", true);
+                    const tripSnap = await getDoc(doc(db, "trips", tripId));
+                    if (tripSnap.exists()) {
+                        const tripData = tripSnap.data();
+                        if (!tripData.editors?.includes(user.uid)) {
+                            showErrorModal("אין לך הרשאה לצפות בטיול זה.", true);
+                            return;
                         }
-                    } catch (e) {
-                         showErrorModal("שגיאה בטעינת נתוני הטיול.", true);
-                         console.error(e);
+                        DOM.pageTitle.textContent += ` - ${tripData.name}`;
+                        DOM.exportTitle.textContent += ` "${tripData.name}"`;
+                    } else {
+                        showErrorModal("הטיול לא נמצא.", true);
                     }
                 } else {
                     window.location.href = 'login.html';
@@ -639,7 +637,7 @@
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
                 hotels.forEach(item => { 
-                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`; 
+                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; 
                     if (includeMaps && item.coords) {
                          html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container"
                                      data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
@@ -713,9 +711,11 @@
             return html;
         }
 
+        // --- UPDATED: Now populates the mapInstances array ---
         function initializeMaps() {
-            mapInstances = []; 
+            mapInstances = []; // Clear previous instances
             
+            // 1. Trip Route Map
             const tripMapContainer = document.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
@@ -734,6 +734,7 @@
                  setTimeout(() => tripMap.invalidateSize(), 100);
             }
 
+            // 2. Attraction Maps
             document.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
@@ -745,6 +746,7 @@
                 }
             });
             
+            // 3. Single-Point Logistics Maps (Hotels, Car Rentals)
             document.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
@@ -756,12 +758,13 @@
                 }
             });
 
+            // 4. Route-Based Logistics Maps (Flights, Rides, Ferries, etc.)
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
                 mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                 
-                if (mapDiv.dataset.routeGeometry) {
+                if (mapDiv.dataset.routeGeometry) { // Ride Map
                      try {
                         const geometry = JSON.parse(mapDiv.dataset.routeGeometry);
                         const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
@@ -774,7 +777,7 @@
                             map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
                         }
                     } catch (e) { console.error("Failed to render ride map", e); }
-                } else {
+                } else { // Flight, Ferry, Train Map
                     const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                     const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                     if (!isNaN(fromLat) && !isNaN(toLat)) {
@@ -829,6 +832,7 @@
             DOM.printModal.classList.add('hidden');
         }
         
+        // --- FINAL FIX: Force redraw all maps, then wait before printing ---
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
@@ -836,17 +840,19 @@
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
+            // Give the UI a moment to update and show the loader
             setTimeout(() => {
+                // Force all maps to re-calculate their size and tiles
                 console.log(`Forcing redraw on ${mapInstances.length} maps...`);
                 mapInstances.forEach(map => {
                     map.invalidateSize(true);
                 });
 
-                // --- *** CHANGED: Increased timeout for better mobile performance ---
+                // Wait for a longer period to ensure tiles are loaded after invalidation
                 setTimeout(() => {
                     window.print();
-                    closePrintModal();
-                }, 5000); // 5-second delay for tile loading
+                    closePrintModal(); // Reset modal after print dialog
+                }, 3000); // 3-second delay
             }, 100); 
         }
 
@@ -862,5 +868,4 @@
     </script>
 </body>
 </html>
-
 
