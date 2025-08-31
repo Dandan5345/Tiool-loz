@@ -265,6 +265,17 @@
             .page-break {
                 page-break-before: always;
             }
+            
+            /* --- *** NEW: Fix for blue lines on print --- */
+            .info-card,
+            .attraction-category,
+            .checklist-dest-title,
+            .note-item {
+                border-right: none !important;
+            }
+            .checklist-item {
+                border-right-color: transparent !important;
+            }
         }
     </style>
 </head>
@@ -363,7 +374,8 @@
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
                 <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה, אנא המתן...</p>
-                <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת מספר שניות.</p>
+                <!-- --- *** NEW: Updated user message for longer wait --- -->
+                <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת עד 10 שניות, תלוי במהירות החיבור.</p>
             </div>
         </div>
     </div>
@@ -407,7 +419,7 @@
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
-        let mapInstances = []; // <-- *** CHANGED: To hold all map objects
+        let mapInstances = [];
 
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -701,15 +713,13 @@
             return html;
         }
 
-        // --- *** CHANGED: Now populates the mapInstances array ---
         function initializeMaps() {
-            mapInstances = []; // Clear previous instances
+            mapInstances = []; 
             
-            // 1. Trip Route Map
             const tripMapContainer = document.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
-                mapInstances.push(tripMap); // Add to array
+                mapInstances.push(tripMap);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
                 const points = (tripDataCache.tripData.destinations || []).filter(d => d.coords).map(d => [d.coords.lat, d.coords.lng]);
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
@@ -724,37 +734,34 @@
                  setTimeout(() => tripMap.invalidateSize(), 100);
             }
 
-            // 2. Attraction Maps
             document.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 15);
-                    mapInstances.push(map); // Add to array
+                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
             
-            // 3. Single-Point Logistics Maps (Hotels, Car Rentals)
             document.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 14);
-                    mapInstances.push(map); // Add to array
+                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
 
-            // 4. Route-Based Logistics Maps (Flights, Rides, Ferries, etc.)
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
-                mapInstances.push(map); // Add to array
+                mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                 
-                if (mapDiv.dataset.routeGeometry) { // Ride Map
+                if (mapDiv.dataset.routeGeometry) {
                      try {
                         const geometry = JSON.parse(mapDiv.dataset.routeGeometry);
                         const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
@@ -767,7 +774,7 @@
                             map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
                         }
                     } catch (e) { console.error("Failed to render ride map", e); }
-                } else { // Flight, Ferry, Train Map
+                } else {
                     const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                     const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                     if (!isNaN(fromLat) && !isNaN(toLat)) {
@@ -822,28 +829,24 @@
             DOM.printModal.classList.add('hidden');
         }
         
-        // --- *** CHANGED: Force redraw all maps, then wait before printing ---
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
 
-            // 1. Show loader to the user
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
-            // 2. Give the UI a moment to update and show the loader
             setTimeout(() => {
-                // 3. Force all maps to re-calculate their size and tiles
                 console.log(`Forcing redraw on ${mapInstances.length} maps...`);
                 mapInstances.forEach(map => {
-                    map.invalidateSize(true); // Tell map to re-check its container size
+                    map.invalidateSize(true);
                 });
 
-                // 4. Wait for a longer period to ensure tiles are loaded after invalidation
+                // --- *** CHANGED: Increased timeout for better mobile performance ---
                 setTimeout(() => {
-                    window.print(); // Trigger print dialog
-                    closePrintModal(); // Reset modal after print dialog is closed
-                }, 3000); // 3-second delay for tile loading
+                    window.print();
+                    closePrintModal();
+                }, 5000); // 5-second delay for tile loading
             }, 100); 
         }
 
@@ -859,4 +862,5 @@
     </script>
 </body>
 </html>
+
 
