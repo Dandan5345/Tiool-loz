@@ -50,7 +50,7 @@
             max-height: 150px;
             overflow-y: auto;
             z-index: 9999;
-            width: 100%;
+            width: calc(100% - 40px); /* Adjust width to not cover the button */
         }
         .autocomplete-suggestion {
             padding: 0.5rem;
@@ -519,6 +519,16 @@
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
                 modalState.data = JSON.parse(JSON.stringify(itemToEdit)); // Deep copy
+                
+                // BUG FIX: Parse stringified geometry on load
+                if (modalState.data.type === 'ride' && modalState.data.route_geometry && typeof modalState.data.route_geometry === 'string') {
+                    try {
+                        modalState.data.route_geometry = JSON.parse(modalState.data.route_geometry);
+                    } catch (e) {
+                        console.error("Failed to parse route geometry:", e);
+                        delete modalState.data.route_geometry; // Clear invalid data
+                    }
+                }
             } else {
                 DOM.modalTitle.textContent = 'הוספת פריט חדש';
             }
@@ -585,7 +595,7 @@
                     { title: "פרטי השכרת הרכב", fields: [
                         {id: 'destination', label: 'לאיזה יעד?', type: 'text'},
                         {id: 'booked_via', label: 'דרך איפה הוזמן?'},
-                        {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?'},
+                        {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?', type: 'text_autocomplete'},
                     ]},
                     { title: "תאריכים וסוג", fields: [
                         {id: 'dates', label: 'תאריכי איסוף והחזרה', type: 'daterange'},
@@ -618,8 +628,8 @@
                 ferry: [
                     { title: "פרטי המעבורת", fields: [
                         { id: 'company', label: 'חברה מפעילה' },
-                        { id: 'from_destination', label: 'נקודת יציאה', type: 'text' },
-                        { id: 'to_destination', label: 'נקודת הגעה', type: 'text' },
+                        { id: 'from_destination', label: 'נקודת יציאה', type: 'text_autocomplete' },
+                        { id: 'to_destination', label: 'נקודת הגעה', type: 'text_autocomplete' },
                     ]},
                     { title: "תאריכים ועלות", fields: [
                         { id: 'date', label: 'תאריך', type: 'date' },
@@ -635,8 +645,8 @@
                 train: [
                     { title: "פרטי הרכבת", fields: [
                         { id: 'company', label: 'חברה מפעילה' },
-                        { id: 'from_station', label: 'תחנת יציאה', type: 'text' },
-                        { id: 'to_station', label: 'תחנת הגעה', type: 'text' },
+                        { id: 'from_station', label: 'תחנת יציאה', type: 'text_autocomplete' },
+                        { id: 'to_station', label: 'תחנת הגעה', type: 'text_autocomplete' },
                     ]},
                     { title: "תאריכים ועלות", fields: [
                         { id: 'date', label: 'תאריך', type: 'date' },
@@ -696,6 +706,22 @@
         };
         const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
 
+        function renderAutocompleteAddressInput(id, label) {
+            const value = modalState.data[id] || '';
+            return `
+            <div class="relative">
+                <label class="block"><span class="text-sm font-semibold text-slate-600">${label}</span>
+                    <div class="flex items-center mt-1">
+                        <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." oninput="window.debouncedAutocomplete(event)" autocomplete="off">
+                        <button type="button" data-action="open-address-picker" data-target-input="${id}" class="p-2 text-slate-500 hover:text-blue-600 shrink-0" title="פנקס כתובות">
+                            <i class="fas fa-book-atlas"></i>
+                        </button>
+                    </div>
+                </label>
+                <div id="${id}-suggestions" class="autocomplete-suggestions"></div>
+            </div>`;
+        }
+
         function renderField(field) {
             const value = modalState.data[field.id] || '';
             
@@ -715,31 +741,17 @@
                                 </label>`;
                 case 'addressmap':
                     return `<div>
-                        <label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                            <div class="flex gap-2 mt-1">
-                                <input type="text" id="${field.id}" value="${modalState.data.address || ''}" class="block w-full p-2 border rounded-md shadow-sm" placeholder="הזן כתובת מלאה">
-                                <button type="button" data-action="find-address" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-24 text-center">מצא</button>
-                            </div>
-                        </label>
+                        ${renderAutocompleteAddressInput(field.id, field.label)}
+                        <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
                         <div id="map-container" class="mt-4 small-map-container"></div>
                     </div>`;
+                case 'text_autocomplete':
+                    return renderAutocompleteAddressInput(field.id, field.label);
                 case 'routemap':
-                    const renderAddressInput = (id, label) => `
-                        <div class="relative">
-                            <label class="block"><span class="text-sm font-semibold text-slate-600">${label}</span>
-                                <div class="flex items-center mt-1">
-                                    <input type="text" id="${id}" value="${modalState.data[id] || ''}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." oninput="window.debouncedAutocomplete(event)" autocomplete="off">
-                                    <button type="button" data-action="open-address-picker" data-target-input="${id}" class="p-2 text-slate-500 hover:text-blue-600" title="פנקס כתובות">
-                                        <i class="fas fa-book-atlas"></i>
-                                    </button>
-                                </div>
-                            </label>
-                            <div id="${id}-suggestions" class="autocomplete-suggestions"></div>
-                        </div>`;
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           ${renderAddressInput('from_address', 'מאיפה?')}
-                           ${renderAddressInput('to_address', 'לאיפה?')}
+                           ${renderAutocompleteAddressInput('from_address', 'מאיפה?')}
+                           ${renderAutocompleteAddressInput('to_address', 'לאיפה?')}
                         </div>
                         <div class="text-center my-4">
                            <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
@@ -804,13 +816,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label><span class="text-sm font-semibold text-slate-600">${destinationLabel}</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
                     <label><span class="text-sm font-semibold text-slate-600">שם שדה תעופה</span><input type="text" id="${id}_airport_name" value="${legData.airport_name || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: JFK"></label>
-                    <label class="md:col-span-2"><span class="text-sm font-semibold text-slate-600">כתובת שדה תעופה</span>
-                        <div class="flex gap-2 mt-1">
-                            <input type="text" id="${id}_airport_address" value="${legData.airport_address || ''}" class="block w-full p-2 border rounded-md">
-                            <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-24 text-center">מצא</button>
-                        </div>
-                        <p class="text-xs text-slate-500 mt-1">לתוצאות טובות: 'שם שדה תעופה, עיר, מדינה'.</p>
-                    </label>
+                    <div class="md:col-span-2">
+                         ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
+                    </div>
+                    <div class="md:col-span-2 text-center">
+                        <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
+                    </div>
                     <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container"></div>
                 </div>
             </fieldset>`;
@@ -834,7 +845,7 @@
             if (document.querySelector('[id^="map-final-route"]')) initMap('map-final-route', 'final-route');
             if (document.getElementById('map-ride-route')) {
                 initMap('map-ride-route', 'ride-route');
-                if (modalState.data.route_geometry) {
+                if (modalState.data.route_geometry && Array.isArray(modalState.data.route_geometry)) {
                     drawRouteOnMap(modalState.maps['ride-route'], modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
                 }
             }
@@ -914,13 +925,19 @@
             const finalData = { ...modalState.data };
             finalData.type = modalState.subType || modalState.mainType;
             
+            // BUG FIX: Stringify nested array before saving to Firestore
+            if (finalData.type === 'ride' && finalData.route_geometry && Array.isArray(finalData.route_geometry)) {
+                finalData.route_geometry = JSON.stringify(finalData.route_geometry);
+            }
+            
             delete finalData.mainType;
             delete finalData.subType;
 
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
                 if (Array.isArray(obj)) return obj.map(item => cleanDataForFirebase(item));
-                if (typeof obj !== 'object') return obj;
+                if (typeof obj !== 'object' || obj instanceof Date) return obj;
+
 
                 const newObj = {};
                 for (const key in obj) {
@@ -1176,14 +1193,25 @@
             };
 
             allItems.forEach(item => {
-                if (item.type === 'hotel' && item.address) {
-                    addAddress(`🏨 ${item.name}`, item.address);
-                } else if (item.type === 'flight') {
-                    if (item.from?.airport_address) addAddress(`✈️ ${item.from.airport_name || item.from.destination}`, item.from.airport_address);
-                    if (item.to?.airport_address) addAddress(`✈️ ${item.to.airport_name || item.to.destination}`, item.to.airport_address);
-                    (item.connections || []).forEach(c => {
-                       if (c.airport_address) addAddress(`✈️ ${c.airport_name || c.destination}`, c.airport_address);
-                    });
+                switch (item.type) {
+                    case 'hotel':
+                        if (item.address) addAddress(`🏨 ${item.name}`, item.address);
+                        break;
+                    case 'flight':
+                        if (item.from?.airport_address) addAddress(`✈️ ${item.from.airport_name || item.from.destination}`, item.from.airport_address);
+                        if (item.to?.airport_address) addAddress(`✈️ ${item.to.airport_name || item.to.destination}`, item.to.airport_address);
+                        (item.connections || []).forEach(c => {
+                           if (c.airport_address) addAddress(`✈️ ${c.airport_name || c.destination}`, c.airport_address);
+                        });
+                        break;
+                    case 'ferry':
+                         if (item.from_destination) addAddress(`🚢 מעבורת מ-${item.from_destination}`, item.from_destination);
+                         if (item.to_destination) addAddress(`🚢 מעבורת אל-${item.to_destination}`, item.to_destination);
+                         break;
+                    case 'train':
+                         if (item.from_station) addAddress(`🚆 רכבת מ-${item.from_station}`, item.from_station);
+                         if (item.to_station) addAddress(`🚆 רכבת אל-${item.to_station}`, item.to_station);
+                         break;
                 }
             });
             return Array.from(addresses, ([address, name]) => ({ name, address }));
@@ -1343,6 +1371,11 @@
         });
 
         document.addEventListener('click', e => {
+            // Close any open autocomplete suggestions if clicking outside
+            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[oninput*="debouncedAutocomplete"]');
+            if (!isAutocomplete) {
+                document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
+            }
             const editBtn = e.target.closest('.edit-btn');
             if (editBtn) {
                 e.stopPropagation();
@@ -1363,6 +1396,8 @@
         async function handleAddressAutocomplete(event) {
             const input = event.target;
             const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
+            if (!suggestionsContainer) return;
+
             const query = input.value;
 
             if (query.length < 3) {
