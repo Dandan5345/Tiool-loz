@@ -208,7 +208,7 @@
         .attraction-map-container {
              height: 250px;
         }
-        .logistics-map-container { /* NEW */
+        .logistics-map-container {
             height: 250px;
         }
         .leaflet-container { z-index: 1; }
@@ -243,10 +243,10 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            body > *:not(.print-container) {
+            body > *:not(#preview-wrapper) {
                 display: none !important;
             }
-            .print-container {
+            #preview-wrapper, #preview-container {
                 display: block !important;
                 position: static !important;
                 background-color: transparent !important;
@@ -295,7 +295,7 @@
                     <p class="text-slate-600 mt-2 mb-6">תחילה, צור תצוגה מקדימה של סיכום הטיול. לאחר מכן תוכל להדפיס או לשמור אותו לקובץ PDF.</p>
 
                     <div class="mb-6 flex justify-center items-center gap-3 bg-slate-100 p-3 rounded-lg">
-                        <input type="checkbox" id="include-maps-checkbox" class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300">
+                        <input type="checkbox" id="include-maps-checkbox" class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300" checked>
                         <label for="include-maps-checkbox" class="font-semibold text-slate-700">הכללת מפות בסיכום</label>
                     </div>
 
@@ -362,7 +362,7 @@
             <!-- Loader section, initially hidden -->
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
-                <p class="mt-4 text-slate-600 font-semibold">בונה דוח הדפסה ומכין את המפות...</p>
+                <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה, אנא המתן...</p>
                 <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת מספר שניות.</p>
             </div>
         </div>
@@ -398,7 +398,6 @@
             previewContainer: document.getElementById('preview-container'),
             previewWrapper: document.getElementById('preview-wrapper'),
             mainContent: document.getElementById('main-content'),
-            // Modal elements
             printModal: document.getElementById('print-modal'),
             closeModalBtn: document.getElementById('close-modal-btn'),
             triggerPrintBtn: document.getElementById('trigger-print-btn'),
@@ -408,6 +407,7 @@
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
+        let mapInstances = []; // <-- *** CHANGED: To hold all map objects
 
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -421,17 +421,22 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    const tripSnap = await getDoc(doc(db, "trips", tripId));
-                    if (tripSnap.exists()) {
-                        const tripData = tripSnap.data();
-                        if (!tripData.editors?.includes(user.uid)) {
-                            showErrorModal("אין לך הרשאה לצפות בטיול זה.", true);
-                            return;
+                    try {
+                        const tripSnap = await getDoc(doc(db, "trips", tripId));
+                        if (tripSnap.exists()) {
+                            const tripData = tripSnap.data();
+                            if (!tripData.editors?.includes(user.uid)) {
+                                showErrorModal("אין לך הרשאה לצפות בטיול זה.", true);
+                                return;
+                            }
+                            DOM.pageTitle.textContent += ` - ${tripData.name}`;
+                            DOM.exportTitle.textContent += ` "${tripData.name}"`;
+                        } else {
+                            showErrorModal("הטיול לא נמצא.", true);
                         }
-                        DOM.pageTitle.textContent += ` - ${tripData.name}`;
-                        DOM.exportTitle.textContent += ` "${tripData.name}"`;
-                    } else {
-                        showErrorModal("הטיול לא נמצא.", true);
+                    } catch (e) {
+                         showErrorModal("שגיאה בטעינת נתוני הטיול.", true);
+                         console.error(e);
                     }
                 } else {
                     window.location.href = 'login.html';
@@ -622,7 +627,7 @@
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
                 hotels.forEach(item => { 
-                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; 
+                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`; 
                     if (includeMaps && item.coords) {
                          html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container"
                                      data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
@@ -696,14 +701,15 @@
             return html;
         }
 
-        // --- REFACTORED: Now accepts a target document to initialize maps in ---
-        function initializeMaps(targetDocument) {
-            const L = targetDocument.defaultView.L; // Use the Leaflet instance from the target window
+        // --- *** CHANGED: Now populates the mapInstances array ---
+        function initializeMaps() {
+            mapInstances = []; // Clear previous instances
             
             // 1. Trip Route Map
-            const tripMapContainer = targetDocument.getElementById('trip-route-map');
+            const tripMapContainer = document.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
+                mapInstances.push(tripMap); // Add to array
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
                 const points = (tripDataCache.tripData.destinations || []).filter(d => d.coords).map(d => [d.coords.lat, d.coords.lng]);
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
@@ -719,30 +725,33 @@
             }
 
             // 2. Attraction Maps
-            targetDocument.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
+            document.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 15);
+                    mapInstances.push(map); // Add to array
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
             
-            // 3. Single-Point Logistics Maps
-            targetDocument.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
+            // 3. Single-Point Logistics Maps (Hotels, Car Rentals)
+            document.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 14);
+                    mapInstances.push(map); // Add to array
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
 
-            // 4. Route-Based Logistics Maps
-            targetDocument.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
+            // 4. Route-Based Logistics Maps (Flights, Rides, Ferries, etc.)
+            document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
+                mapInstances.push(map); // Add to array
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                 
                 if (mapDiv.dataset.routeGeometry) { // Ride Map
@@ -789,7 +798,7 @@
                     DOM.floatingActionBtn.classList.remove('hidden');
                     
                     if (includeMaps) {
-                        initializeMaps(document); // Initialize in main document
+                        initializeMaps();
                     }
 
                     setStatus('התצוגה המקדימה מוכנה.', false);
@@ -813,47 +822,29 @@
             DOM.printModal.classList.add('hidden');
         }
         
-        // --- FINAL FIX: The robust iframe printing method ---
+        // --- *** CHANGED: Force redraw all maps, then wait before printing ---
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
 
+            // 1. Show loader to the user
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
-            const printFrame = document.createElement('iframe');
-            printFrame.style.position = 'absolute';
-            printFrame.style.width = '0';
-            printFrame.style.height = '0';
-            printFrame.style.border = '0';
-            document.body.appendChild(printFrame);
+            // 2. Give the UI a moment to update and show the loader
+            setTimeout(() => {
+                // 3. Force all maps to re-calculate their size and tiles
+                console.log(`Forcing redraw on ${mapInstances.length} maps...`);
+                mapInstances.forEach(map => {
+                    map.invalidateSize(true); // Tell map to re-check its container size
+                });
 
-            const frameDoc = printFrame.contentDocument;
-            const frameHead = frameDoc.head;
-            
-            // Copy all styles and links from the main document
-            document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
-                frameHead.appendChild(node.cloneNode(true));
-            });
-            // Add Leaflet JS to the iframe
-            const leafletScript = frameDoc.createElement('script');
-            leafletScript.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-            frameHead.appendChild(leafletScript);
-
-            leafletScript.onload = () => {
-                // Copy the report HTML content
-                frameDoc.body.innerHTML = DOM.previewContainer.innerHTML;
-                
-                // Initialize maps inside the iframe's context
-                initializeMaps(frameDoc);
-
-                // Wait for maps to render, then print
+                // 4. Wait for a longer period to ensure tiles are loaded after invalidation
                 setTimeout(() => {
-                    printFrame.contentWindow.print();
-                    document.body.removeChild(printFrame);
-                    closePrintModal();
-                }, 4000); // 4 seconds should be safe
-            };
+                    window.print(); // Trigger print dialog
+                    closePrintModal(); // Reset modal after print dialog is closed
+                }, 3000); // 3-second delay for tile loading
+            }, 100); 
         }
 
         DOM.startPreviewBtn.addEventListener('click', showPreview);
@@ -868,5 +859,4 @@
     </script>
 </body>
 </html>
-
 
