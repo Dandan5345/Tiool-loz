@@ -35,6 +35,7 @@
         .leaflet-container { width: 100%; border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
         .small-map-container { height: 200px; }
         .final-map-container { height: 300px; }
+        .details-map-container { height: 250px; }
         .litepicker { z-index: 100 !important; }
 
         /* Loading Overlay */
@@ -170,6 +171,7 @@
     
     <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-[75] hidden items-center justify-center p-4 opacity-0">
         <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
+             <!-- Details content will be injected here -->
         </div>
     </div>
 
@@ -234,6 +236,7 @@
         let editingItem = null; 
         let itemToDelete = null;
         let logisticsUnsubscribe = null; // To detach the listener
+        let detailsMap = null; // For the details modal map
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
             maps: {}, mapLayers: {}, datePicker: null,
@@ -420,7 +423,10 @@
 
         function createHotelCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col";
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            card.dataset.id = item.id;
+            card.dataset.action = 'view-details'; // For opening the details modal
+
             card.innerHTML = `
                 <div class="flex-grow">
                     <div class="flex justify-between items-start">
@@ -433,13 +439,10 @@
                     <p class="text-sm text-slate-500 mb-3">${item.destination || ''} | ${item.dates || ''}</p>
                     <ul class="space-y-2 text-slate-600 text-sm mb-4">
                         <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> $${item.price ? item.price.toLocaleString() : 'לא צוין'}</li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-building-user fa-fw text-slate-500"></i> <strong>הוזמן דרך:</strong> ${item.booked_via || ''}</li>
                     </ul>
-                    ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 </div>
-                <div class="mt-4 pt-4 border-t grid grid-cols-2 gap-2">
-                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">לאתר <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">נווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                <div class="mt-auto pt-4 border-t text-center">
+                   <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
                 </div>`;
             return card;
         }
@@ -475,12 +478,12 @@
                 case 'ride':
                     title = `הסעה: ${item.from_address?.split(',')[0] || ''} ← ${item.to_address?.split(',')[0] || ''}`;
                     icon = 'fa-taxi';
-                    const company = item.company || 'חברה לא צוינה';
+                    const rideDate = item.date ? `${item.date} | ` : '';
                     const pickup = `איסוף ב-${item.pickup_time || 'לא צוין'}`;
-                    details = `<p class="text-sm text-slate-500">${company} | ${pickup}</p>`;
+                    details = `<p class="text-sm text-slate-500">${rideDate}${pickup}</p>`;
                     const extraInfo = [];
+                    if (item.company) extraInfo.push(item.company);
                     if (item.driver_name) extraInfo.push(`נהג: ${item.driver_name}`);
-                    if (item.vehicle_number) extraInfo.push(`רכב: ${item.vehicle_number}`);
                     if (extraInfo.length > 0) {
                         details += `<p class="text-xs text-slate-600 font-semibold mt-1">${extraInfo.join(' | ')}</p>`;
                     }
@@ -492,7 +495,7 @@
             }
 
             card.innerHTML = `
-                <div class="flex justify-between items-start">
+                <div class="flex justify-between items-start flex-grow">
                     <div class="flex items-center gap-3">
                         <i class="fas ${icon} fa-2x text-sky-500"></i>
                         <div>
@@ -504,6 +507,9 @@
                          <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}"><i class="fas fa-pencil"></i></button>
                          <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}"><i class="fas fa-trash"></i></button>
                     </div>
+                </div>
+                 <div class="mt-auto pt-4 border-t text-center">
+                   <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
                 </div>`;
             return card;
         }
@@ -594,11 +600,16 @@
                         { id: 'company', label: 'חברת ההסעות/מוניות'}
                     ]},
                     { title: "פרטים לוגיסטיים", fields: [
+                        { id: 'date', label: 'תאריך נסיעה', type: 'date' },
                         { id: 'pickup_time', label: 'שעת איסוף', type: 'time'},
                         { id: 'driver_name', label: 'שם הנהג (אופציונלי)'},
                         { id: 'driver_phone', label: 'טלפון הנהג (אופציונלי)', type: 'tel'},
                         { id: 'vehicle_number', label: 'מספר רכב (אופציונלי)'},
                         { id: 'price', label: 'מחיר (בדולרים, 0 אם חינם)', type: 'number'},
+                    ]},
+                    { title: "פרטים נוספים", fields: [
+                        { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
+                        { id: 'additional_details', label: 'פירוט נוסף (הערות, נקודת מפגש וכו\')', type: 'textarea'}
                     ]}
                 ],
                 car_rental: [
@@ -767,8 +778,8 @@
                            <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
                         </div>
                         <div class="grid grid-cols-2 gap-4 text-center bg-slate-100 p-2 rounded-lg">
-                           <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
-                           <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
+                            <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
+                            <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
                         </div>
                         <div id="map-ride-route" class="mt-4 final-map-container"></div>`;
                 case 'flightroute':
@@ -856,7 +867,7 @@
             if (document.getElementById('map-ride-route')) {
                 initMap('map-ride-route', 'ride-route');
                 if (modalState.data.route_geometry && Array.isArray(modalState.data.route_geometry)) {
-                    drawRouteOnMap(modalState.maps['ride-route'], modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
+                    drawRouteOnMap(modalState.maps['ride-route'], 'ride-route', modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
                 }
             }
             
@@ -1085,8 +1096,8 @@
             }
         }
         
-        function drawRouteOnMap(map, geometry, startCoords, endCoords) {
-            const layerGroup = modalState.mapLayers['ride-route'];
+        function drawRouteOnMap(map, mapKey, geometry, startCoords, endCoords) {
+            const layerGroup = modalState.mapLayers[mapKey];
             if (!map || !layerGroup) return;
 
             layerGroup.clearLayers();
@@ -1364,7 +1375,7 @@
 
                         const map = modalState.maps['ride-route'];
                         if (map) {
-                           drawRouteOnMap(map, routeResult.geometry, fromResult.coords, toResult.coords);
+                           drawRouteOnMap(map, 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
                         }
 
                     } else {
@@ -1399,6 +1410,12 @@
                 e.stopPropagation();
                 handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
                 return;
+            }
+
+            const card = e.target.closest('[data-action="view-details"]');
+            if (card) {
+                 const item = allItems.find(i => i.id === card.dataset.id);
+                 if (item) openDetailsModal(item);
             }
         });
 
@@ -1462,6 +1479,136 @@
                 closeAddressPicker();
             }
         });
+        
+        // --- Details Modal ---
+        function openDetailsModal(item) {
+            let contentHtml = '';
+            // Generic Header
+            contentHtml += `
+                <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
+                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+                <div class="flex-grow overflow-y-auto p-6 space-y-6">`;
+
+            // Specific content based on type
+            switch(item.type) {
+                case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
+                case 'ride': contentHtml += generateRideDetailsHTML(item); break;
+                // Add cases for flight, car_rental etc. as needed
+                default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
+            }
+            
+            contentHtml += `</div>`; // Close content wrapper
+            DOM.detailsModal.querySelector('.modal-content').innerHTML = contentHtml;
+
+            // Show modal
+            DOM.detailsModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.detailsModal.classList.remove('opacity-0');
+                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
+                
+                // Initialize map after modal is visible
+                initDetailsMap(item);
+            }, 10);
+
+            // Add close listener
+            document.getElementById('details-modal-close-btn').addEventListener('click', closeDetailsModal);
+        }
+
+        function closeDetailsModal() {
+            DOM.detailsModal.classList.add('opacity-0');
+            DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.detailsModal.classList.add('hidden');
+                if (detailsMap) {
+                    detailsMap.remove();
+                    detailsMap = null;
+                }
+            }, 300);
+        }
+
+        function generateHotelDetailsHTML(item) {
+             return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">יעד:</strong> ${item.destination || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">כתובת:</strong> ${item.address || '-'}</div>
+                </div>
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-2 gap-4">
+                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                </div>
+                ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
+            `;
+        }
+        
+        function generateRideDetailsHTML(item) {
+            const title = `הסעה: ${item.from_address?.split(',')[0] || ''} ← ${item.to_address?.split(',')[0] || ''}`;
+            let route_geometry = item.route_geometry;
+            if(typeof route_geometry === 'string') {
+                try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+            }
+
+            return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                </div>
+                ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
+            `;
+        }
+
+        function initDetailsMap(item) {
+            if(detailsMap) {
+                detailsMap.remove();
+                detailsMap = null;
+            }
+            const mapContainer = document.getElementById('details-map');
+            if (!mapContainer) return;
+
+            detailsMap = L.map('details-map').setView([31.7683, 35.2137], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailsMap);
+            const layerGroup = L.layerGroup().addTo(detailsMap);
+
+            if (item.type === 'hotel' && item.coords) {
+                const coords = [item.coords.lat, item.coords.lng || item.coords.lon];
+                L.marker(coords).addTo(layerGroup);
+                detailsMap.setView(coords, 13);
+            } else if (item.type === 'ride' && item.route_geometry) {
+                 let route_geometry = item.route_geometry;
+                 if(typeof route_geometry === 'string') {
+                    try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+                 }
+                 if(route_geometry) {
+                    const latlngs = route_geometry.map(coord => L.latLng(coord[0], coord[1]));
+                    if (item.from_coords) L.marker([item.from_coords.lat, item.from_coords.lon]).addTo(layerGroup).bindPopup('התחלה');
+                    if (item.to_coords) L.marker([item.to_coords.lat, item.to_coords.lon]).addTo(layerGroup).bindPopup('סיום');
+                    const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
+                    detailsMap.fitBounds(polyline.getBounds(), {padding: [20, 20]});
+                 }
+            }
+             // Add logic for other types like 'flight' if needed
+
+            setTimeout(() => detailsMap.invalidateSize(), 100);
+        }
 
         // --- Summary Table Logic ---
         function renderSummaryTables() {
@@ -1517,4 +1664,3 @@
     </script>
 </body>
 </html>
-
