@@ -204,7 +204,7 @@
         let logisticsUnsubscribe = null; // To detach the listener
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
-            maps: {}, mapMarkers: {}, datePicker: null,
+            maps: {}, mapLayers: {}, datePicker: null,
         };
 
         // --- DOM Elements ---
@@ -302,7 +302,7 @@
         // --- UI Population ---
         function renderApp() {
             const hotels = allItems.filter(item => item.type === 'hotel');
-            const transports = allItems.filter(item => ['flight', 'car_rental', 'ferry', 'train'].includes(item.type));
+            const transports = allItems.filter(item => ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(item.type));
             
             renderCards(DOM.hotelContainer, hotels, createHotelCard);
             renderCards(DOM.transportContainer, transports, createTransportCard);
@@ -436,6 +436,11 @@
                     icon = 'fa-train';
                     details = `<p class="text-sm text-slate-500">${item.company || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
                     break;
+                case 'ride':
+                    title = `הסעה: ${item.from_address?.split(',')[0] || ''} ← ${item.to_address?.split(',')[0] || ''}`;
+                    icon = 'fa-taxi';
+                    details = `<p class="text-sm text-slate-500">${item.company || 'חברה לא צוינה'}</p><p class="text-sm text-slate-600 font-semibold">איסוף ב-${item.pickup_time || 'לא צוין'}</p>`;
+                    break;
                 default:
                     title = "מעבר לא ידוע";
                     icon = 'fa-question-circle';
@@ -466,7 +471,7 @@
             if (modalState.datePicker) modalState.datePicker.destroy();
             modalState = {
                 mainType: null, subType: null, currentStep: 1, data: {},
-                maps: {}, mapMarkers: {}, datePicker: null,
+                maps: {}, mapLayers: {}, datePicker: null,
             };
             editingItem = null;
         }
@@ -476,7 +481,7 @@
             if (itemToEdit) {
                 editingItem = { id: itemToEdit.id };
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
-                modalState.subType = ['flight', 'car_rental', 'ferry', 'train'].includes(itemToEdit.type) ? itemToEdit.type : null;
+                modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
                 modalState.data = JSON.parse(JSON.stringify(itemToEdit)); // Deep copy
             } else {
                 DOM.modalTitle.textContent = 'הוספת פריט חדש';
@@ -524,9 +529,22 @@
                 transport: { title: "איזה סוג מעבר?", fields: [{ id: 'subType', type: 'radio', options: [
                     {value: 'flight', label: '✈️ טיסה'}, 
                     {value: 'car_rental', label: '🚗 רכב שכור'},
+                    {value: 'ride', label: '🚕 מונית/הסעה'},
                     {value: 'ferry', label: '🚢 מעבורת'},
                     {value: 'train', label: '🚆 רכבת'}
                 ] }] },
+                ride: [
+                    { title: "מסלול הנסיעה", fields: [{ id: 'routemap', type: 'routemap'}] },
+                    { title: "פרטי הזמנה", fields: [
+                        { id: 'booked_via', label: 'מאיפה הוזמן?'},
+                        { id: 'company', label: 'חברת ההסעות/מוניות'}
+                    ]},
+                    { title: "פרטים לוגיסטיים", fields: [
+                        { id: 'pickup_time', label: 'שעת איסוף', type: 'time'},
+                        { id: 'driver_name', label: 'שם הנהג (אופציונלי)'},
+                        { id: 'price', label: 'מחיר (בדולרים, 0 אם חינם)', type: 'number'},
+                    ]}
+                ],
                 car_rental: [
                     { title: "פרטי השכרת הרכב", fields: [
                         {id: 'destination', label: 'לאיזה יעד?', type: 'text'},
@@ -659,6 +677,20 @@
                         </label>
                         <div id="map-container" class="mt-4 small-map-container"></div>
                     </div>`;
+                case 'routemap':
+                    return `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <label class="block"><span class="text-sm font-semibold text-slate-600">מאיפה?</span><input type="text" id="from_address" value="${modalState.data.from_address || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="כתובת התחלה"></label>
+                           <label class="block"><span class="text-sm font-semibold text-slate-600">לאיפה?</span><input type="text" id="to_address" value="${modalState.data.to_address || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="כתובת סיום"></label>
+                        </div>
+                        <div class="text-center my-4">
+                           <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-center bg-slate-100 p-2 rounded-lg">
+                           <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
+                           <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
+                        </div>
+                        <div id="map-ride-route" class="mt-4 final-map-container"></div>`;
                 case 'flightroute':
                     return `
                         <div class="space-y-4">
@@ -690,7 +722,7 @@
                     </fieldset>`;
                 case 'daterange':
                 case 'date':
-                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
+                    return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <input type="text" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="לחץ לבחירת תאריכים">
                                 </label>`;
                 default: // text, url, number, time
@@ -742,6 +774,12 @@
             if (document.querySelector('[id^="map-to"]')) initMap('map-to', 'to');
             (modalState.data.connections || []).forEach((conn, i) => initMap(`map-connection-${i}`, `connection-${i}`));
             if (document.querySelector('[id^="map-final-route"]')) initMap('map-final-route', 'final-route');
+            if (document.getElementById('map-ride-route')) {
+                initMap('map-ride-route', 'ride-route');
+                if (modalState.data.route_geometry) {
+                    drawRouteOnMap(modalState.maps['ride-route'], modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
+                }
+            }
             
             if (document.getElementById('add-seat-btn')) {
                 (modalState.data.seats || []).forEach(seat => addSeatInput(seat));
@@ -769,6 +807,11 @@
                 if (field.type === 'radio') {
                     const checked = document.querySelector(`input[name="${field.id}"]:checked`);
                     value = checked ? checked.value : null;
+                } else if (field.type === 'routemap') {
+                    modalState.data.from_address = document.getElementById('from_address').value;
+                    modalState.data.to_address = document.getElementById('to_address').value;
+                    // Other route data (coords, geometry, etc.) is saved during calculation
+                    return; 
                 } else if (field.type === 'flightroute') {
                     const collectLegData = (legId, existingData = {}) => ({
                         destination: document.getElementById(`${legId}_destination`)?.value,
@@ -793,7 +836,7 @@
                 else {
                     const input = document.getElementById(field.id);
                     if (input) {
-                         value = field.type === 'number' ? parseFloat(input.value) || null : input.value;
+                         value = field.type === 'number' ? parseFloat(input.value) || 0 : input.value;
                     }
                 }
                 
@@ -849,7 +892,7 @@
             }
         }
         
-        // --- Map & Geocoding Logic ---
+        // --- Map & Geocoding & Routing Logic ---
         function initMap(containerId, mapKey) {
             if (modalState.maps[mapKey]) modalState.maps[mapKey].remove();
             const mapContainer = document.getElementById(containerId);
@@ -858,6 +901,7 @@
             const map = L.map(containerId).setView([31.7683, 35.2137], 2);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             modalState.maps[mapKey] = map;
+            modalState.mapLayers[mapKey] = L.layerGroup().addTo(map);
         }
 
         async function geocodeAddress(address) {
@@ -873,7 +917,7 @@
                 });
                 const data = await response.json();
                 if (data && data.length > 0) {
-                    return { success: true, coords: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } };
+                    return { success: true, coords: { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } };
                 } else {
                     return { success: false, message: 'הכתובת לא נמצאה.' };
                 }
@@ -893,15 +937,15 @@
             DOM.modalError.textContent = 'מחפש...';
             const result = await geocodeAddress(address);
             const map = modalState.maps[mapKey];
+            const layerGroup = modalState.mapLayers[mapKey];
 
-            if (result.success && map) {
+            if (result.success && map && layerGroup) {
                 DOM.modalError.textContent = '';
-                const coords = result.coords;
-                map.setView([coords.lat, coords.lng], 13);
-                if (modalState.mapMarkers[mapKey]) modalState.mapMarkers[mapKey].remove();
+                const coords = { lat: result.coords.lat, lng: result.coords.lon };
+                map.setView(coords, 13);
+                layerGroup.clearLayers();
                 
-                const marker = L.marker([coords.lat, coords.lng]).addTo(map);
-                modalState.mapMarkers[mapKey] = marker;
+                L.marker(coords).addTo(layerGroup);
                 
                 // Save coordinates to the state
                 const legId = mapKey;
@@ -929,42 +973,76 @@
                         delete modalState.data.connections[index].coords;
                     }
                 } else { // hotel
-                     if (modalState.data.coords) delete modalState.data.coords;
+                   if (modalState.data.coords) delete modalState.data.coords;
                 }
             }
         }
         
+        async function fetchRoute(startCoords, endCoords) {
+            const url = `https://router.project-osrm.org/route/v1/driving/${startCoords.lon},${startCoords.lat};${endCoords.lon},${endCoords.lat}?overview=full&geometries=geojson`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.code === 'Ok' && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    return {
+                        success: true,
+                        geometry: route.geometry.coordinates.map(c => [c[1], c[0]]), // OSRM is lng,lat; Leaflet is lat,lng
+                        duration: route.duration, // in seconds
+                        distance: route.distance, // in meters
+                    };
+                } else {
+                    return { success: false, message: 'לא נמצא מסלול.' };
+                }
+            } catch (error) {
+                console.error("Routing error:", error);
+                return { success: false, message: 'שגיאת רשת בחישוב המסלול.' };
+            }
+        }
+        
+        function drawRouteOnMap(map, geometry, startCoords, endCoords) {
+            const layerGroup = modalState.mapLayers['ride-route'];
+            if (!map || !layerGroup) return;
+
+            layerGroup.clearLayers();
+            const latlngs = geometry.map(coord => L.latLng(coord[0], coord[1]));
+            
+            if (startCoords) L.marker([startCoords.lat, startCoords.lon]).addTo(layerGroup).bindPopup('התחלה');
+            if (endCoords) L.marker([endCoords.lat, endCoords.lon]).addTo(layerGroup).bindPopup('סיום');
+
+            const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
+            map.fitBounds(polyline.getBounds(), {padding: [20, 20]});
+        }
+
         function showFinalRouteOnMap() {
             const finalMap = modalState.maps['final-route'];
-            if (!finalMap) return;
+            const finalLayers = modalState.mapLayers['final-route'];
+            if (!finalMap || !finalLayers) return;
             
             collectStepData(); 
 
-            Object.values(finalMap._layers).forEach(layer => {
-                if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.PolylineDecorator) {
-                    finalMap.removeLayer(layer);
-                }
-            });
+            finalLayers.clearLayers();
 
             const points = [];
             const allLegs = [modalState.data.from, ...(modalState.data.connections || []), modalState.data.to];
             
             allLegs.forEach(leg => {
                 if (leg && leg.coords) {
-                    points.push([leg.coords.lat, leg.coords.lng]);
-                    L.marker([leg.coords.lat, leg.coords.lng]).addTo(finalMap);
+                    const coords = [leg.coords.lat, leg.coords.lng || leg.coords.lon];
+                    points.push(coords);
+                    L.marker(coords).addTo(finalLayers);
                 }
             });
 
             if (points.length > 0) {
                 finalMap.fitBounds(points, { padding: [50, 50] });
                 if (points.length > 1) {
-                    const polyline = L.polyline(points, {color: '#3b82f6', weight: 3, dashArray: '10, 10'}).addTo(finalMap);
+                    const polyline = L.polyline(points, {color: '#3b82f6', weight: 3, dashArray: '10, 10'}).addTo(finalLayers);
                     L.polylineDecorator(polyline, {
                         patterns: [
                             { offset: 25, repeat: 50, symbol: L.Symbol.arrowHead({ pixelSize: 12, pathOptions: { fillOpacity: 1, weight: 0, color: '#3b82f6' } }) }
                         ]
-                    }).addTo(finalMap);
+                    }).addTo(finalLayers);
                 }
             }
         }
@@ -1030,6 +1108,20 @@
             }, 300);
         }
 
+        // --- Utility Functions ---
+        function formatDuration(seconds) {
+            if (seconds === undefined || seconds === null) return '-';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+
+        function formatDistance(meters) {
+            if (meters === undefined || meters === null) return '-';
+            return `${(meters / 1000).toFixed(1)} ק"מ`;
+        }
+
+
         // --- Event Listeners ---
         document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
         DOM.modalCloseBtn.addEventListener('click', closeModal);
@@ -1086,6 +1178,42 @@
             } else if (action === 'find-flight-leg') {
                 const address = document.getElementById(`${legId}_airport_address`).value;
                 await handleSearch(() => findAddressOnMap(legId, address));
+            } else if(action === 'calculate-ride-route') {
+                await handleSearch(async () => {
+                    const fromAddress = document.getElementById('from_address').value;
+                    const toAddress = document.getElementById('to_address').value;
+                    modalState.data.from_address = fromAddress;
+                    modalState.data.to_address = toAddress;
+
+                    DOM.modalError.textContent = 'מחשב מסלול...';
+                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
+
+                    if (!fromResult.success || !toResult.success) {
+                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
+                        return;
+                    }
+
+                    modalState.data.from_coords = fromResult.coords;
+                    modalState.data.to_coords = toResult.coords;
+                    
+                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
+                    if (routeResult.success) {
+                        DOM.modalError.textContent = '';
+                        modalState.data.route_geometry = routeResult.geometry;
+                        modalState.data.route_duration = routeResult.duration;
+                        modalState.data.route_distance = routeResult.distance;
+                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
+                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
+
+                        const map = modalState.maps['ride-route'];
+                        if (map) {
+                           drawRouteOnMap(map, routeResult.geometry, fromResult.coords, toResult.coords);
+                        }
+
+                    } else {
+                        DOM.modalError.textContent = routeResult.message;
+                    }
+                });
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
             } else if (target.id === 'calculate-final-route-btn') {
@@ -1131,6 +1259,7 @@
                 hotel: { label: '🏨 מלונות', total: 0 },
                 flight: { label: '✈️ טיסות', total: 0 },
                 car_rental: { label: '🚗 רכבים', total: 0 },
+                ride: { label: '🚕 הסעות', total: 0 },
                 ferry: { label: '🚢 מעבורות', total: 0 },
                 train: { label: '🚆 רכבות', total: 0 },
             };
