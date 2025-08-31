@@ -243,10 +243,10 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            body > *:not(#preview-wrapper) {
+            body > *:not(.print-container) {
                 display: none !important;
             }
-            #preview-wrapper, #preview-container {
+            .print-container {
                 display: block !important;
                 position: static !important;
                 background-color: transparent !important;
@@ -362,7 +362,7 @@
             <!-- Loader section, initially hidden -->
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
-                <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה, אנא המתן...</p>
+                <p class="mt-4 text-slate-600 font-semibold">בונה דוח הדפסה ומכין את המפות...</p>
                 <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת מספר שניות.</p>
             </div>
         </div>
@@ -402,14 +402,12 @@
             printModal: document.getElementById('print-modal'),
             closeModalBtn: document.getElementById('close-modal-btn'),
             triggerPrintBtn: document.getElementById('trigger-print-btn'),
-            // ADDED FOR MAPS
             includeMapsCheckbox: document.getElementById('include-maps-checkbox'),
         };
 
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
-        let mapInstances = []; // <-- NEW: To hold all map objects
 
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -698,15 +696,14 @@
             return html;
         }
 
-        // --- UPDATED: Now populates the mapInstances array ---
-        function initializeMaps() {
-            mapInstances = []; // Clear previous instances
+        // --- REFACTORED: Now accepts a target document to initialize maps in ---
+        function initializeMaps(targetDocument) {
+            const L = targetDocument.defaultView.L; // Use the Leaflet instance from the target window
             
             // 1. Trip Route Map
-            const tripMapContainer = document.getElementById('trip-route-map');
+            const tripMapContainer = targetDocument.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
-                mapInstances.push(tripMap);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
                 const points = (tripDataCache.tripData.destinations || []).filter(d => d.coords).map(d => [d.coords.lat, d.coords.lng]);
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
@@ -722,33 +719,30 @@
             }
 
             // 2. Attraction Maps
-            document.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
+            targetDocument.querySelectorAll('.attraction-map-container').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 15);
-                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
             
-            // 3. Single-Point Logistics Maps (Hotels, Car Rentals)
-            document.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
+            // 3. Single-Point Logistics Maps
+            targetDocument.querySelectorAll('.logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 14);
-                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
                 }
             });
 
-            // 4. Route-Based Logistics Maps (Flights, Rides, Ferries, etc.)
-            document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
+            // 4. Route-Based Logistics Maps
+            targetDocument.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
-                mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                 
                 if (mapDiv.dataset.routeGeometry) { // Ride Map
@@ -795,7 +789,7 @@
                     DOM.floatingActionBtn.classList.remove('hidden');
                     
                     if (includeMaps) {
-                        initializeMaps();
+                        initializeMaps(document); // Initialize in main document
                     }
 
                     setStatus('התצוגה המקדימה מוכנה.', false);
@@ -819,7 +813,7 @@
             DOM.printModal.classList.add('hidden');
         }
         
-        // --- FINAL FIX: Force redraw all maps, then wait before printing ---
+        // --- FINAL FIX: The robust iframe printing method ---
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
@@ -827,20 +821,39 @@
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
-            // Give the UI a moment to update and show the loader
-            setTimeout(() => {
-                // Force all maps to re-calculate their size and tiles
-                console.log(`Forcing redraw on ${mapInstances.length} maps...`);
-                mapInstances.forEach(map => {
-                    map.invalidateSize(true);
-                });
+            const printFrame = document.createElement('iframe');
+            printFrame.style.position = 'absolute';
+            printFrame.style.width = '0';
+            printFrame.style.height = '0';
+            printFrame.style.border = '0';
+            document.body.appendChild(printFrame);
 
-                // Wait for a longer period to ensure tiles are loaded after invalidation
+            const frameDoc = printFrame.contentDocument;
+            const frameHead = frameDoc.head;
+            
+            // Copy all styles and links from the main document
+            document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
+                frameHead.appendChild(node.cloneNode(true));
+            });
+            // Add Leaflet JS to the iframe
+            const leafletScript = frameDoc.createElement('script');
+            leafletScript.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+            frameHead.appendChild(leafletScript);
+
+            leafletScript.onload = () => {
+                // Copy the report HTML content
+                frameDoc.body.innerHTML = DOM.previewContainer.innerHTML;
+                
+                // Initialize maps inside the iframe's context
+                initializeMaps(frameDoc);
+
+                // Wait for maps to render, then print
                 setTimeout(() => {
-                    window.print();
-                    closePrintModal(); // Reset modal after print dialog
-                }, 3000); // 3-second delay
-            }, 100); 
+                    printFrame.contentWindow.print();
+                    document.body.removeChild(printFrame);
+                    closePrintModal();
+                }, 4000); // 4 seconds should be safe
+            };
         }
 
         DOM.startPreviewBtn.addEventListener('click', showPreview);
