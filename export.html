@@ -409,6 +409,7 @@
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
+        let mapInstances = []; // <-- NEW: To hold all map objects
 
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -697,11 +698,15 @@
             return html;
         }
 
+        // --- UPDATED: Now populates the mapInstances array ---
         function initializeMaps() {
+            mapInstances = []; // Clear previous instances
+            
             // 1. Trip Route Map
             const tripMapContainer = document.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
+                mapInstances.push(tripMap);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
                 const points = (tripDataCache.tripData.destinations || []).filter(d => d.coords).map(d => [d.coords.lat, d.coords.lng]);
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
@@ -721,6 +726,7 @@
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 15);
+                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
@@ -732,6 +738,7 @@
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv).setView([lat, lng], 14);
+                    mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
                     setTimeout(() => map.invalidateSize(), 100);
@@ -741,6 +748,7 @@
             // 4. Route-Based Logistics Maps (Flights, Rides, Ferries, etc.)
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
+                mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                 
                 if (mapDiv.dataset.routeGeometry) { // Ride Map
@@ -801,34 +809,38 @@
         
         function openPrintModal() { DOM.printModal.classList.remove('hidden'); }
         
-        // --- UPDATED to reset modal state ---
         function closePrintModal() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
             
-            // Reset state before hiding
-            if(modalContent) modalContent.classList.remove('hidden');
-            if(modalLoader) modalLoader.classList.add('hidden');
+            modalContent.classList.remove('hidden');
+            modalLoader.classList.add('hidden');
             
             DOM.printModal.classList.add('hidden');
         }
         
-        // --- UPDATED to add a delay for map rendering ---
+        // --- FINAL FIX: Force redraw all maps, then wait before printing ---
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
 
-            // Show loader and hide the regular content
-            if(modalContent) modalContent.classList.add('hidden');
-            if(modalLoader) modalLoader.classList.remove('hidden');
+            modalContent.classList.add('hidden');
+            modalLoader.classList.remove('hidden');
 
-            // Wait for 2.5 seconds to allow maps to fully render in the print layout, then trigger print
+            // Give the UI a moment to update and show the loader
             setTimeout(() => {
-                window.print();
-                // After the print dialog is handled by the user, close the modal.
-                // The close function will automatically reset the modal's view.
-                closePrintModal();
-            }, 2500); 
+                // Force all maps to re-calculate their size and tiles
+                console.log(`Forcing redraw on ${mapInstances.length} maps...`);
+                mapInstances.forEach(map => {
+                    map.invalidateSize(true);
+                });
+
+                // Wait for a longer period to ensure tiles are loaded after invalidation
+                setTimeout(() => {
+                    window.print();
+                    closePrintModal(); // Reset modal after print dialog
+                }, 3000); // 3-second delay
+            }, 100); 
         }
 
         DOM.startPreviewBtn.addEventListener('click', showPreview);
