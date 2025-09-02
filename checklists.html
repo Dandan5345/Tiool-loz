@@ -200,9 +200,12 @@
                     <label for="note-type-select" class="block text-sm font-bold text-slate-700 mb-2">הקשר ההערה</label>
                     <select id="note-type-select" class="w-full p-3 border border-slate-300 rounded-lg">
                         <option value="">-- בחר --</option>
-                        <option value="לפני הטיול">✈️ כללי - לפני הטיול</option>
-                        <option value="לפני יעד">🗺️ קשור ליעד ספציפי</option>
+                        <option value="לפני הטיול">✈️ לפני הטיול</option>
+                        <option value="לפני יעד">🗺️ לפני יעד</option>
+                        <option value="לפני מעבר">🚚 לפני מעבר</option>
+                        <option value="אחר">📋 אחר</option>
                     </select>
+                    <input type="text" id="note-type-other" class="w-full p-3 border border-slate-300 rounded-lg mt-2 hidden" placeholder="שם מותאם לסוג ההערה" />
                 </div>
                 <div id="note-step-2" class="modal-step"></div> <!-- Dynamic content for destination/topic -->
                 <div id="note-step-content" class="modal-step">
@@ -336,6 +339,7 @@
     const noteModalFinishBtn = document.getElementById('note-modal-finish-btn');
     const noteStepsIndicator = document.getElementById('note-modal-steps-indicator');
     const noteStep2 = document.getElementById('note-step-2');
+    const noteTypeOtherInput = document.getElementById('note-type-other');
 
     
     // --- State ---
@@ -510,7 +514,6 @@
             return;
         }
 
-        // NEW: Color mapping
         const colorMap = {
             red: 'bg-red-100/80 border-red-200',
             blue: 'bg-blue-100/80 border-blue-200',
@@ -522,20 +525,27 @@
 
         const byType = groupBy(notesData, 'type');
         let html = '';
-        for(const type of Object.keys(byType).sort()) {
+        for (const type of Object.keys(byType).sort()) {
             const notesInType = byType[type];
+            const typeEmoji = getEmoji('types', type);
+            html += `<details class="bg-white/90 rounded-xl shadow-md" open>
+            <summary class="text-2xl font-bold text-slate-800 flex justify-between items-center p-5">
+                <span>${typeEmoji} ${type || 'כללי'}</span><i class="fa-solid fa-chevron-down chevron-icon"></i>
+            </summary>
+            <div class="p-4 space-y-4 bg-slate-50/80">`;
+
             const byDest = groupBy(notesInType, 'destination');
-            for(const dest of Object.keys(byDest).sort()) {
+            for (const dest of Object.keys(byDest).sort()) {
                 const notesInDest = byDest[dest];
-                const header = type === 'לפני יעד' ? `יעד: ${dest}` : `${type}`;
-                const emoji = type === 'לפני יעד' ? '🗺️' : '✈️';
+                const isOnlyGeneral = Object.keys(byDest).length === 1 && dest === 'כללי';
                 
-                html += `<details class="bg-white/90 rounded-xl shadow-md" open><summary class="text-xl font-bold text-slate-700 flex justify-between items-center p-4">
-                            <span>${emoji} ${header}</span><i class="fa-solid fa-chevron-down chevron-icon text-lg"></i></summary>
-                            <div class="p-3 pt-3 border-t space-y-3">`;
-                
+                html += `<div class="${isOnlyGeneral ? 'space-y-3' : 'bg-white/90 rounded-xl shadow-md p-4 space-y-3'}">`;
+
+                if (!isOnlyGeneral) {
+                    html += `<h3 class="text-xl font-bold text-slate-700 mb-3">יעד: ${dest}</h3>`;
+                }
+
                 notesInDest.forEach(note => {
-                    // NEW: Apply color classes from map, with a fallback
                     const cardClasses = colorMap[note.color] || colorMap.default;
                     html += `
                         <div class="p-4 rounded-xl shadow-sm border ${cardClasses}">
@@ -550,8 +560,9 @@
                         </div>
                     `;
                 });
-                html += `</div></details>`;
+                html += `</div>`;
             }
+            html += `</div></details>`;
         }
         notesContainer.innerHTML = html;
     }
@@ -642,10 +653,24 @@
         editingNoteId = note ? note.id : null;
         noteModalTitle.textContent = note ? 'עריכת הערה' : 'יצירת הערה חדשה';
         noteTitleInput.value = note?.title || '';
-        noteTypeSelect.value = note?.type || '';
         noteContentTextarea.value = note?.content || '';
+
+        const standardTypeExists = [...noteTypeSelect.options].some(opt => opt.value === note?.type);
         
-        // NEW: Set correct radio button for color
+        if (note && standardTypeExists) {
+            noteTypeSelect.value = note.type;
+            noteTypeOtherInput.classList.add('hidden');
+            noteTypeOtherInput.value = '';
+        } else if (note) { // Custom type
+            noteTypeSelect.value = 'אחר';
+            noteTypeOtherInput.value = note.type;
+            noteTypeOtherInput.classList.remove('hidden');
+        } else { // New note
+            noteTypeSelect.value = '';
+            noteTypeOtherInput.classList.add('hidden');
+            noteTypeOtherInput.value = '';
+        }
+        
         const colorToSelect = note?.color || 'default';
         const colorRadio = document.querySelector(`#note-modal input[name="note-color"][value="${colorToSelect}"]`);
         if (colorRadio) {
@@ -714,8 +739,11 @@
     // --- Note Modal Steps ---
     function updateNoteModalStep(isOpening = false, note = null) {
         const type = noteTypeSelect.value;
-        if (type.includes('יעד')) numNoteQuestionSteps = 3;
-        else numNoteQuestionSteps = 2;
+        if (type === 'לפני יעד' || type === 'לפני מעבר') {
+            numNoteQuestionSteps = 3;
+        } else {
+            numNoteQuestionSteps = 2;
+        }
 
         if (isOpening) currentNoteModalStep = 0;
 
@@ -738,9 +766,10 @@
     function genNoteStep2(note = null) {
         const type = noteTypeSelect.value;
         let html = '';
-        if (type.includes('יעד')) {
+        if (type === 'לפני יעד' || type === 'לפני מעבר') {
             const options = (tripData?.destinations || []).map(d => `<option value="${d.nameHe}" ${note?.destination === d.nameHe ? 'selected' : ''}>${d.nameHe}</option>`).join('');
-            html = `<label class="block text-sm font-bold text-slate-700 mb-2">לאיזה יעד מתייחסת ההערה?</label><select id="note-destination" class="w-full p-3 border rounded-lg">${options}</select>`;
+            const label = type === 'לפני יעד' ? 'לאיזה יעד מתייחסת ההערה?' : 'לאיזה יעד/מעבר מתייחסת ההערה?';
+            html = `<label class="block text-sm font-bold text-slate-700 mb-2">${label}</label><select id="note-destination" class="w-full p-3 border rounded-lg">${options}</select>`;
         }
         noteStep2.innerHTML = html;
     }
@@ -771,10 +800,13 @@
         const content = noteContentTextarea.value.trim();
         if (!title || !content) return alert('יש למלא כותרת ותוכן להערה.');
         
-        const type = noteTypeSelect.value;
-        const destination = type === 'לפני יעד' ? document.getElementById('note-destination')?.value : null;
+        let type = noteTypeSelect.value;
+        if (type === 'אחר') {
+            type = noteTypeOtherInput.value.trim() || 'אחר';
+        }
+        
+        const destination = (noteTypeSelect.value === 'לפני יעד' || noteTypeSelect.value === 'לפני מעבר') ? document.getElementById('note-destination')?.value : null;
 
-        // NEW: Get selected color
         const selectedColor = document.querySelector('#note-modal input[name="note-color"]:checked').value;
 
         const payload = { title, content, type, destination, color: selectedColor, updatedAt: serverTimestamp() };
@@ -834,7 +866,8 @@
     noteModalBackBtn.addEventListener('click', () => { if (currentNoteModalStep > 0) { currentNoteModalStep--; updateNoteModalStep(); }});
     noteModalNextBtn.addEventListener('click', () => { currentNoteModalStep++; updateNoteModalStep(); });
     noteModalFinishBtn.addEventListener('click', finishNoteModal);
-    noteTypeSelect.addEventListener('change', () => {
+    noteTypeSelect.addEventListener('change', (e) => {
+        noteTypeOtherInput.classList.toggle('hidden', e.target.value !== 'אחר');
         updateNoteModalStep();
     });
 
@@ -907,3 +940,4 @@
   </script>
 </body>
 </html>
+
