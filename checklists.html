@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet" />
 
   <style>
-    body { font-family: 'Assistant', sans-serif; background-color: #f0f4f8; }
+    body { font-family: 'Assistant', sans-serif; }
     #sidebar { transition: transform .3s ease-in-out; }
     .submenu { max-height: 0; overflow: hidden; transition: max-height .5s ease-in-out; }
     .submenu.open { max-height: 1200px; }
@@ -37,6 +37,9 @@
 
     .modal-step{display:none}
     .modal-step.active{display:block}
+    
+    .note-modal-step{display:none}
+    .note-modal-step.active{display:block}
 
     /* Loader */
     #loader{position:fixed;inset:0;background:#f0f4f8;display:flex;align-items:center;justify-content:center;z-index:1000;transition:opacity .5s ease}
@@ -46,24 +49,15 @@
         white-space: pre-wrap;
     }
 
-    /* Note background colors */
-    .note-card.bg-note-default { background-color: #ffffff; border-left: 4px solid #64748b; }
-    .note-card.bg-note-blue { background-color: #eff6ff; border-left: 4px solid #3b82f6; }
-    .note-card.bg-note-red { background-color: #fef2f2; border-left: 4px solid #ef4444; }
-    .note-card.bg-note-green { background-color: #f0fdf4; border-left: 4px solid #22c55e; }
-    .note-card.bg-note-orange { background-color: #fff7ed; border-left: 4px solid #f97316; }
-    .note-card.bg-note-yellow { background-color: #fefce8; border-left: 4px solid #eab308; }
-    
-    .color-picker-btn {
-        transition: transform 0.2s, box-shadow 0.2s;
+    /* Color picker styles */
+    .color-swatch {
+        width: 32px; height: 32px; border-radius: 9999px; cursor: pointer; transition: transform .2s; border: 3px solid transparent;
     }
-    .color-picker-btn.selected {
-        transform: scale(1.15);
-        box-shadow: 0 0 0 3px white, 0 0 0 5px currentColor;
-    }
+    .color-swatch:hover { transform: scale(1.1); }
+    .color-swatch.selected { border-color: #0284c7; }
   </style>
 </head>
-<body>
+<body class="bg-slate-100">
   <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image:url('https://i.imgur.com/IrS6mDW.jpeg')"></div>
   <div class="fixed inset-0 z-0 bg-black/50"></div>
 
@@ -100,22 +94,22 @@
             <h2 class="text-5xl font-extrabold text-white drop-shadow-lg">📝 סדר עושים בכיף</h2>
             <p class="mt-3 text-xl text-slate-200 max-w-2xl mx-auto">כל הרשימות, הדגשים וההערות לטיול, מסונכרנות עם כולם בזמן אמת.</p>
             <div class="mt-6 flex justify-center gap-4 flex-wrap">
-              <button id="add-checklist-btn" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105">
+              <button id="add-checklist-btn" class="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:from-blue-600 hover:to-blue-700 transition-transform transform hover:scale-105">
                 <i class="fas fa-plus mr-2"></i> הוספת רשימה חדשה
               </button>
-              <button id="add-note-btn" class="bg-teal-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-teal-700 transition-transform transform hover:scale-105">
+              <button id="add-note-btn" class="bg-gradient-to-br from-teal-500 to-teal-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:from-teal-600 hover:to-teal-700 transition-transform transform hover:scale-105">
                 <i class="fas fa-lightbulb mr-2"></i> הוספת דגש/הערה
               </button>
             </div>
           </div>
           <div id="content-container" class="space-y-8">
-            <!-- Collapsible sections - now closed by default -->
+            <!-- NEW: Collapsible sections are now closed by default (removed 'open' attribute) -->
             <details id="notes-section" class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
                 <summary class="text-3xl font-bold text-slate-800 flex justify-between items-center p-6 bg-white/20 cursor-pointer">
                     <span>💡 דגשים והערות</span>
                     <i class="fa-solid fa-chevron-down chevron-icon"></i>
                 </summary>
-                <div id="notes-container" class="p-4 space-y-4 bg-slate-50/80"></div>
+                <div id="notes-container" class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/80"></div>
             </details>
 
             <details id="checklists-section" class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
@@ -192,41 +186,46 @@
                 <button class="modal-close-btn text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
             <div class="p-6 space-y-6 overflow-y-auto">
-                <!-- Step 0: Note Title -->
-                <div id="note-step-0" class="modal-step">
-                    <label for="note-title-input" class="block text-sm font-bold text-slate-700 mb-2">כותרת הדגש</label>
-                    <input type="text" id="note-title-input" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="לדוגמה: טיפים לתחבורה ציבורית">
+                <!-- Step 0: Note Name (same as checklist name) -->
+                <div id="note-step-0" class="note-modal-step">
+                    <label for="note-name" class="block text-sm font-bold text-slate-700 mb-2">נושא כללי להערה</label>
+                    <input type="text" id="note-name" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="לדוגמה: תחבורה ציבורית ביעד" />
                 </div>
                 <!-- Step 1: Note Type -->
-                <div id="note-step-1" class="modal-step">
-                    <label for="note-type-select" class="block text-sm font-bold text-slate-700 mb-2">הקשר</label>
-                    <select id="note-type-select" class="w-full p-3 border border-slate-300 rounded-lg">
+                <div id="note-step-1" class="note-modal-step">
+                    <label class="block text-sm font-bold text-slate-700 mb-2">סוג ההערה</label>
+                    <select id="note-type" class="w-full p-3 border border-slate-300 rounded-lg">
                         <option value="">-- בחר --</option>
-                        <option value="לפני הטיול">✈️ כללי - לפני הטיול</option>
-                        <option value="לפני יעד">🗺️ קשור ליעד ספציפי</option>
+                        <option value="לפני הטיול">✈️ לפני הטיול</option>
+                        <option value="לפני יעד">🗺️ לפני יעד</option>
+                        <option value="לפני מעבר">🚚 לפני מעבר</option>
                         <option value="אחר">📋 אחר</option>
                     </select>
-                    <input type="text" id="note-type-other" class="w-full p-3 border border-slate-300 rounded-lg mt-2 hidden" placeholder="שם מותאם לסוג ההקשר" />
+                    <input type="text" id="note-type-other" class="w-full p-3 border border-slate-300 rounded-lg mt-2 hidden" placeholder="שם מותאם לסוג ההערה" />
                 </div>
-                <!-- Step 2: Destination or SubType -->
-                <div id="note-step-2" class="modal-step"></div>
-                <!-- Step 3: SubType for Destination -->
-                <div id="note-step-3" class="modal-step"></div>
-                <!-- Final Step: Content & Color -->
-                <div id="note-step-content" class="modal-step space-y-4">
+                <!-- Step 2: Destination / Subtype -->
+                <div id="note-step-2" class="note-modal-step"></div>
+                <!-- Step 3: Subtype for destination -->
+                <div id="note-step-3" class="note-modal-step"></div>
+                <!-- Final Step: Content and Color -->
+                <div id="note-step-final" class="note-modal-step space-y-4">
                     <div>
-                        <label for="note-content-textarea" class="block text-sm font-bold text-slate-700 mb-2">תוכן ההערה</label>
-                        <textarea id="note-content-textarea" rows="8" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="כתבו כאן את כל הפרטים החשובים..."></textarea>
+                        <label for="note-title-input" class="block text-sm font-bold text-slate-700 mb-2">כותרת מפורטת</label>
+                        <input type="text" id="note-title-input" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="לדוגמה: טיפים לרכישת כרטיס יומי">
                     </div>
                     <div>
-                        <label class="block text-sm font-bold text-slate-700 mb-3">בחירת צבע</label>
-                        <div id="note-color-picker" class="flex justify-center gap-4">
-                            <button data-color="default" style="color: #64748b" class="color-picker-btn w-10 h-10 rounded-full bg-white border-2 border-slate-300"></button>
-                            <button data-color="blue" style="color: #3b82f6" class="color-picker-btn w-10 h-10 rounded-full bg-blue-500"></button>
-                            <button data-color="red" style="color: #ef4444" class="color-picker-btn w-10 h-10 rounded-full bg-red-500"></button>
-                            <button data-color="green" style="color: #22c55e" class="color-picker-btn w-10 h-10 rounded-full bg-green-500"></button>
-                            <button data-color="orange" style="color: #f97316" class="color-picker-btn w-10 h-10 rounded-full bg-orange-500"></button>
-                            <button data-color="yellow" style="color: #eab308" class="color-picker-btn w-10 h-10 rounded-full bg-yellow-500"></button>
+                        <label for="note-content-textarea" class="block text-sm font-bold text-slate-700 mb-2">תוכן ההערה</label>
+                        <textarea id="note-content-textarea" rows="6" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="כתבו כאן את כל הפרטים החשובים..."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-2">בחר צבע רקע</label>
+                        <div id="note-color-picker" class="flex items-center justify-center gap-3 pt-2">
+                            <div class="color-swatch bg-sky-200" data-color="bg-sky-100"></div>
+                            <div class="color-swatch bg-red-200" data-color="bg-red-100"></div>
+                            <div class="color-swatch bg-green-200" data-color="bg-green-100"></div>
+                            <div class="color-swatch bg-orange-200" data-color="bg-orange-100"></div>
+                            <div class="color-swatch bg-yellow-200" data-color="bg-yellow-100"></div>
+                            <button id="clear-color-btn" class="p-2 text-slate-500 hover:text-slate-800 text-sm">נקה</button>
                         </div>
                     </div>
                 </div>
@@ -235,7 +234,7 @@
                 <button id="note-modal-back-btn" class="py-2 px-4 rounded-lg hover:bg-slate-200 transition hidden">אחורה</button>
                 <div id="note-modal-steps-indicator" class="text-sm text-slate-500"></div>
                 <button id="note-modal-next-btn" class="py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">הבא</button>
-                <button id="note-finish-btn" class="py-2 px-4 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 transition hidden">שמור הערה</button>
+                <button id="note-modal-finish-btn" class="py-2 px-4 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 transition hidden">שמור הערה</button>
             </div>
         </div>
     </div>
@@ -293,7 +292,7 @@
       location.href = 'index.html';
     }
 
-    // --- DOM Elements ---
+    // --- DOM ---
     const loader = document.getElementById('loader');
     const sidebar = document.getElementById('sidebar');
     const hamburgerBtn = document.getElementById('hamburger-btn');
@@ -314,11 +313,11 @@
     const modalNextBtn = document.getElementById('modal-next-btn');
     const modalFinishBtn = document.getElementById('modal-finish-btn');
     const stepsIndicator = document.getElementById('modal-steps-indicator');
-    const nameInput = document.getElementById('checklist-name');
-    const typeSelect = document.getElementById('checklist-type');
-    const typeOtherInput = document.getElementById('checklist-type-other');
-    const step2 = document.getElementById('step-2');
-    const step3 = document.getElementById('step-3');
+    const checklistNameInput = document.getElementById('checklist-name');
+    const checklistTypeSelect = document.getElementById('checklist-type');
+    const checklistTypeOtherInput = document.getElementById('checklist-type-other');
+    const checklistStep2 = document.getElementById('step-2');
+    const checklistStep3 = document.getElementById('step-3');
     const itemsPreview = document.getElementById('items-preview-container');
     const addItemBtn = document.getElementById('add-item-btn');
 
@@ -327,33 +326,45 @@
     const noteModalTitle = document.getElementById('note-modal-title');
     const noteModalBackBtn = document.getElementById('note-modal-back-btn');
     const noteModalNextBtn = document.getElementById('note-modal-next-btn');
-    const noteModalStepsIndicator = document.getElementById('note-modal-steps-indicator');
-    const noteFinishBtn = document.getElementById('note-finish-btn');
-    const noteTitleInput = document.getElementById('note-title-input');
-    const noteTypeSelect = document.getElementById('note-type-select');
+    const noteModalFinishBtn = document.getElementById('note-modal-finish-btn');
+    const noteStepsIndicator = document.getElementById('note-modal-steps-indicator');
+    const noteNameInput = document.getElementById('note-name');
+    const noteTypeSelect = document.getElementById('note-type');
     const noteTypeOtherInput = document.getElementById('note-type-other');
     const noteStep2 = document.getElementById('note-step-2');
     const noteStep3 = document.getElementById('note-step-3');
+    const noteTitleInput = document.getElementById('note-title-input');
     const noteContentTextarea = document.getElementById('note-content-textarea');
     const noteColorPicker = document.getElementById('note-color-picker');
-    
+    const clearColorBtn = document.getElementById('clear-color-btn');
+
     // --- State ---
     let currentUser = null;
     let tripData = null;
+
     let checklistsData = [];
     let notesData = [];
-    
+    let editingChecklistId = null;
+    let editingNoteId = null;
+
     // Checklist Modal State
     let currentChecklistModalStep = 0;
-    let checklistModalItems = [];
-    let editingChecklistId = null;
+    let modalItems = [];
     let numChecklistQuestionSteps = 0;
 
     // Note Modal State
     let currentNoteModalStep = 0;
-    let editingNoteId = null;
     let numNoteQuestionSteps = 0;
-    let selectedNoteColor = 'default';
+    let selectedNoteColor = null;
+
+    // --- Color mapping ---
+    const noteColorClasses = {
+        'bg-sky-100': { bg: 'bg-sky-100', text: 'text-sky-800', border: 'border-sky-300' },
+        'bg-red-100': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
+        'bg-green-100': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300' },
+        'bg-orange-100': { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-300' },
+        'bg-yellow-100': { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300' },
+    };
 
     // --- Helpers: dates formatting for sidebar ---
     function parseDDMMYYYY(s){ const [d,m,y] = s.split('/').map(Number); return new Date(y, m-1, d); }
@@ -393,7 +404,7 @@
         const wrap = document.createElement('div');
         const btn = document.createElement('button');
         btn.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center';
-        btn.innerHTML = `<span>${dest.nameHe}</span><i class="fas fa-chevron-down"></i>`;
+        btn.innerHTML = `<span>${dest.nameHe}</span><i class="fas fa-chevron-down transition-transform"></i>`;
         const submenu = document.createElement('div');
         submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
         const dates = generateDatesFromRange(dest.dates);
@@ -457,7 +468,7 @@
       }
     }
 
-    // --- Firestore paths & Listeners ---
+    // --- Firestore paths ---
     const checklistsCol = collection(db, 'trips', tripId, 'checklists');
     const notesCol = collection(db, 'trips', tripId, 'notes');
 
@@ -500,45 +511,35 @@
     function renderNotes() {
         if (notesData.length === 0) {
             notesContainer.innerHTML =
-              `<div class="text-center p-16 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm">
-                 <i class="fas fa-folder-open fa-4x text-slate-400 mb-6"></i>
-                 <h3 class="text-2xl font-bold text-slate-700">עדיין אין דגשים...</h3>
-                 <p class="text-slate-500 mt-2">לחצו "הוספת דגש/הערה" כדי להתחיל.</p>
-               </div>`;
+              `<div class="text-center p-16 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm md:col-span-2 lg:col-span-3">
+                  <i class="fas fa-folder-open fa-4x text-slate-400 mb-6"></i>
+                  <h3 class="text-2xl font-bold text-slate-700">עדיין אין דגשים...</h3>
+                  <p class="text-slate-500 mt-2">לחצו "הוספת דגש/הערה" כדי להתחיל.</p>
+                 </div>`;
             return;
         }
 
-        const byType = groupBy(notesData, 'type');
         let html = '';
-        for(const type of Object.keys(byType).sort()) {
-            const notesInType = byType[type];
-            const byDest = groupBy(notesInType, 'destination');
-            for(const dest of Object.keys(byDest).sort()) {
-                const notesInDest = byDest[dest];
-                const header = type === 'לפני יעד' ? `יעד: ${dest}` : `${type}`;
-                const emoji = getEmoji('types', type);
-                
-                html += `<details class="bg-white/90 rounded-xl shadow-md"><summary class="text-xl font-bold text-slate-700 flex justify-between items-center p-4">
-                    <span>${emoji} ${header}</span><i class="fa-solid fa-chevron-down chevron-icon text-lg"></i></summary>
-                    <div class="p-3 pt-3 border-t space-y-3">`;
-                
-                notesInDest.forEach(note => {
-                    html += `
-                        <div class="note-card p-4 rounded-xl shadow-sm bg-note-${note.color || 'default'}">
-                            <div class="flex justify-between items-center mb-3">
-                                <h4 class="text-lg font-bold text-teal-700">${note.title}</h4>
-                                <div>
-                                    <button class="edit-note-btn p-2 text-slate-500 hover:text-blue-600" data-note-id="${note.id}"><i class="fas fa-pencil-alt"></i></button>
-                                    <button class="delete-note-btn p-2 text-slate-500 hover:text-red-600" data-note-id="${note.id}"><i class="fas fa-trash-alt"></i></button>
-                                </div>
+        notesData.forEach(note => {
+            const colorInfo = noteColorClasses[note.color] || { bg: 'bg-white', text: 'text-teal-700', border: 'border-slate-200' };
+            html += `
+                <div class="${colorInfo.bg} p-4 rounded-xl shadow-md border ${colorInfo.border} flex flex-col">
+                    <div class="flex-grow">
+                        <div class="flex justify-between items-start mb-3">
+                            <h4 class="text-lg font-bold ${colorInfo.text}">${note.title}</h4>
+                            <div class="flex-shrink-0">
+                                <button class="edit-note-btn p-2 text-slate-500 hover:text-blue-600" data-note-id="${note.id}"><i class="fas fa-pencil-alt"></i></button>
+                                <button class="delete-note-btn p-2 text-slate-500 hover:text-red-600" data-note-id="${note.id}"><i class="fas fa-trash-alt"></i></button>
                             </div>
-                            <div class="text-slate-700 note-content">${note.content}</div>
                         </div>
-                    `;
-                });
-                html += `</div></details>`;
-            }
-        }
+                        <div class="text-slate-700 note-content">${note.content}</div>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-4 pt-2 border-t border-slate-200/50">
+                        ${note.type || ''} ${note.destination ? `• ${note.destination}` : ''} ${note.subType ? `• ${note.subType}` : ''}
+                    </div>
+                </div>
+            `;
+        });
         notesContainer.innerHTML = html;
     }
 
@@ -558,7 +559,7 @@
       for (const type of Object.keys(byType).sort()){
         const listsInType = byType[type];
         const typeEmoji = getEmoji('types', type);
-        html += `<details class="bg-white/90 rounded-xl shadow-md">
+        html += `<details class="bg-white/90 rounded-xl shadow-md" open>
           <summary class="text-2xl font-bold text-slate-800 flex justify-between items-center p-5">
             <span>${typeEmoji} ${type || 'כללי'}</span><i class="fa-solid fa-chevron-down chevron-icon"></i>
           </summary>
@@ -567,7 +568,7 @@
         for (const dest of Object.keys(byDest).sort()){
           const listsInDest = byDest[dest];
           const isOnlyGeneral = Object.keys(byDest).length===1 && dest==='כללי';
-          html += `<div class="${isOnlyGeneral ? '' : 'bg-white/90 rounded-xl shadow-md p-4'}">`;
+          html += `<div class="${isOnlyGeneral ? '' : 'bg-white/90 rounded-xl shadow-sm p-4'}">`;
           if (!isOnlyGeneral){
             html += `<h3 class="text-xl font-bold text-slate-700 mb-3">יעד: ${dest}</h3>`;
           }
@@ -614,10 +615,10 @@
     function openChecklistModal(list=null){
       editingChecklistId = list ? list.id : null;
       modalTitle.textContent = list ? 'עריכת רשימה' : 'יצירת רשימה חדשה';
-      nameInput.value = list?.name || '';
-      typeSelect.value = list?.type || '';
-      typeOtherInput.classList.toggle('hidden', typeSelect.value !== 'אחר');
-      checklistModalItems = list?.items ? JSON.parse(JSON.stringify(list.items)) : [];
+      checklistNameInput.value = list?.name || '';
+      checklistTypeSelect.value = list?.type || '';
+      checklistTypeOtherInput.classList.toggle('hidden', checklistTypeSelect.value !== 'אחר');
+      modalItems = list?.items ? JSON.parse(JSON.stringify(list.items)) : [];
       renderModalItems();
       currentChecklistModalStep = 0;
       updateChecklistModalStep(true);
@@ -627,20 +628,18 @@
     function openNoteModal(note=null){
         editingNoteId = note ? note.id : null;
         noteModalTitle.textContent = note ? 'עריכת הערה' : 'יצירת הערה חדשה';
-        noteTitleInput.value = note?.title || '';
+        
+        // Populate fields from existing note or clear them
+        noteNameInput.value = note?.name || '';
         noteTypeSelect.value = note?.type || '';
-        noteContentTextarea.value = note?.content || '';
-        selectedNoteColor = note?.color || 'default';
-        
         noteTypeOtherInput.classList.toggle('hidden', noteTypeSelect.value !== 'אחר');
-        
-        // Update color picker UI
-        noteColorPicker.querySelectorAll('button').forEach(btn => {
-            btn.classList.toggle('selected', btn.dataset.color === selectedNoteColor);
-        });
+        noteTitleInput.value = note?.title || '';
+        noteContentTextarea.value = note?.content || '';
+        selectedNoteColor = note?.color || null;
+        updateColorPickerSelection();
 
         currentNoteModalStep = 0;
-        updateNoteModalStep(true); 
+        updateNoteModalStep(true, note);
         noteModal.classList.add('flex'); noteModal.classList.remove('hidden');
     }
     
@@ -649,105 +648,102 @@
         noteModal.classList.add('hidden'); noteModal.classList.remove('flex');
     }
 
+    // --- Dynamic Step Generation (reusable for both modals) ---
+    function generateStepContent(stepNum, type, destinations) {
+        let html = '';
+        if (stepNum === 2) {
+            if (type.includes('הטיול')){
+                html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא</label><select id="modal-subtype" class="w-full p-3 border rounded-lg"><option>👕 בגדים</option><option>📄 מסמכים</option><option>🎟️ הזמנות</option><option>🛒 קניות</option><option>🎒 ציוד</option><option value="אחר">אחר</option></select><input type="text" id="modal-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
+            } else if (type.includes('יעד') || type.includes('מעבר')){
+                const options = (destinations||[]).map(d=>`<option value="${d.nameHe}">${d.nameHe}</option>`).join('');
+                html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר יעד</label><select id="modal-destination" class="w-full p-3 border rounded-lg">${options}</select>`;
+            }
+        } else if (stepNum === 3) {
+            if (type.includes('יעד')){
+                html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא ליעד</label><select id="modal-subtype" class="w-full p-3 border rounded-lg"><option>👕 בגדים</option><option>📄 מסמכים ליעד</option><option>🎒 ציוד נדרש</option><option value="אחר">אחר</option></select><input type="text" id="modal-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
+            } else if (type.includes('מעבר')){
+                html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא למעבר</label><select id="modal-subtype" class="w-full p-3 border rounded-lg"><option>📄 אישורים</option><option>🛒 קניות</option><option>👕 בגדים</option></select>`;
+            }
+        }
+        return html;
+    }
+
+
     // --- Checklist Modal Steps ---
     function updateChecklistModalStep(isOpening=false){
-      const type = typeSelect.value;
+      const type = checklistTypeSelect.value;
       if (type.includes('יעד') || type.includes('מעבר')) numChecklistQuestionSteps = 4;
       else if (type.includes('הטיול')) numChecklistQuestionSteps = 3;
       else numChecklistQuestionSteps = 2;
       if (isOpening) currentChecklistModalStep = 0;
-      checklistModal.querySelectorAll('.modal-step').forEach(s=>s.classList.remove('active'));
+      
+      document.querySelectorAll('.modal-step').forEach(s=>s.classList.remove('active'));
       const isLast = currentChecklistModalStep >= numChecklistQuestionSteps -1;
       const curId = isLast ? 'step-items' : `step-${currentChecklistModalStep}`;
       document.getElementById(curId).classList.add('active');
+
       modalBackBtn.classList.toggle('hidden', currentChecklistModalStep===0);
       modalNextBtn.classList.toggle('hidden', isLast);
       modalFinishBtn.classList.toggle('hidden', !isLast);
       stepsIndicator.textContent = `שלב ${currentChecklistModalStep+1} מתוך ${numChecklistQuestionSteps}`;
-      if (currentChecklistModalStep === 2) genChecklistStep2();
-      if (currentChecklistModalStep === 3) genChecklistStep3();
+      
+      if (currentChecklistModalStep === 1) checklistStep2.innerHTML = generateStepContent(2, type, tripData?.destinations);
+      if (currentChecklistModalStep === 2) checklistStep3.innerHTML = generateStepContent(3, type, tripData?.destinations);
     }
-    function genChecklistStep2(){
-      const type = typeSelect.value;
-      let html = '';
-      if (type.includes('הטיול')){
-        html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא</label><select id="checklist-subtype" class="w-full p-3 border rounded-lg"><option>👕 בגדים</option><option>📄 מסמכים</option><option>🎟️ הזמנות</option><option>🛒 קניות</option><option>🎒 ציוד</option><option value="אחר">אחר</option></select><input type="text" id="checklist-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
-      } else if (type.includes('יעד') || type.includes('מעבר')){
-        const options = (tripData?.destinations||[]).map(d=>`<option value="${d.nameHe}">${d.nameHe}</option>`).join('');
-        html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר יעד</label><select id="checklist-destination" class="w-full p-3 border rounded-lg">${options}</select>`;
-      }
-      step2.innerHTML = html;
+
+    // --- Note Modal Steps ---
+    function updateNoteModalStep(isOpening = false, note = null) {
+        const type = noteTypeSelect.value;
+        if (type.includes('יעד') || type.includes('מעבר')) numNoteQuestionSteps = 4;
+        else if (type.includes('הטיול')) numNoteQuestionSteps = 3;
+        else numNoteQuestionSteps = 2;
+        if (isOpening) currentNoteModalStep = 0;
+
+        document.querySelectorAll('.note-modal-step').forEach(s => s.classList.remove('active'));
+        const isLast = currentNoteModalStep >= numNoteQuestionSteps - 1;
+        const curId = isLast ? 'note-step-final' : `note-step-${currentNoteModalStep}`;
+        document.getElementById(curId).classList.add('active');
+
+        noteModalBackBtn.classList.toggle('hidden', currentNoteModalStep === 0);
+        noteModalNextBtn.classList.toggle('hidden', isLast);
+        noteModalFinishBtn.classList.toggle('hidden', !isLast);
+        noteStepsIndicator.textContent = `שלב ${currentNoteModalStep + 1} מתוך ${numNoteQuestionSteps}`;
+
+        if (currentNoteModalStep === 1) noteStep2.innerHTML = generateStepContent(2, type, tripData?.destinations);
+        if (currentNoteModalStep === 2) noteStep3.innerHTML = generateStepContent(3, type, tripData?.destinations);
+
+        // Pre-select values if editing
+        if (note) {
+            const destSelect = document.getElementById('modal-destination');
+            if (destSelect && note.destination) destSelect.value = note.destination;
+            const subTypeSelect = document.getElementById('modal-subtype');
+            if (subTypeSelect && note.subType) subTypeSelect.value = note.subType;
+        }
     }
-    function genChecklistStep3(){
-      const type = typeSelect.value;
-      let html = '';
-      if (type.includes('יעד')){
-        html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא ליעד</label><select id="checklist-subtype" class="w-full p-3 border rounded-lg"><option>👕 בגדים</option><option>📄 מסמכים ליעד</option><option>🎒 ציוד נדרש</option><option value="אחר">אחר</option></select><input type="text" id="checklist-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
-      } else if (type.includes('מעבר')){
-        html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא למעבר</label><select id="checklist-subtype" class="w-full p-3 border rounded-lg"><option>📄 אישורים</option><option>🛒 קניות</option><option>👕 בגדים</option></select>`;
-      }
-      step3.innerHTML = html;
-    }
+
+
     function renderModalItems(){
-      itemsPreview.innerHTML = checklistModalItems.length===0 ? `<p class="text-center text-slate-500">אין פריטים.</p>` : checklistModalItems.map((it,i)=>`
+      itemsPreview.innerHTML = modalItems.length===0 ? `<p class="text-center text-slate-500">אין פריטים.</p>` : modalItems.map((it,i)=>`
           <div class="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm">
             <span>${it.text} (x${it.quantity||1})</span>
             <button class="remove-item-btn text-red-500 hover:text-red-700" data-index="${i}"><i class="fas fa-times-circle"></i></button>
           </div>`).join('');
     }
 
-    // --- Note Modal Steps ---
-    function updateNoteModalStep(isOpening=false) {
-        const type = noteTypeSelect.value;
-        if (type.includes('יעד')) numNoteQuestionSteps = 4;
-        else if (type.includes('הטיול')) numNoteQuestionSteps = 3;
-        else numNoteQuestionSteps = 2;
-
-        if (isOpening) currentNoteModalStep = 0;
-
-        noteModal.querySelectorAll('.modal-step').forEach(s => s.classList.remove('active'));
-        
-        const isLast = currentNoteModalStep >= numNoteQuestionSteps - 1;
-        const currentStepId = isLast ? 'note-step-content' : `note-step-${currentNoteModalStep}`;
-        document.getElementById(currentStepId).classList.add('active');
-
-        noteModalBackBtn.classList.toggle('hidden', currentNoteModalStep === 0);
-        noteModalNextBtn.classList.toggle('hidden', isLast);
-        noteFinishBtn.classList.toggle('hidden', !isLast);
-        noteModalStepsIndicator.textContent = `שלב ${currentNoteModalStep + 1} מתוך ${numNoteQuestionSteps}`;
-
-        if (currentNoteModalStep === 2) genNoteStep2();
-        if (currentNoteModalStep === 3) genNoteStep3();
-    }
-
-    function genNoteStep2() {
-        const type = noteTypeSelect.value;
-        let html = '';
-        if (type.includes('הטיול')) {
-            html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא</label><select id="note-subtype" class="w-full p-3 border rounded-lg"><option>💡 טיפ כללי</option><option>ℹ️ מידע חשוב</option><option>🔗 קישורים</option><option value="אחר">אחר</option></select><input type="text" id="note-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
-        } else if (type.includes('יעד')) {
-            const options = (tripData?.destinations || []).map(d => `<option value="${d.nameHe}">${d.nameHe}</option>`).join('');
-            html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר יעד</label><select id="note-destination" class="w-full p-3 border rounded-lg">${options}</select>`;
-        }
-        noteStep2.innerHTML = html;
-    }
-
-    function genNoteStep3() {
-        let html = `<label class="block text-sm font-bold text-slate-700 mb-2">בחר נושא לדגש</label><select id="note-subtype" class="w-full p-3 border rounded-lg"><option>🏨 לינה</option><option>🍔 אוכל</option><option>🚗 תחבורה</option><option>📍 אתרים</option><option value="אחר">אחר</option></select><input type="text" id="note-subtype-other" class="w-full p-3 border rounded-lg mt-2 hidden" placeholder="נושא מותאם" />`;
-        noteStep3.innerHTML = html;
-    }
-
-
-    // --- Finish Modals (Save to Firestore) ---
     async function finishChecklistModal(){
-      const name = nameInput.value.trim();
+      const name = checklistNameInput.value.trim();
       if (!name) return alert('יש להזין שם לרשימה.');
-      let type = typeSelect.value;
-      if (type === 'אחר') type = typeOtherInput.value.trim() || 'אחר';
-      let subType = checklistModal.querySelector('#checklist-subtype')?.value || null;
-      if (subType === 'אחר') subType = checklistModal.querySelector('#checklist-subtype-other')?.value || 'אחר';
-      let destination = checklistModal.querySelector('#checklist-destination')?.value || null;
-      const payload = { name, type, destination, subType, items: checklistModalItems, updatedAt: serverTimestamp() };
+      let type = checklistTypeSelect.value;
+      if (type === 'אחר') type = checklistTypeOtherInput.value.trim() || 'אחר';
+      
+      const subTypeEl = checklistModal.querySelector('#modal-subtype');
+      let subType = subTypeEl?.value || null;
+      if (subType === 'אחר') subType = checklistModal.querySelector('#modal-subtype-other')?.value || 'אחר';
+      
+      const destEl = checklistModal.querySelector('#modal-destination');
+      let destination = destEl?.value || null;
+
+      const payload = { name, type, destination, subType, items: modalItems, updatedAt: serverTimestamp() };
       try{
         if (editingChecklistId){
           await updateDoc(doc(db,'trips', tripId, 'checklists', editingChecklistId), payload);
@@ -764,15 +760,18 @@
         const content = noteContentTextarea.value.trim();
         if (!title || !content) return alert('יש למלא כותרת ותוכן להערה.');
         
+        const name = noteNameInput.value.trim();
         let type = noteTypeSelect.value;
         if (type === 'אחר') type = noteTypeOtherInput.value.trim() || 'אחר';
-        
-        let subType = noteModal.querySelector('#note-subtype')?.value || null;
-        if (subType === 'אחר') subType = noteModal.querySelector('#note-subtype-other')?.value.trim() || 'אחר';
 
-        let destination = noteModal.querySelector('#note-destination')?.value || null;
+        const subTypeEl = noteModal.querySelector('#modal-subtype');
+        let subType = subTypeEl?.value || null;
+        if (subType === 'אחר') subType = noteModal.querySelector('#modal-subtype-other')?.value || 'אחר';
+      
+        const destEl = noteModal.querySelector('#modal-destination');
+        let destination = destEl?.value || null;
 
-        const payload = { title, content, type, subType, destination, color: selectedNoteColor, updatedAt: serverTimestamp() };
+        const payload = { name, title, content, type, destination, subType, color: selectedNoteColor, updatedAt: serverTimestamp() };
         
         try {
             if (editingNoteId) {
@@ -783,6 +782,12 @@
             }
             closeModal();
         } catch(e) { console.error(e); alert('שגיאה בשמירת ההערה.'); }
+    }
+    
+    function updateColorPickerSelection() {
+        document.querySelectorAll('#note-color-picker .color-swatch').forEach(swatch => {
+            swatch.classList.toggle('selected', swatch.dataset.color === selectedNoteColor);
+        });
     }
 
     // --- Events ---
@@ -799,20 +804,20 @@
     modalBackBtn.addEventListener('click', ()=>{ if (currentChecklistModalStep>0){ currentChecklistModalStep--; updateChecklistModalStep(); }});
     modalNextBtn.addEventListener('click', ()=>{ currentChecklistModalStep++; updateChecklistModalStep(); });
     modalFinishBtn.addEventListener('click', finishChecklistModal);
-    typeSelect.addEventListener('change', (e)=>{
-      typeOtherInput.classList.toggle('hidden', e.target.value!=='אחר');
+    checklistTypeSelect.addEventListener('change', (e)=>{
+      checklistTypeOtherInput.classList.toggle('hidden', e.target.value!=='אחר');
       updateChecklistModalStep();
     });
     checklistModal.addEventListener('change', e=>{
-      if (e.target.id==='checklist-subtype'){
-        const other = document.getElementById('checklist-subtype-other');
+      if (e.target.id==='modal-subtype'){
+        const other = checklistModal.querySelector('#modal-subtype-other');
         if (other) other.classList.toggle('hidden', e.target.value!=='אחר');
       }
     });
     addItemBtn.addEventListener('click', ()=>{
       const t = document.getElementById('item-text');
       if (!t.value.trim()) return;
-      checklistModalItems.push({ text: t.value.trim(), quantity: Number(document.getElementById('item-quantity').value || 1), description: document.getElementById('item-description').value.trim(), priority: Number(document.getElementById('item-priority').value || 2), checked: false });
+      modalItems.push({ text: t.value.trim(), quantity: Number(document.getElementById('item-quantity').value || 1), description: document.getElementById('item-description').value.trim(), priority: Number(document.getElementById('item-priority').value || 2), checked: false });
       renderModalItems();
       ['item-text','item-description'].forEach(id=>document.getElementById(id).value='');
       document.getElementById('item-quantity').value = 1;
@@ -821,32 +826,35 @@
     itemsPreview.addEventListener('click', e=>{
       const btn = e.target.closest('.remove-item-btn');
       if (!btn) return;
-      checklistModalItems.splice(Number(btn.dataset.index),1);
+      modalItems.splice(Number(btn.dataset.index),1);
       renderModalItems();
     });
 
     // Note modal events
-    noteModalBackBtn.addEventListener('click', () => { if (currentNoteModalStep > 0) { currentNoteModalStep--; updateNoteModalStep(); }});
+    noteModalBackBtn.addEventListener('click', () => { if (currentNoteModalStep > 0) { currentNoteModalStep--; updateNoteModalStep(); } });
     noteModalNextBtn.addEventListener('click', () => { currentNoteModalStep++; updateNoteModalStep(); });
-    noteFinishBtn.addEventListener('click', finishNoteModal);
+    noteModalFinishBtn.addEventListener('click', finishNoteModal);
     noteTypeSelect.addEventListener('change', e => {
         noteTypeOtherInput.classList.toggle('hidden', e.target.value !== 'אחר');
         updateNoteModalStep();
     });
     noteModal.addEventListener('change', e => {
-        if (e.target.id === 'note-subtype') {
-            const other = document.getElementById('note-subtype-other');
-            if (other) other.classList.toggle('hidden', e.target.value !== 'אחר');
-        }
+      if (e.target.id==='modal-subtype'){
+        const other = noteModal.querySelector('#modal-subtype-other');
+        if (other) other.classList.toggle('hidden', e.target.value!=='אחר');
+      }
     });
     noteColorPicker.addEventListener('click', e => {
-        const btn = e.target.closest('button');
-        if (!btn) return;
-        selectedNoteColor = btn.dataset.color;
-        noteColorPicker.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
+        const swatch = e.target.closest('.color-swatch');
+        if (swatch) {
+            selectedNoteColor = swatch.dataset.color;
+            updateColorPickerSelection();
+        }
     });
-
+    clearColorBtn.addEventListener('click', () => {
+        selectedNoteColor = null;
+        updateColorPickerSelection();
+    });
 
     // Delegated events for content containers
     checklistsContainer.addEventListener('change', async e=>{
