@@ -45,6 +45,22 @@
     .note-content {
         white-space: pre-wrap;
     }
+
+    /* NEW: Custom radio buttons for colors */
+    .color-radio-label {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 3px solid transparent;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    input[type="radio"]:checked + .color-radio-label {
+      transform: scale(1.1);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      border-color: #3b82f6; /* Blue-500 for selection indication */
+    }
   </style>
 </head>
 <body class="bg-slate-50">
@@ -192,6 +208,30 @@
                 <div id="note-step-content" class="modal-step">
                     <label for="note-content-textarea" class="block text-sm font-bold text-slate-700 mb-2">תוכן ההערה</label>
                     <textarea id="note-content-textarea" rows="8" class="w-full p-3 border border-slate-300 rounded-lg" placeholder="כתבו כאן את כל הפרטים החשובים..."></textarea>
+                    
+                    <!-- NEW: Color selection -->
+                    <div class="mt-4">
+                        <label class="block text-sm font-bold text-slate-700 mb-3">בחר צבע לדגש</label>
+                        <div class="flex items-center justify-center gap-4 flex-wrap">
+                            <input type="radio" name="note-color" value="default" id="color-default" class="sr-only" checked>
+                            <label for="color-default" class="color-radio-label bg-white border-slate-300" title="רגיל"></label>
+                            
+                            <input type="radio" name="note-color" value="red" id="color-red" class="sr-only">
+                            <label for="color-red" class="color-radio-label bg-red-100" title="אדום"></label>
+
+                            <input type="radio" name="note-color" value="blue" id="color-blue" class="sr-only">
+                            <label for="color-blue" class="color-radio-label bg-blue-100" title="כחול"></label>
+
+                            <input type="radio" name="note-color" value="green" id="color-green" class="sr-only">
+                            <label for="color-green" class="color-radio-label bg-green-100" title="ירוק"></label>
+                            
+                            <input type="radio" name="note-color" value="yellow" id="color-yellow" class="sr-only">
+                            <label for="color-yellow" class="color-radio-label bg-yellow-100" title="צהוב"></label>
+                            
+                            <input type="radio" name="note-color" value="orange" id="color-orange" class="sr-only">
+                            <label for="color-orange" class="color-radio-label bg-orange-100" title="כתום"></label>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="p-4 bg-slate-100 border-t flex justify-between items-center rounded-b-2xl">
@@ -470,6 +510,16 @@
             return;
         }
 
+        // NEW: Color mapping
+        const colorMap = {
+            red: 'bg-red-100/80 border-red-200',
+            blue: 'bg-blue-100/80 border-blue-200',
+            green: 'bg-green-100/80 border-green-200',
+            yellow: 'bg-yellow-100/80 border-yellow-200',
+            orange: 'bg-orange-100/80 border-orange-200',
+            default: 'bg-white/80 border-slate-200',
+        };
+
         const byType = groupBy(notesData, 'type');
         let html = '';
         for(const type of Object.keys(byType).sort()) {
@@ -481,12 +531,14 @@
                 const emoji = type === 'לפני יעד' ? '🗺️' : '✈️';
                 
                 html += `<details class="bg-white/90 rounded-xl shadow-md" open><summary class="text-xl font-bold text-slate-700 flex justify-between items-center p-4">
-                        <span>${emoji} ${header}</span><i class="fa-solid fa-chevron-down chevron-icon text-lg"></i></summary>
-                        <div class="p-3 pt-3 border-t space-y-3">`;
+                            <span>${emoji} ${header}</span><i class="fa-solid fa-chevron-down chevron-icon text-lg"></i></summary>
+                            <div class="p-3 pt-3 border-t space-y-3">`;
                 
                 notesInDest.forEach(note => {
+                    // NEW: Apply color classes from map, with a fallback
+                    const cardClasses = colorMap[note.color] || colorMap.default;
                     html += `
-                        <div class="bg-white/80 p-4 rounded-xl shadow-sm border border-slate-200">
+                        <div class="p-4 rounded-xl shadow-sm border ${cardClasses}">
                             <div class="flex justify-between items-start mb-3">
                                 <h4 class="text-lg font-bold text-teal-700">${note.title}</h4>
                                 <div class="flex-shrink-0">
@@ -593,6 +645,13 @@
         noteTypeSelect.value = note?.type || '';
         noteContentTextarea.value = note?.content || '';
         
+        // NEW: Set correct radio button for color
+        const colorToSelect = note?.color || 'default';
+        const colorRadio = document.querySelector(`#note-modal input[name="note-color"][value="${colorToSelect}"]`);
+        if (colorRadio) {
+            colorRadio.checked = true;
+        }
+
         currentNoteModalStep = 0;
         updateNoteModalStep(true, note);
         noteModal.classList.add('flex'); noteModal.classList.remove('hidden');
@@ -715,7 +774,10 @@
         const type = noteTypeSelect.value;
         const destination = type === 'לפני יעד' ? document.getElementById('note-destination')?.value : null;
 
-        const payload = { title, content, type, destination, updatedAt: serverTimestamp() };
+        // NEW: Get selected color
+        const selectedColor = document.querySelector('#note-modal input[name="note-color"]:checked').value;
+
+        const payload = { title, content, type, destination, color: selectedColor, updatedAt: serverTimestamp() };
         
         try {
             if (editingNoteId) {
