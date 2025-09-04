@@ -146,7 +146,7 @@
             border-right: 3px solid #60a5fa;
         }
 
-        /* --- Checklists --- */
+        /* --- Checklists & Notes --- */
         .checklist-container { break-inside: avoid; margin-bottom: 20px; }
         .checklist-type-title { font-size: 18pt; font-weight: 700; color: #1e3a8a; background-color: #e0f2fe; padding: 10px; border-radius: 6px; margin-top: 15px; }
         .checklist-dest-title { font-size: 15pt; font-weight: 600; color: #1e40af; margin-top: 15px; padding-right: 8px; border-right: 2px solid #93c5fd; }
@@ -185,15 +185,17 @@
 
         .notes-section { margin-top: 30px; }
         .notes-section h4 { font-size: 14pt; font-weight: 700; margin-bottom: 10px; }
+        /* Style for both daily and general notes */
         .note-item {
-            border-right-width: 5px; padding: 10px 12px; margin-bottom: 8px;
+            padding: 10px 12px; margin-bottom: 8px;
             border-radius: 4px; break-inside: avoid; border: 1px solid #e2e8f0;
+            border-right: 5px solid #94a3b8; /* Default color */
         }
         .note-item strong { display: block; margin-bottom: 4px; font-size: 11pt; }
         .note-item p { white-space: pre-wrap; font-size: 10pt; margin: 0; }
-        .note-color-red { border-right-color: #ef4444; } .note-color-green { border-right-color: #22c55e; }
-        .note-color-blue { border-right-color: #3b82f6; } .note-color-yellow { border-right-color: #eab308; }
-        .note-color-orange { border-right-color: #f97316; }
+        .note-color-red { border-right-color: #ef4444 !important; } .note-color-green { border-right-color: #22c55e !important; }
+        .note-color-blue { border-right-color: #3b82f6 !important; } .note-color-yellow { border-right-color: #eab308 !important; }
+        .note-color-orange { border-right-color: #f97316 !important; }
 
         /* --- ADDED FOR MAPS: Map container styles --- */
         .map-container {
@@ -330,7 +332,7 @@
     <div id="preview-wrapper" class="hidden relative z-20">
          <div id="preview-container"></div>
          <button id="floating-action-btn" class="hidden action-btn fixed bottom-6 left-6 bg-red-500 hover:bg-red-600 text-white font-bold w-16 h-16 rounded-full shadow-lg z-50 flex items-center justify-center" title="הדפסה או שמירה כקובץ">
-            <i class="fas fa-print fa-xl"></i>
+             <i class="fas fa-print fa-xl"></i>
         </button>
     </div>
 
@@ -472,19 +474,32 @@
 
             setStatus('טוען את כל נתוני הטיול...', true);
             const tripRef = doc(db, 'trips', tripId);
-            const collectionsToFetch = ['logistics', 'places', 'checklists', 'schedules'];
+            
+            // --- UPDATED: Added 'notes' to the collections to fetch ---
+            const collectionsToFetch = ['logistics', 'places', 'checklists', 'notes', 'schedules'];
+
             const [tripSnap, ...collectionsSnaps] = await Promise.all([
                 getDoc(tripRef),
-                ...collectionsToFetch.map(c => getDocs(query(collection(db, 'trips', tripId, c), orderBy('createdAt'))))
+                ...collectionsToFetch.map(c => {
+                    const collRef = collection(db, 'trips', tripId, c);
+                    // Schedules don't have createdAt and should be ordered by ID, others can use createdAt.
+                    const q = (c === 'schedules') 
+                        ? query(collRef)
+                        : query(collRef, orderBy('createdAt'));
+                    return getDocs(q);
+                })
             ]);
+
             const allData = {
                 tripData: tripSnap.data(),
                 logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
                 places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
                 checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
+                notes: collectionsSnaps[3].docs.map(d => ({ id: d.id, ...d.data() })), // <-- NEW
                 schedules: []
             };
-            const scheduleDocs = collectionsSnaps[3].docs;
+
+            const scheduleDocs = collectionsSnaps[4].docs; // <-- UPDATED index
             for (const scheduleDoc of scheduleDocs) {
                 const dayData = { id: scheduleDoc.id, ...scheduleDoc.data() };
                 const [itemsSnap, notesSnap] = await Promise.all([
@@ -539,7 +554,8 @@
 
         function renderReportHtml(data, includeMaps) {
             let html = '<div class="report-page">';
-            const { tripData, logistics, places, checklists, schedules } = data;
+            // --- UPDATED: Destructure 'notes' as well ---
+            const { tripData, logistics, places, checklists, schedules, notes } = data;
             
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
             
@@ -586,51 +602,51 @@
             if (transports.length) {
                  html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> תחבורה והתניידות</h3>`;
                  transports.forEach(item => {
-                    let cardHtml = `<div class="info-card">`;
-                    switch (item.type) {
-                        case 'flight':
-                             const from = item.from || {}; const to = item.to || {};
-                             const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
-                             cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline)} - ${sanitize(item.flight_number)}</span><span class="flight-path">${sanitize(from.destination)} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination)}</span></h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.dates)}${detailItem('fa-plane-departure', 'שעת המראה', item.departure_time)}${detailItem('fa-plane-arrival', 'שעת נחיתה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}${detailItem('fa-suitcase', 'כבודה', luggage)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
-                             if (includeMaps && from.coords && to.coords) {
-                                cardHtml += `<div id="map-flight-${item.id}" class="map-container logistics-map-container"
-                                                data-from-lat="${from.coords.lat}" data-from-lng="${from.coords.lng}" data-from-name="${sanitize(from.destination || 'Origin')}"
-                                                data-to-lat="${to.coords.lat}" data-to-lng="${to.coords.lng}" data-to-name="${sanitize(to.destination || 'Destination')}"></div>`;
-                             }
-                             break;
-                        case 'ride':
-                            cardHtml += `<h4>הסעה: ${sanitize(item.from_address?.split(',')[0] || '')} ← ${sanitize(item.to_address?.split(',')[0] || '')}</h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-user-tie', 'שם נהג', item.driver_name)}${detailItem('fa-phone', 'טלפון נהג', item.driver_phone)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '0')}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
-                             if (includeMaps && item.route_geometry) {
-                                const geometryStr = typeof item.route_geometry === 'string' ? item.route_geometry : JSON.stringify(item.route_geometry);
-                                cardHtml += `<div id="map-ride-${item.id}" class="map-container logistics-map-container"
-                                               data-route-geometry='${sanitize(geometryStr)}'
-                                               data-from-lat="${item.from_coords?.lat}" data-from-lng="${item.from_coords?.lon}" data-from-name="${sanitize(item.from_address)}"
-                                               data-to-lat="${item.to_coords?.lat}" data-to-lng="${item.to_coords?.lon}" data-to-name="${sanitize(item.to_address)}"></div>`;
-                             }
-                             break;
-                        case 'car_rental':
-                            cardHtml += `<h4>רכב שכור ב${sanitize(item.destination)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-clock', 'שעת החזרה', item.return_time)}${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}${detailItem('fa-car-side', 'סוג רכב', item.car_type)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}</div>`;
-                             if (includeMaps && item.coords) {
-                                cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
-                                               data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location || 'Pickup')}"></div>`;
-                             }
-                             break;
-                        case 'ferry':
-                        case 'train':
-                             const isFerry = item.type === 'ferry';
-                             const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
-                             cardHtml += `<h4>${title}</h4><div class="card-grid">${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}</div>`;
-                             if (includeMaps && item.from_coords && item.to_coords) {
-                                const fromName = isFerry ? item.from_destination : item.from_station;
-                                const toName = isFerry ? item.to_destination : item.to_station;
-                                cardHtml += `<div id="map-transport-${item.id}" class="map-container logistics-map-container"
-                                                  data-from-lat="${item.from_coords.lat}" data-from-lng="${item.from_coords.lng}" data-from-name="${sanitize(fromName)}"
-                                                  data-to-lat="${item.to_coords.lat}" data-to-lng="${item.to_coords.lng}" data-to-name="${sanitize(toName)}"></div>`;
-                             }
-                             break;
-                    }
-                     cardHtml += `</div>`;
-                     html += cardHtml;
+                     let cardHtml = `<div class="info-card">`;
+                     switch (item.type) {
+                         case 'flight':
+                                const from = item.from || {}; const to = item.to || {};
+                                const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
+                                cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline)} - ${sanitize(item.flight_number)}</span><span class="flight-path">${sanitize(from.destination)} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination)}</span></h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.dates)}${detailItem('fa-plane-departure', 'שעת המראה', item.departure_time)}${detailItem('fa-plane-arrival', 'שעת נחיתה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}${detailItem('fa-suitcase', 'כבודה', luggage)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
+                                if (includeMaps && from.coords && to.coords) {
+                                    cardHtml += `<div id="map-flight-${item.id}" class="map-container logistics-map-container"
+                                                     data-from-lat="${from.coords.lat}" data-from-lng="${from.coords.lng}" data-from-name="${sanitize(from.destination || 'Origin')}"
+                                                     data-to-lat="${to.coords.lat}" data-to-lng="${to.coords.lng}" data-to-name="${sanitize(to.destination || 'Destination')}"></div>`;
+                                }
+                                break;
+                         case 'ride':
+                                cardHtml += `<h4>הסעה: ${sanitize(item.from_address?.split(',')[0] || '')} ← ${sanitize(item.to_address?.split(',')[0] || '')}</h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-user-tie', 'שם נהג', item.driver_name)}${detailItem('fa-phone', 'טלפון נהג', item.driver_phone)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '0')}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
+                                 if (includeMaps && item.route_geometry) {
+                                     const geometryStr = typeof item.route_geometry === 'string' ? item.route_geometry : JSON.stringify(item.route_geometry);
+                                     cardHtml += `<div id="map-ride-${item.id}" class="map-container logistics-map-container"
+                                                      data-route-geometry='${sanitize(geometryStr)}'
+                                                      data-from-lat="${item.from_coords?.lat}" data-from-lng="${item.from_coords?.lon}" data-from-name="${sanitize(item.from_address)}"
+                                                      data-to-lat="${item.to_coords?.lat}" data-to-lng="${item.to_coords?.lon}" data-to-name="${sanitize(item.to_address)}"></div>`;
+                                 }
+                                break;
+                         case 'car_rental':
+                                cardHtml += `<h4>רכב שכור ב${sanitize(item.destination)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-clock', 'שעת החזרה', item.return_time)}${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}${detailItem('fa-car-side', 'סוג רכב', item.car_type)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}</div>`;
+                                 if (includeMaps && item.coords) {
+                                     cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
+                                                      data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location || 'Pickup')}"></div>`;
+                                 }
+                                break;
+                         case 'ferry':
+                         case 'train':
+                                const isFerry = item.type === 'ferry';
+                                const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
+                                cardHtml += `<h4>${title}</h4><div class="card-grid">${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}</div>`;
+                                if (includeMaps && item.from_coords && item.to_coords) {
+                                    const fromName = isFerry ? item.from_destination : item.from_station;
+                                    const toName = isFerry ? item.to_destination : item.to_station;
+                                    cardHtml += `<div id="map-transport-${item.id}" class="map-container logistics-map-container"
+                                                       data-from-lat="${item.from_coords.lat}" data-from-lng="${item.from_coords.lng}" data-from-name="${sanitize(fromName)}"
+                                                       data-to-lat="${item.to_coords.lat}" data-to-lng="${item.to_coords.lng}" data-to-name="${sanitize(toName)}"></div>`;
+                                }
+                                break;
+                     }
+                      cardHtml += `</div>`;
+                      html += cardHtml;
                  });
             }
 
@@ -640,11 +656,32 @@
                     html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div></div>`; 
                     if (includeMaps && item.coords) {
                          html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container"
-                                     data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
+                                      data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
                     }
                 });
             }
-            
+
+            // --- NEW SECTION: General Notes & Highlights ---
+            if (notes && notes.length > 0) {
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-lightbulb"></i> דגשים והערות</h3>`;
+                const notesByType = groupBy(notes, 'type');
+                Object.keys(notesByType).sort().forEach(type => {
+                    html += `<div class="checklist-type-title">${sanitize(type || 'כללי')}</div>`;
+                    const notesInType = notesByType[type];
+                    const notesByDest = groupBy(notesInType, 'destination');
+                     Object.keys(notesByDest).sort().forEach(dest => {
+                        if (dest !== 'כללי') html += `<div class="checklist-dest-title">יעד: ${sanitize(dest)}</div>`;
+                        notesByDest[dest].forEach(note => {
+                            const colorClass = note.color && note.color !== 'default' ? `note-color-${note.color}` : '';
+                            html += `<div class="note-item ${colorClass}">
+                                <strong class="rtl-force">${sanitize(note.title)}</strong>
+                                <p class="rtl-force">${sanitize(note.content)}</p>
+                            </div>`;
+                        });
+                    });
+                });
+            }
+
             if (places.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
                 Object.keys(attractionsByType).forEach(type => {
@@ -655,29 +692,6 @@
                             html += `<div id="map-${place.id}" class="map-container attraction-map-container" data-lat="${place.coords.lat}" data-lng="${place.coords.lng}" data-name="${sanitize(place.name)}"></div>`;
                         }
                         html += `</div>`;
-                    });
-                });
-            }
-
-            if (checklists.length > 0) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i> רשימות ציוד</h3>`;
-                const byType = groupBy(checklists, 'type');
-                Object.keys(byType).sort().forEach(type => {
-                    html += `<div class="checklist-type-title">${sanitize(type)}</div>`;
-                    const byDest = groupBy(byType[type], 'destination');
-                    Object.keys(byDest).sort().forEach(dest => {
-                        if (dest !== 'כללי') html += `<div class="checklist-dest-title">יעד: ${sanitize(dest)}</div>`;
-                        byDest[dest].forEach(list => {
-                            html += `<div class="checklist-container"><div class="checklist-list-title">${sanitize(list.name)}</div>`;
-                            const sortedItems = (list.items || []).slice().sort((a,b) => (b.priority || 0) - (a.priority || 0));
-                            sortedItems.forEach(item => {
-                                const checkbox = item.checked ? '☑' : '☐';
-                                const checkedClass = item.checked ? 'item-checked' : '';
-                                const descHtml = item.description ? `<p class="item-description rtl-force">${sanitize(item.description)}</p>` : '';
-                                html += `<div class="checklist-item priority-${item.priority || 1} ${checkedClass}"><span class="checkbox">${checkbox}</span><div class="item-details"><span class="item-text rtl-force">${sanitize(item.text)} (כמות: ${item.quantity || 1})</span>${descHtml}</div></div>`;
-                            });
-                            html += `</div>`;
-                        });
                     });
                 });
             }
@@ -707,6 +721,31 @@
                     }
                 });
             }
+
+            // --- MOVED & UPDATED: Checklists section now appears at the end ---
+            if (checklists.length > 0) {
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i> רשימות וציוד</h3>`;
+                const byType = groupBy(checklists, 'type');
+                Object.keys(byType).sort().forEach(type => {
+                    html += `<div class="checklist-type-title">${sanitize(type)}</div>`;
+                    const byDest = groupBy(byType[type], 'destination');
+                    Object.keys(byDest).sort().forEach(dest => {
+                        if (dest !== 'כללי') html += `<div class="checklist-dest-title">יעד: ${sanitize(dest)}</div>`;
+                        byDest[dest].forEach(list => {
+                            html += `<div class="checklist-container"><div class="checklist-list-title">${sanitize(list.name)}</div>`;
+                            const sortedItems = (list.items || []).slice().sort((a,b) => (b.priority || 0) - (a.priority || 0));
+                            sortedItems.forEach(item => {
+                                const checkbox = item.checked ? '☑' : '☐';
+                                const checkedClass = item.checked ? 'item-checked' : '';
+                                const descHtml = item.description ? `<p class="item-description rtl-force">${sanitize(item.description)}</p>` : '';
+                                html += `<div class="checklist-item priority-${item.priority || 1} ${checkedClass}"><span class="checkbox">${checkbox}</span><div class="item-details"><span class="item-text rtl-force">${sanitize(item.text)} (כמות: ${item.quantity || 1})</span>${descHtml}</div></div>`;
+                            });
+                            html += `</div>`;
+                        });
+                    });
+                });
+            }
+
             html += '</div>';
             return html;
         }
@@ -868,4 +907,3 @@
     </script>
 </body>
 </html>
-
