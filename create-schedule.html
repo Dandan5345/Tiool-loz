@@ -422,7 +422,7 @@
         </div>
         <div class="flex gap-2">
           <button id="view-verify" class="px-3 py-2 rounded-lg bg-red-600 text-white hidden"><i class="fa-solid fa-triangle-exclamation"></i> אמת עכשיו</button>
-          <button id="view-edit"  class="px-3 py-2 rounded-lg bg-amber-500 text-white"><i class="fa-solid fa-pen"></i> ערוך</button>
+          <button id="view-edit"   class="px-3 py-2 rounded-lg bg-amber-500 text-white"><i class="fa-solid fa-pen"></i> ערוך</button>
           <button id="view-delete" class="px-3 py-2 rounded-lg bg-red-600 text-white"><i class="fa-solid fa-trash"></i> מחק</button>
         </div>
       </footer>
@@ -758,8 +758,8 @@
     let pickedNoteColor = 'yellow';
     let editingNoteId = null;
     let user=null, tripData=null;
-    let selectedDate = urlDate || null;
-    let selectedDest = null;
+    let selectedDate = null; // *** BUGFIX: Initialize to null, will be set in onAuthStateChanged
+    let selectedDestName = null; // *** BUGFIX: Add state for destination name
     let dayDocId=null, dayDocRef=null;
     let dayTitle=null;
     let items=[], notes=[];
@@ -776,11 +776,11 @@
     const minutesFromHHMM = (hhmm)=>{ const [h,m]=(hhmm||'00:00').split(':').map(Number); return h*60+m; };
     const haversineMeters = (a,b) => { const R=6371000, t=x=>x*Math.PI/180; const dLa=t(b.lat-a.lat), dLo=t(b.lng-a.lng); const s1=Math.sin(dLa/2)**2 + Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(s1)); };
     const colorMap = {
-      red:    {bg:'bg-red-50',    border:'border-red-300',    text:'text-red-800'},
-      green:  {bg:'bg-green-50',  border:'border-green-300',  text:'text-green-800'},
-      blue:   {bg:'bg-blue-50',   border:'border-blue-300',   text:'text-blue-800'},
-      yellow: {bg:'bg-yellow-50', border:'border-yellow-300', text:'text-yellow-800'},
-      orange: {bg:'bg-orange-50', border:'border-orange-300', text:'text-orange-800'},
+      red:     {bg:'bg-red-50',    border:'border-red-300',    text:'text-red-800'},
+      green:   {bg:'bg-green-50',  border:'border-green-300',  text:'text-green-800'},
+      blue:    {bg:'bg-blue-50',   border:'border-blue-300',   text:'text-blue-800'},
+      yellow:  {bg:'bg-yellow-50', border:'border-yellow-300', text:'text-yellow-800'},
+      orange:  {bg:'bg-orange-50', border:'border-orange-300', text:'text-orange-800'},
     };
     
     // *** NEW: Confirmation Modal Logic ***
@@ -803,6 +803,7 @@
         confirmModal.classList.remove('show');
     });
 
+    // *** BUGFIX: Major change in initial loading logic ***
     onAuthStateChanged(auth, async (u)=>{
       if (!u){ location.href='login.html'; return; }
       user=u;
@@ -818,13 +819,34 @@
       }
 
       buildDateSelector();
-      if (!selectedDate){
-        const first = tripData.destinations?.[0]?.dates?.split(' - ')?.[0];
-        selectedDate = first || null;
+
+      let initialDate = urlDate;
+      let initialDestName = null;
+
+      // Try to find destination for the date from URL
+      if (initialDate) {
+        const destForDate = tripData.destinations?.find(d => expandRange(d.dates).includes(initialDate));
+        if (destForDate) {
+          initialDestName = destForDate.nameHe;
+        }
       }
-      await setWorkingDate(selectedDate);
-      backToDay.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(selectedDate)}`;
+
+      // If no date from URL or no destination found for it, fallback to the first day of the trip
+      if (!initialDate || !initialDestName) {
+        const firstDest = tripData.destinations?.[0];
+        initialDate = firstDest?.dates?.split(' - ')?.[0];
+        initialDestName = firstDest?.nameHe;
+      }
+
+      // If we have a valid date and destination, set it as the working context
+      if (initialDate && initialDestName) {
+        await setWorkingDate(initialDate, initialDestName);
+      } else {
+        dateCurrent.textContent = 'לא נמצאו תאריכים בטיול.';
+        console.error("Could not determine an initial date and destination for the trip.");
+      }
     });
+
 
     function renderItems(){
       if (!items.length){
@@ -947,8 +969,7 @@
         }
     });
     
-    // The rest of the JS code remains the same...
-    // (buildDateSelector, expandRange, setWorkingDate, reflectDayTitleUI, resubscribeDayStreams, etc.)
+    // *** BUGFIX: Modified this function to pass destination name ***
     function buildDateSelector(){
       dateList.innerHTML='';
       dateCurrent.textContent='בחר תאריך...';
@@ -963,7 +984,7 @@
           btn.className='w-full text-right p-2 rounded hover:bg-slate-100';
           btn.textContent=`${wd} – (${dest.nameHe}) • ${toDisplayDotted(d)}`;
           btn.addEventListener('click', async ()=>{
-            await setWorkingDate(d);
+            await setWorkingDate(d, dest.nameHe); // Pass destination name
             datePanel.classList.remove('open');
           });
           wrap.appendChild(btn);
@@ -972,8 +993,9 @@
       });
       dateToggle.addEventListener('click', ()=> datePanel.classList.toggle('open'));
     }
+
     function expandRange(r){
-      if (!r?.includes(' - ')) return [];
+      if (!r?.includes(' - ')) return r ? [r] : [];
       const [s,e]=r.split(' - ');
       const [sd,sm,sy]=s.split('/').map(Number);
       const [ed,em,ey]=e.split('/').map(Number);
@@ -982,27 +1004,55 @@
       while(cur<=end){ out.push(`${pad2(cur.getDate())}/${pad2(cur.getMonth()+1)}/${cur.getFullYear()}`); cur.setDate(cur.getDate()+1); }
       return out;
     }
-    async function setWorkingDate(ddmmyyyy){
-      selectedDate=ddmmyyyy;
-      const iso=toISOFromDDMMYYYY(ddmmyyyy);
-      dayDocId=iso; dayDocRef=doc(db,'trips',tripId,'schedules',dayDocId);
-      selectedDest = tripData.destinations?.find(d=> expandRange(d.dates).includes(ddmmyyyy)) || null;
-      dateCurrent.textContent = `${weekdayHe(ddmmyyyy)} – (${selectedDest?.nameHe || 'ללא יעד'}) • ${toDisplayDotted(ddmmyyyy)}`;
+
+    // *** BUGFIX: Major change to use date + destination name for document ID ***
+    async function setWorkingDate(ddmmyyyy, destName){
+      if (!ddmmyyyy || !destName) {
+        console.error("setWorkingDate called with invalid arguments", {ddmmyyyy, destName});
+        return;
+      }
+      
+      selectedDate = ddmmyyyy;
+      selectedDestName = destName; // Store the destination name
+
+      const iso = toISOFromDDMMYYYY(ddmmyyyy);
+      // The crucial change: doc ID is now date + destination
+      dayDocId = `${iso}_${destName}`; 
+      dayDocRef = doc(db, 'trips', tripId, 'schedules', dayDocId);
+
+      dateCurrent.textContent = `${weekdayHe(ddmmyyyy)} – (${destName}) • ${toDisplayDotted(ddmmyyyy)}`;
       badgeDate.textContent   = `${weekdayHe(ddmmyyyy)} • ${toDisplayDotted(ddmmyyyy)}`;
-      const snap=await getDoc(dayDocRef);
-      if (snap.exists()) dayTitle = snap.data().title || null;
-      else { dayTitle=null; await setDoc(dayDocRef,{title:null,date:ddmmyyyy,destination:selectedDest?.nameHe||null},{merge:true}); }
+
+      const snap = await getDoc(dayDocRef);
+      if (snap.exists()) {
+        dayTitle = snap.data().title || null;
+      } else {
+        dayTitle = null;
+        // Create the document with the destination name for reference
+        await setDoc(dayDocRef, { title: null, date: ddmmyyyy, destination: destName }, { merge: true });
+      }
+
       reflectDayTitleUI();
       backToDay.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(selectedDate)}`;
       resubscribeDayStreams();
     }
+    
     function reflectDayTitleUI(){
       dayTitleInline.textContent = dayTitle || 'לא נקבעה';
       editDayTitleInline.classList.toggle('hidden', !dayTitle);
     }
+    
     function resubscribeDayStreams(){
       if (itemsUnsub) { itemsUnsub(); itemsUnsub=null; }
       if (notesUnsub) { notesUnsub(); notesUnsub=null; }
+
+      if (!dayDocId) {
+          console.warn("No dayDocId set, cannot subscribe to streams.");
+          itemsList.innerHTML = `<div class="text-slate-500 p-6 text-center">נא לבחור תאריך ויעד.</div>`;
+          notesList.innerHTML = `<div class="text-slate-500">נא לבחור תאריך ויעד.</div>`;
+          return;
+      }
+
       const qItems = query(collection(db,'trips',tripId,'schedules',dayDocId,'items'), orderBy('sort','asc'));
       itemsUnsub = onSnapshot(qItems, (snap)=>{
         items = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -1014,6 +1064,7 @@
         renderNotes();
       });
     }
+
     editDayTitleInline.addEventListener('click', ()=>{
       titleInput.value = dayTitle || '';
       titleModal.classList.add('show');
@@ -1225,7 +1276,7 @@
       } else rTime.textContent='לא נמצא מסלול.';
     });
     useHotelBtn.addEventListener('click', async ()=>{
-      const h = await findHotelForDate(selectedDate, selectedDest?.nameHe);
+      const h = await findHotelForDate(selectedDate, selectedDestName);
       if (!h) return alert('אין מלון מוגדר לתאריך זה.');
       addrInput.value = h.address || h.name || '';
       const c = h.coords || h.location || null;
@@ -1366,7 +1417,7 @@
         ...payload,
         sort:thisSort,
         date:selectedDate,
-        destination:selectedDest?.nameHe||null,
+        destination:selectedDestName, // Use the stored destination name
         updatedAt: serverTimestamp(),
         needsVerifyAddress,
         needsVerifyRoute,
@@ -1397,7 +1448,7 @@
     }
     addBackHotel.addEventListener('click', async ()=>{
       if (!inputStart.value) return alert('בחר שעת התחלה לחזרה למלון.');
-      const h = await findHotelForDate(selectedDate, selectedDest?.nameHe);
+      const h = await findHotelForDate(selectedDate, selectedDestName);
       if (!h) return alert('לא נמצא מלון לתאריך זה.');
       await saveItemCore({
         title:'חזרה למלון',
@@ -1530,7 +1581,7 @@
                 dayTitle = parsed.dayTitle;
                 reflectDayTitleUI();
             }
-            const hotel = await findHotelForDate(selectedDate, selectedDest?.nameHe);
+            const hotel = await findHotelForDate(selectedDate, selectedDestName);
             for (const it of parsed.items) {
                 const payload = {
                     title: it.title || '(ללא כותרת)',
@@ -1673,7 +1724,7 @@
       } else vRouteTime.textContent='לא נמצא מסלול.';
     });
     vUseHotel.addEventListener('click', async ()=>{
-      const h = await findHotelForDate(selectedDate, selectedDest?.nameHe);
+      const h = await findHotelForDate(selectedDate, selectedDestName);
       if (!h) return alert('אין מלון מוגדר לתאריך זה.');
       vAddrInput.value = h.address || h.name || '';
       const c = h.coords || h.location || null;
