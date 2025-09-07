@@ -432,7 +432,7 @@
                 </div>
                 <div class="pt-4 border-t">
                      <p class="font-bold text-slate-700">בחר ערכת נושא מוכנה:</p>
-                     <div id="theme-presets-container" class="grid grid-cols-2 gap-2 mt-2">
+                      <div id="theme-presets-container" class="grid grid-cols-2 gap-2 mt-2">
                            </div>
                 </div>
                  <button id="apply-theme-settings" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">החל שינויים</button>
@@ -557,13 +557,13 @@
         const db = getFirestore(app);
         
         // --- הוספת יכולות אופליין ---
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
-  } else if (err.code === 'unimplemented') {
-    console.warn("הדפדפן לא תומך ב־Persistence.");
-  }
-});
+        enableIndexedDbPersistence(db).catch((err) => {
+          if (err.code === 'failed-precondition') {
+            console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
+          } else if (err.code === 'unimplemented') {
+            console.warn("הדפדפן לא תומך ב־Persistence.");
+          }
+        });
         
         const IMAGE_WORKER_URL = "https://yellow-cloud-3f13.doronenakache.workers.dev/";
 
@@ -653,7 +653,35 @@ enableIndexedDbPersistence(db).catch((err) => {
         function toISODateUTC(d) { const yyyy = d.getUTCFullYear(); const mm = String(d.getUTCMonth()+1).padStart(2,'0'); const dd = String(d.getUTCDate()).padStart(2,'0'); return `${yyyy}-${mm}-${dd}`; }
         function hebWeekdayUTC(d) { const names = ['יום ראשון','יום שני','יום שלישי','יום רביעי','יום חמישי','יום שישי','יום שבת']; return names[d.getUTCDay()]; }
         function generateDatesFromRange(rangeStr) { if (!rangeStr || !rangeStr.includes(' - ')) return []; const [startStr, endStr] = rangeStr.split(' - '); const start = parseLocalDateFlexible(startStr); const end = parseLocalDateFlexible(endStr); if (!start || !end) return []; const out = []; for (let t = new Date(start); t <= end; t.setUTCDate(t.getUTCDate()+1)) { out.push(new Date(t.getTime())); } return out; }
-        function findDestinationForDate(trip, rawDDMMYYYY) { const target = parseLocalDateFlexible(rawDDMMYYYY); if (!target) return null; const targetISO = toISODateUTC(target); return (trip.destinations || []).find(dest => { const days = generateDatesFromRange(dest.dates); const isoList = days.map(d => toISODateUTC(d)); return isoList.includes(targetISO); }) || null; }
+        
+        // BUGFIX: This function now accepts a destination name to find the exact destination.
+        function findDestinationForDate(trip, rawDDMMYYYY, destName) {
+            const target = parseLocalDateFlexible(rawDDMMYYYY);
+            if (!target) return null;
+            const targetISO = toISODateUTC(target);
+
+            const destinations = trip.destinations || [];
+
+            // If a destination name is provided, find the exact match
+            if (destName) {
+                const specificDest = destinations.find(dest => (dest.nameHe === destName || dest.name === destName));
+                if (specificDest) {
+                    const days = generateDatesFromRange(specificDest.dates);
+                    const isoList = days.map(d => toISODateUTC(d));
+                    if (isoList.includes(targetISO)) {
+                        return specificDest;
+                    }
+                }
+            }
+
+            // Fallback to old logic if no specific destination name is given or found (for backward compatibility)
+            return destinations.find(dest => {
+                const days = generateDatesFromRange(dest.dates);
+                const isoList = days.map(d => toISODateUTC(d));
+                return isoList.includes(targetISO);
+            }) || null;
+        }
+        
         function hexToRgb(hex) {
             let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
             return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
@@ -815,8 +843,11 @@ enableIndexedDbPersistence(db).catch((err) => {
                     const date = `${dObj.getUTCDate()}.${dObj.getUTCMonth()+1}.${dObj.getUTCFullYear()}`;
                     const nice = `${dObj.getUTCDate()}/${dObj.getUTCMonth()+1}/${dObj.getUTCFullYear()}`;
                     const a = document.createElement('a');
-                    // --- FIX: Add dest.id to the URL to distinguish between destinations on the same date ---
-                    a.href = `?tripId=${tripId}&date=${encodeURIComponent(nice)}&destId=${dest.id}`;
+                    
+                    // BUGFIX: Add the destination name to the URL to distinguish between schedules on the same day.
+                    const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
+                    a.href = `?tripId=${tripId}&date=${encodeURIComponent(nice)}&dest=${destNameParam}`;
+                    
                     a.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md';
                     a.textContent = `${day} ${date} (${dest.nameHe} ${dest.emoji || ''})`;
                     submenu.appendChild(a);
@@ -1440,7 +1471,9 @@ enableIndexedDbPersistence(db).catch((err) => {
             const tripRef = doc(db, 'trips', tripId);
             let key;
             if (scope === 'date') {
-                key = `styles.date_${dateISO}.${settingType}`;
+                // BUGFIX: Use the same doc ID structure as create-schedule.html
+                const scheduleDocId = `${dateISO}_${destForDate.nameHe}`;
+                key = `styles.date_${scheduleDocId}.${settingType}`;
             } else if (scope === 'destination') {
                 key = `styles.destination_${destForDate.id}.${settingType}`;
             } else {
@@ -1450,7 +1483,10 @@ enableIndexedDbPersistence(db).catch((err) => {
                 await updateDoc(tripRef, { [key]: value });
             } catch (e) {
                 console.error("Error saving settings, trying setDoc with merge", e);
-                await setDoc(tripRef, { styles: { [scope === 'date' ? `date_${dateISO}` : scope === 'destination' ? `destination_${destForDate.id}` : 'trip']: { [settingType]: value } } }, { merge: true });
+                // BUGFIX: Use the same doc ID structure here as well
+                const scheduleDocId = `${dateISO}_${destForDate.nameHe}`;
+                const dynamicKey = scope === 'date' ? `date_${scheduleDocId}` : scope === 'destination' ? `destination_${destForDate.id}` : 'trip';
+                await setDoc(tripRef, { styles: { [dynamicKey]: { [settingType]: value } } }, { merge: true });
             }
         }
 
@@ -1458,7 +1494,10 @@ enableIndexedDbPersistence(db).catch((err) => {
             const styles = tripData.styles || {};
             const tripStyle = styles.trip || {};
             const destStyle = destForDate ? (styles[`destination_${destForDate.id}`] || {}) : {};
-            const dateStyle = dateISO ? (styles[`date_${dateISO}`] || {}) : {};
+            
+            // BUGFIX: Use the combined doc ID to get date-specific styles
+            const scheduleDocId = (dateISO && destForDate) ? `${dateISO}_${destForDate.nameHe}` : null;
+            const dateStyle = scheduleDocId ? (styles[`date_${scheduleDocId}`] || {}) : {};
             
             const finalLayoutSetting = dateStyle.layout || destStyle.layout || tripStyle.layout || { layout: 'default', smart: false };
             const finalLayout = typeof finalLayoutSetting === 'string' ? finalLayoutSetting : finalLayoutSetting.layout;
@@ -1486,7 +1525,9 @@ enableIndexedDbPersistence(db).catch((err) => {
             const url = new URLSearchParams(window.location.search);
             tripId = url.get('tripId');
             dateStr = decodeURIComponent(url.get('date') || '').trim();
-            const destIdFromUrl = url.get('destId'); // --- FIX: Get destination ID from URL
+            // BUGFIX: Get the destination name from the URL
+            const destNameFromUrl = decodeURIComponent(url.get('dest') || '').trim();
+
             const parsed = parseLocalDateFlexible(dateStr);
             if (parsed) { dateISO = toISODateUTC(parsed); dayNameHe = hebWeekdayUTC(parsed); }
 
@@ -1513,12 +1554,12 @@ enableIndexedDbPersistence(db).catch((err) => {
                     if (canAccess) {
                         tripData = loadedTripData;
 
-                        // --- FIX: Prioritize destId from URL, then fall back to old method ---
-                        if (destIdFromUrl) {
-                            destForDate = (tripData.destinations || []).find(d => d.id === destIdFromUrl);
-                        }
-                        if (!destForDate) { // Fallback for old URLs or if destId is invalid
-                            destForDate = findDestinationForDate(tripData, dateStr);
+                        // BUGFIX: Use the destination name from the URL to find the correct destination
+                        destForDate = findDestinationForDate(tripData, dateStr, destNameFromUrl);
+                        if (!destForDate) {
+                            alert('לא נמצא יעד מתאים לתאריך ולשם שצוינו.');
+                            // location.href = `trip.html?id=${tripId}`; // Optional: redirect back
+                            return;
                         }
 
                         const defaultBgUrl = 'https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand';
@@ -1532,13 +1573,16 @@ enableIndexedDbPersistence(db).catch((err) => {
                         editBtn.href = editHref;
                         createBtn.href = editHref;
 
-                        if (dateISO) {
-                            const schedDocRef = doc(db, 'trips', tripId, 'schedules', dateISO);
+                        // BUGFIX: Use a combined ID for the schedule document
+                        if (dateISO && destForDate.nameHe) {
+                            const scheduleDocId = `${dateISO}_${destForDate.nameHe}`;
+                            const schedDocRef = doc(db, 'trips', tripId, 'schedules', scheduleDocId);
+                            
                             const schedSnap = await getDoc(schedDocRef);
                             const dayTitleFromDoc = schedSnap.exists() ? (schedSnap.data().title || null) : null;
                             renderHeadline(dayTitleFromDoc);
 
-                            const itemsCol = collection(db, 'trips', tripId, 'schedules', dateISO, 'items');
+                            const itemsCol = collection(db, 'trips', tripId, 'schedules', scheduleDocId, 'items');
                             const qItems = query(itemsCol);
                             onSnapshot(qItems, (snap) => { 
                                 const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1546,7 +1590,7 @@ enableIndexedDbPersistence(db).catch((err) => {
                                 renderTimelineFromItems(arr);
                             }, () => renderTimelineFromItems([]));
 
-                            const notesCol = collection(db, 'trips', tripId, 'schedules', dateISO, 'notes');
+                            const notesCol = collection(db, 'trips', tripId, 'schedules', scheduleDocId, 'notes');
                             const qNotes = query(notesCol);
                             onSnapshot(qNotes, (snap) => {
                                 const arr = snap.docs.map(d => ({id:d.id, ...d.data()}));
@@ -1649,37 +1693,37 @@ enableIndexedDbPersistence(db).catch((err) => {
 
         function renderLogisticsDetailsHTML(item) {
              let detailsHtml = '';
-              switch(item.subType) {
-                   case 'hotel':
-                         detailsHtml = `
-                              <p><strong>יעד:</strong> ${item.destination}</p>
-                              <p><strong>תאריכים:</strong> ${item.dates}</p>
-                              <p><strong>מחיר:</strong> ${item.price ? `$${item.price.toLocaleString()}`: 'לא צוין'}</p>
-                              <p><strong>הוזמן דרך:</strong> ${item.booked_via}</p>
-                              ${item.address ? `<p><strong>כתובת:</strong> ${item.address}</p>` : ''}
-                         `;
-                         break;
-                   case 'flight':
-                         detailsHtml = `
-                              <p><strong>חברת תעופה:</strong> ${item.airline}</p>
-                              <p><strong>מספר טיסה:</strong> ${item.flight_number}</p>
-                              <p><strong>תאריך:</strong> ${item.dates}</p>
-                              <p><strong>מ:</strong> ${item.from?.destination} (${item.from?.airport_name}) <strong>אל:</strong> ${item.to?.destination} (${item.to?.airport_name})</p>
-                              <p><strong>המראה:</strong> ${item.departure_time}, <strong>נחיתה:</strong> ${item.arrival_time}</p>
-                         `;
-                         break;
-                   default:
-                         detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
-              }
+             switch(item.subType) {
+                 case 'hotel':
+                      detailsHtml = `
+                          <p><strong>יעד:</strong> ${item.destination}</p>
+                          <p><strong>תאריכים:</strong> ${item.dates}</p>
+                          <p><strong>מחיר:</strong> ${item.price ? `$${item.price.toLocaleString()}`: 'לא צוין'}</p>
+                          <p><strong>הוזמן דרך:</strong> ${item.booked_via}</p>
+                          ${item.address ? `<p><strong>כתובת:</strong> ${item.address}</p>` : ''}
+                      `;
+                      break;
+                 case 'flight':
+                      detailsHtml = `
+                          <p><strong>חברת תעופה:</strong> ${item.airline}</p>
+                          <p><strong>מספר טיסה:</strong> ${item.flight_number}</p>
+                          <p><strong>תאריך:</strong> ${item.dates}</p>
+                          <p><strong>מ:</strong> ${item.from?.destination} (${item.from?.airport_name}) <strong>אל:</strong> ${item.to?.destination} (${item.to?.airport_name})</p>
+                          <p><strong>המראה:</strong> ${item.departure_time}, <strong>נחיתה:</strong> ${item.arrival_time}</p>
+                      `;
+                      break;
+                 default:
+                      detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
+             }
 
-              return `
-                   <button id="close-ref-modal-btn" class="absolute top-3 left-3 w-8 h-8 bg-slate-100/50 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
-                   <div class="p-0 space-y-4">
-                        <h3 class="text-2xl font-bold border-b pb-3">${item.name || item.subType}</h3>
-                        <div class="text-sm space-y-2">${detailsHtml}</div>
-                        ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                   </div>
-              `;
+             return `
+                  <button id="close-ref-modal-btn" class="absolute top-3 left-3 w-8 h-8 bg-slate-100/50 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
+                  <div class="p-0 space-y-4">
+                      <h3 class="text-2xl font-bold border-b pb-3">${item.name || item.subType}</h3>
+                      <div class="text-sm space-y-2">${detailsHtml}</div>
+                      ${item.additional_details ? `<div class="mt-2 p-3 bg-slate-100 rounded-lg text-sm text-slate-700"><p class="font-bold mb-1">פרטים נוספים:</p><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                  </div>
+             `;
         }
 
         initPage();
