@@ -627,8 +627,9 @@
           <div class="flex justify-between items-center mb-3">
             <h4 class="text-lg font-bold text-blue-700">${list.name}</h4>
             <div>
-              <button class="edit-btn p-2 text-slate-500 hover:text-blue-600" data-list-id="${list.id}"><i class="fas fa-pencil-alt"></i></button>
-              <button class="delete-btn p-2 text-slate-500 hover:text-red-600" data-list-id="${list.id}"><i class="fas fa-trash-alt"></i></button>
+              <button class="edit-btn p-2 text-slate-500 hover:text-blue-600" data-list-id="${list.id}" title="ערוך"><i class="fas fa-pencil-alt"></i></button>
+              <button class="duplicate-btn p-2 text-slate-500 hover:text-green-600" data-list-id="${list.id}" title="שכפל"><i class="fas fa-copy"></i></button>
+              <button class="delete-btn p-2 text-slate-500 hover:text-red-600" data-list-id="${list.id}" title="מחק"><i class="fas fa-trash-alt"></i></button>
             </div>
           </div>
           <div class="space-y-2">${itemsHtml || '<p class="text-center text-slate-400 p-4">אין פריטים ברשימה זו.</p>'}</div>
@@ -884,9 +885,11 @@
       await updateDoc(doc(db,'trips', tripId, 'checklists', listId), { items });
     });
 
-    checklistsContainer.addEventListener('click', e=>{
+    checklistsContainer.addEventListener('click', async e=>{
       const del = e.target.closest('.delete-btn');
       const edit = e.target.closest('.edit-btn');
+      const duplicate = e.target.closest('.duplicate-btn');
+
       if (del){
         const list = checklistsData.find(x=>x.id===del.dataset.listId);
         if(list) showDeleteModal(`למחוק את "${list.name}"?`, () => deleteDoc(doc(db,'trips', tripId, 'checklists', list.id)));
@@ -894,6 +897,33 @@
       if (edit){
         const list = checklistsData.find(x=>x.id===edit.dataset.listId);
         if (list) openModal(list);
+      }
+      if (duplicate) {
+        const listId = duplicate.dataset.listId;
+        const listToCopy = checklistsData.find(x => x.id === listId);
+        if (listToCopy) {
+            const newItems = listToCopy.items ? JSON.parse(JSON.stringify(listToCopy.items)) : [];
+            
+            // Reset the checked status for all items in the new list
+            newItems.forEach(item => { item.checked = false; });
+
+            const newChecklist = {
+                name: `${listToCopy.name} (העתק)`,
+                type: listToCopy.type,
+                destination: listToCopy.destination || null,
+                subType: listToCopy.subType || null,
+                items: newItems,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            };
+
+            try {
+                await addDoc(checklistsCol, newChecklist);
+            } catch (err) {
+                console.error("Error duplicating checklist:", err);
+                alert("שגיאה בשכפול הרשימה.");
+            }
+        }
       }
     });
     
