@@ -171,7 +171,6 @@
     </div>
   </div>
 
-  <!-- ======================= 📍 תיקון #1: מבנה HTML למודאל ניווט 📍 ======================= -->
   <div id="navigation-choice-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-6 text-center max-w-sm w-full relative">
       <button id="navigation-modal-close" class="absolute top-3 right-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 transition-colors"><i class="fas fa-times"></i></button>
@@ -543,55 +542,32 @@
 
     function openModalHandler(itemId = null) {
       editingItemId = itemId;
-      selectedOSMPlaceDetails = null;
+      selectedOSMPlaceDetails = null; // Reset this on every open
       form.reset();
-      for (let i=1;i<=9;i++) {
+      for (let i = 1; i <= 9; i++) {
         const c = document.getElementById(`step-${i}`);
         if (c) c.innerHTML = '';
       }
       const modalTitle = document.getElementById('modal-title');
       const finishButton = document.getElementById('modal-finish-btn');
-
+    
       if (editingItemId) {
         modalTitle.textContent = 'עריכת מקום';
         finishButton.textContent = 'שמור שינויים';
-        setTimeout(() => {
-          generateStepContent(1);
-          const item = allItems.find(i => i.id === editingItemId);
-          if (item) {
-            document.getElementById('item-name').value = item.name || '';
-            if (document.getElementById('item-destination')) document.getElementById('item-destination').value = item.destination || '';
-            if (document.getElementById('item-type')) document.getElementById('item-type').value = item.type || '';
-            if (document.getElementById('item-short-description')) document.getElementById('item-short-description').value = item.shortDescription || '';
-            if (document.getElementById('item-description')) document.getElementById('item-description').value = item.description || '';
-            if (document.getElementById('item-location')) document.getElementById('item-location').value = item.location || '';
-            if (document.getElementById('item-hours')) document.getElementById('item-hours').value = item.hours || '';
-            if (document.getElementById('item-link')) document.getElementById('item-link').value = item.link || '';
-            if (document.getElementById('item-reservation')) document.getElementById('item-reservation').value = item.reservation || 'לא';
-
-            isRestaurant = item.type === 'מסעדה/אוכל';
-            if (isRestaurant) {
-              if (document.getElementById('item-kosher')) document.getElementById('item-kosher').value = item.isKosher || 'לא';
-              const foodSel = document.getElementById('item-food-type');
-              const foodOther = document.getElementById('item-food-type-other');
-              if (foodSel) {
-                if (siteData.foodTypes[item.foodType]) {
-                  foodSel.value = item.foodType;
-                } else if (item.foodType) {
-                  foodSel.value = 'אחר';
-                  if (foodOther) { foodOther.value = item.foodType; foodOther.classList.remove('hidden'); }
-                }
-              }
-            }
-            if (item.coords) initAddEditMap(item.coords);
-          }
-        }, 50);
+        
+        // Find the item to pre-populate common fields
+        const item = allItems.find(i => i.id === editingItemId);
+        if (item) {
+          isRestaurant = item.type === 'מסעדה/אוכל';
+        }
       } else {
         modalTitle.textContent = 'הוספת מקום חדש';
         finishButton.textContent = 'הוסף לדף';
+        isRestaurant = false;
       }
+    
       currentModalStep = 1;
-      updateModalView();
+      updateModalView(); // This will generate step 1 and populate its fields
       modal.classList.remove('hidden');
       modal.classList.add('flex');
     }
@@ -609,8 +585,15 @@
     }
     
     function updateModalView() {
+      // Determine if it's a restaurant based on current selection or saved item data
       const itemTypeEl = document.getElementById('item-type');
-      const currentType = itemTypeEl ? itemTypeEl.value : (allItems.find(i => i.id === editingItemId)?.type || '');
+      let currentType = '';
+      if(itemTypeEl) {
+          currentType = itemTypeEl.value;
+      } else if (editingItemId) {
+          const item = allItems.find(i => i.id === editingItemId);
+          if (item) currentType = item.type;
+      }
       isRestaurant = currentType === 'מסעדה/אוכל';
 
       const baseSteps = [1, 2, 3, 4, 5, 6, 7];
@@ -624,10 +607,13 @@
       const actualStep = steps[currentModalStep - 1];
       const stepEl = document.getElementById(`step-${actualStep}`);
       if (stepEl) {
-        if (!stepEl.innerHTML.trim()) generateStepContent(actualStep);
+        if (!stepEl.innerHTML.trim()) {
+            generateStepContent(actualStep);
+        }
         stepEl.classList.add('active');
         
-        // תיקון לבאג המפה האפורה
+        // ======================= 📍 תיקון #3: ריענון המפה האפורה 📍 =======================
+        // הלוגיקה הזו מוודאת שהמפה מתרעננת אחרי שהיא הופכת לנראית, ומונעת את בעיית האריחים האפורים.
         if (actualStep === 4 && addEditMap) {
           setTimeout(() => {
             addEditMap.invalidateSize();
@@ -648,8 +634,10 @@
     function handleTypeChange(e) {
       const other = document.getElementById('item-type-other');
       if (other) other.classList.toggle('hidden', e.target.value !== 'אחר');
+      // Clear subsequent steps to rebuild them with new logic if type changes
       document.querySelectorAll('.modal-step').forEach((el, idx) => {
-        if (idx+1 > currentModalStep) el.innerHTML = '';
+        const stepNum = parseInt(el.id.split('-')[1]);
+        if (stepNum > currentModalStep) el.innerHTML = '';
       });
       updateModalView();
     }
@@ -689,52 +677,98 @@
     }
     
     function generateStepContent(step) {
-      const c = document.getElementById(`step-${step}`);
-      if (!c) return;
-      const label = "flex items-center gap-3 text-lg font-bold text-slate-700 mb-3";
-      switch(step) {
-        case 1: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום <span class="text-red-500">*</span></label><input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">`; break;
-        case 2: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד? <span class="text-red-500">*</span></label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`; break;
-        case 3: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום <span class="text-red-500">*</span></label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`; break;
-        case 4:
-          c.innerHTML = createLocationHtml();
-          initOSMAutocomplete();
-          
-          // תיקון למרכוז המפה
-          const itemBeingEdited = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
-          if (!itemBeingEdited || !itemBeingEdited.coords) {
-              const destName = document.getElementById('item-destination')?.value;
-              if (destName) {
-                  const geocodeAndInit = async (name) => {
-                      try {
-                          const url = `${NOM_BASE}/search?format=jsonv2&limit=1&q=${encodeURIComponent(name)}`;
-                          const res = await fetch(url);
-                          const data = await res.json();
-                          if (data && data.length > 0) {
-                              const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-                              initAddEditMap(loc);
-                          } else {
-                              initAddEditMap(); // Fallback to default
-                          }
-                      } catch (e) {
-                          console.error("Geocoding destination failed:", e);
-                          initAddEditMap(); // Fallback to default
-                      }
-                  };
-                  geocodeAndInit(destName);
-              } else {
-                  initAddEditMap(); // Fallback if no destination is selected
-              }
-          }
-          break;
-        case 5: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`; break;
-        case 6: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-quote-left text-slate-400"></i>פירוט קצר (אופציונלי)</label><textarea id="item-short-description" class="form-textarea w-full p-3" rows="2" placeholder="משפט או שניים שיופיעו בכרטיסייה הראשית..."></textarea>`; break;
-        case 7: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-pen-to-square text-slate-400"></i>תיאור מלא (אופציונלי)</label><textarea id="item-description" class="form-textarea w-full p-3" rows="4" placeholder="פרטים נוספים, המלצות, טיפים..."></textarea>`; break;
-        case 8: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-star-of-david text-slate-400"></i>האם המסעדה כשרה?</label><select id="item-kosher" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option></select>`; break;
-        case 9: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-utensils text-slate-400"></i>סוג אוכל</label><select id="item-food-type" class="form-select w-full p-3">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value="${n}">${e} ${n}</option>`).join('')}</select><input type="text" id="item-food-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג אוכל">`; document.getElementById('item-food-type').addEventListener('change', handleFoodTypeChange); break;
-      }
-      if (step === 3) document.getElementById('item-type').addEventListener('change', handleTypeChange);
+        const c = document.getElementById(`step-${step}`);
+        if (!c) return;
+    
+        const item = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
+        const label = "flex items-center gap-3 text-lg font-bold text-slate-700 mb-3";
+    
+        switch(step) {
+            case 1:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום <span class="text-red-500">*</span></label><input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">`;
+                if(item) document.getElementById('item-name').value = item.name || '';
+                break;
+            case 2:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד? <span class="text-red-500">*</span></label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`;
+                if(item) document.getElementById('item-destination').value = item.destination || '';
+                break;
+            case 3:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום <span class="text-red-500">*</span></label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`;
+                if(item) document.getElementById('item-type').value = item.type || '';
+                document.getElementById('item-type').addEventListener('change', handleTypeChange);
+                handleTypeChange({target: document.getElementById('item-type')}); // Trigger to show/hide "other"
+                break;
+            case 4:
+                c.innerHTML = createLocationHtml();
+                initOSMAutocomplete();
+                
+                // ======================= 📍 תיקון #2: אכלוס נתונים בעריכה 📍 =======================
+                // מאכלסים את שדות הכתובת רק לאחר שהם נוצרו, ורק במצב עריכה.
+                if (item) {
+                    document.getElementById('item-location').value = item.location || '';
+                    document.getElementById('item-hours').value = item.hours || '';
+                    document.getElementById('item-link').value = item.link || '';
+                    if (item.coords) {
+                        selectedOSMPlaceDetails = { coords: item.coords, location: item.location };
+                        initAddEditMap(item.coords);
+                    }
+                }
+                
+                if (!item || !item.coords) {
+                    // Fallback logic to center map on destination for new items
+                    const destName = document.getElementById('item-destination')?.value;
+                    if (destName) {
+                        const geocodeAndInit = async (name) => {
+                            try {
+                                const url = `${NOM_BASE}/search?format=jsonv2&limit=1&q=${encodeURIComponent(name)}`;
+                                const res = await fetch(url);
+                                const data = await res.json();
+                                if (data && data.length > 0) {
+                                    initAddEditMap({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+                                } else { initAddEditMap(); }
+                            } catch (e) {
+                                console.error("Geocoding failed:", e);
+                                initAddEditMap();
+                            }
+                        };
+                        geocodeAndInit(destName);
+                    } else { initAddEditMap(); }
+                }
+                break;
+            case 5:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`;
+                if(item) document.getElementById('item-reservation').value = item.reservation || 'לא';
+                break;
+            case 6:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-quote-left text-slate-400"></i>פירוט קצר (אופציונלי)</label><textarea id="item-short-description" class="form-textarea w-full p-3" rows="2" placeholder="משפט או שניים..."></textarea>`;
+                if(item) document.getElementById('item-short-description').value = item.shortDescription || '';
+                break;
+            case 7:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-pen-to-square text-slate-400"></i>תיאור מלא (אופציונלי)</label><textarea id="item-description" class="form-textarea w-full p-3" rows="4" placeholder="פרטים נוספים, המלצות..."></textarea>`;
+                if(item) document.getElementById('item-description').value = item.description || '';
+                break;
+            case 8:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-star-of-david text-slate-400"></i>האם המסעדה כשרה?</label><select id="item-kosher" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option></select>`;
+                if(item) document.getElementById('item-kosher').value = item.isKosher || 'לא';
+                break;
+            case 9:
+                c.innerHTML = `<label class="${label}"><i class="fa-solid fa-utensils text-slate-400"></i>סוג אוכל</label><select id="item-food-type" class="form-select w-full p-3">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value="${n}">${e} ${n}</option>`).join('')}</select><input type="text" id="item-food-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג אוכל">`;
+                if(item) {
+                    const foodSel = document.getElementById('item-food-type');
+                    const foodOther = document.getElementById('item-food-type-other');
+                    if (siteData.foodTypes[item.foodType]) {
+                        foodSel.value = item.foodType;
+                    } else if (item.foodType) {
+                        foodSel.value = 'אחר';
+                        foodOther.value = item.foodType;
+                        foodOther.classList.remove('hidden');
+                    }
+                }
+                document.getElementById('item-food-type').addEventListener('change', handleFoodTypeChange);
+                break;
+        }
     }
+
 
     // ---------- רנדר פריטים ----------
     function renderAllItems() {
@@ -838,8 +872,6 @@
                     <span>מרחק אווירי: <b>${item.airDistanceKm.toFixed(1)} ק"מ</b></span>
                   </div>` : '';
 
-              // <!-- ======================= 📍 תיקון #2: שינוי כפתור ניווט 📍 ======================= -->
-              // שינינו את תגית a לתגית button והוספנו class ו-dataset כדי להפעיל את המודאל
               const hasCoords = !!item.coords;
               const navigateButton = `
                 <button data-id="${item.id}" class="navigate-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition ${!hasCoords ? 'opacity-50 cursor-not-allowed' : ''}" title="נווט למקום" ${!hasCoords ? 'disabled' : ''}>
@@ -1014,7 +1046,6 @@
           } else if (actionBtn.matches('.edit-btn')) {
             openModalHandler(id);
           } else if (actionBtn.matches('.navigate-btn')) {
-            // טיפול בלחיצה על כפתור הניווט החדש
             if (item) openNavigationChoiceModal(item);
           }
           return;
@@ -1044,7 +1075,8 @@
         const name = gv('item-name');
         if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
         
-        // ======================= 📍 תיקון #3: הוספת שדה כתובת חובה 📍 =======================
+        // ======================= 📍 תיקון #1: וידוא בחירת כתובת חובה 📍 =======================
+        // הבדיקה הזו מוודאת שהמשתמש בחר כתובת מהחיפוש האוטומטי, מה שמבטיח שיש לנו גם טקסט וגם קואורדינטות.
         const locationText = gv('item-location');
         if (!locationText || locationText.trim() === '') {
             showModalError('בחירת כתובת ומיקום על המפה היא שדה חובה.');
