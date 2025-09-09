@@ -171,16 +171,16 @@
     </div>
   </div>
 
-  <!-- ======================= 📍 תוספת #1: חלון בחירת ניווט 📍 ======================= -->
-  <div id="nav-choice-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl p-6 text-center max-w-xs w-full">
-        <h3 class="text-xl font-bold text-slate-800 mb-6">לאן לנווט?</h3>
-        <div class="space-y-3">
-            <a id="nav-google-maps" href="#" target="_blank" class="block w-full text-center bg-blue-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-600 transition"><i class="fab fa-google mr-2"></i>Google Maps</a>
-            <a id="nav-waze" href="#" target="_blank" class="block w-full text-center bg-cyan-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-cyan-600 transition"><i class="fab fa-waze mr-2"></i>Waze</a>
-            <a id="nav-osm" href="#" target="_blank" class="block w-full text-center bg-green-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-green-600 transition"><i class="fa-solid fa-map mr-2"></i>OpenStreetMap</a>
-        </div>
-        <button id="nav-choice-cancel" class="mt-6 py-2 px-6 bg-slate-200 font-semibold rounded-lg hover:bg-slate-300 w-full">ביטול</button>
+  <!-- ======================= 📍 תיקון #1: מבנה HTML למודאל ניווט 📍 ======================= -->
+  <div id="navigation-choice-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 text-center max-w-sm w-full relative">
+      <button id="navigation-modal-close" class="absolute top-3 right-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 transition-colors"><i class="fas fa-times"></i></button>
+      <h3 class="text-xl font-bold text-slate-800 mb-6">באיזו אפליקציה לנווט?</h3>
+      <div class="space-y-3">
+        <a id="nav-link-google" href="#" target="_blank" class="block w-full text-center bg-blue-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-600 transition"><i class="fa-brands fa-google mr-2"></i>Google Maps</a>
+        <a id="nav-link-waze" href="#" target="_blank" class="block w-full text-center bg-cyan-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-cyan-600 transition"><i class="fa-brands fa-waze mr-2"></i>Waze</a>
+        <a id="nav-link-osm" href="#" target="_blank" class="block w-full text-center bg-orange-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-orange-600 transition"><i class="fa-solid fa-map-location-dot mr-2"></i>OpenStreetMap</a>
+      </div>
     </div>
   </div>
 
@@ -203,9 +203,13 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     
+    // --- הוספת יכולות אופליין ---
     enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code === 'failed-precondition') console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
-      else if (err.code === 'unimplemented') console.warn("הדפדפן לא תומך ב־Persistence.");
+      if (err.code === 'failed-precondition') {
+        console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
+      } else if (err.code === 'unimplemented') {
+        console.warn("הדפדפן לא תומך ב־Persistence.");
+      }
     });
 
     // ---------- State ----------
@@ -241,8 +245,11 @@
     const deleteModal = document.getElementById('delete-confirm-modal');
     const authContainer = document.getElementById('auth-container');
     const tripTitleLine = document.getElementById('trip-title-line');
-    const navChoiceModal = document.getElementById('nav-choice-modal');
+    const navigationModal = document.getElementById('navigation-choice-modal');
+    const closeNavigationModalBtn = document.getElementById('navigation-modal-close');
 
+
+    // נתוני אתר (סוגים בסיסיים) + סוגים מותאמים מ־Firestore
     const settingsDocRef = doc(db, 'app_settings', 'custom_types');
     const siteData = {
       destinations: [],
@@ -260,16 +267,20 @@
     let activeFilters = {};
     let isInitialLoad = true;
 
+    // מודאל צעדים
     let currentModalStep = 1;
     let totalModalSteps = 1;
     let editingItemId = null;
     let isRestaurant = false;
 
+    // מיקום משתמש
     let userLocation = null;
 
+    // Leaflet maps
     let addEditMap = null, addEditMarker = null;
     let detailsMap = null, detailsMarker = null;
 
+    // פרטי מקום שנבחר מה־OSM
     let selectedOSMPlaceDetails = null;
 
     // ---------- Utils ----------
@@ -368,7 +379,6 @@
             list.classList.add('hidden');
             const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
             document.getElementById('item-location').value = r.display_name || '';
-            document.getElementById('item-location-search').value = r.display_name.split(',')[0];
             initAddEditMap({ lat, lng: lon });
 
             try {
@@ -409,7 +419,6 @@
 
       input.addEventListener('input', () => {
         const q = input.value.trim();
-        document.getElementById('item-location').value = '';
         selectedOSMPlaceDetails = null;
         if (acState.timer) clearTimeout(acState.timer);
         if (q.length < 2) { list.classList.add('hidden'); return; }
@@ -446,6 +455,7 @@
           const { lat, lng } = addEditMarker.getLatLng();
           if (!selectedOSMPlaceDetails) selectedOSMPlaceDetails = {};
           selectedOSMPlaceDetails.coords = { lat, lng };
+          // It's better to reverse geocode here to update the address, but for simplicity we'll skip it.
         });
       } else {
         addEditMap.setView([location.lat, location.lng], 15);
@@ -555,7 +565,6 @@
             if (document.getElementById('item-short-description')) document.getElementById('item-short-description').value = item.shortDescription || '';
             if (document.getElementById('item-description')) document.getElementById('item-description').value = item.description || '';
             if (document.getElementById('item-location')) document.getElementById('item-location').value = item.location || '';
-            if (document.getElementById('item-location-search')) document.getElementById('item-location-search').value = item.location?.split(',')[0] || '';
             if (document.getElementById('item-hours')) document.getElementById('item-hours').value = item.hours || '';
             if (document.getElementById('item-link')) document.getElementById('item-link').value = item.link || '';
             if (document.getElementById('item-reservation')) document.getElementById('item-reservation').value = item.reservation || 'לא';
@@ -591,13 +600,14 @@
       editingItemId = null;
       modal.classList.add('hidden'); modal.classList.remove('flex');
       showModalError('');
+      // ניקוי המפה בסגירת המודאל כדי למנוע בעיות בפתיחה הבאה
       if (addEditMap) {
         addEditMap.remove();
         addEditMap = null;
         addEditMarker = null;
       }
     }
-
+    
     function updateModalView() {
       const itemTypeEl = document.getElementById('item-type');
       const currentType = itemTypeEl ? itemTypeEl.value : (allItems.find(i => i.id === editingItemId)?.type || '');
@@ -617,10 +627,13 @@
         if (!stepEl.innerHTML.trim()) generateStepContent(actualStep);
         stepEl.classList.add('active');
         
+        // תיקון לבאג המפה האפורה
         if (actualStep === 4 && addEditMap) {
           setTimeout(() => {
             addEditMap.invalidateSize();
-            if (addEditMarker) addEditMap.panTo(addEditMarker.getLatLng());
+            if (addEditMarker) {
+              addEditMap.panTo(addEditMarker.getLatLng());
+            }
           }, 100);
         }
       }
@@ -630,38 +643,6 @@
       finishBtn.classList.toggle('hidden', currentModalStep !== totalModalSteps);
       stepsIndicator.textContent = `שלב ${currentModalStep} מתוך ${totalModalSteps}`;
       progressBar.style.width = `${(currentModalStep / totalModalSteps) * 100}%`;
-    }
-
-    // ======================= 📍 תיקון #2: פונקציית ולידציה לשלבים 📍 =======================
-    function validateCurrentStep() {
-        showModalError(''); 
-        const itemTypeEl = document.getElementById('item-type');
-        const currentType = itemTypeEl ? itemTypeEl.value : (allItems.find(i => i.id === editingItemId)?.type || '');
-        isRestaurant = currentType === 'מסעדה/אוכל';
-        const baseSteps = [1, 2, 3, 4, 5, 6, 7];
-        const restaurantSteps = [8, 9];
-        let steps = [...baseSteps];
-        if (isRestaurant) steps.push(...restaurantSteps);
-        steps.sort((a, b) => a - b);
-        const actualStep = steps[currentModalStep - 1];
-
-        if (actualStep === 1) {
-            const name = document.getElementById('item-name');
-            if (!name || !name.value.trim()) {
-                showModalError('שם המקום הוא שדה חובה.');
-                name.focus();
-                return false;
-            }
-        }
-        if (actualStep === 4) {
-            const location = document.getElementById('item-location');
-            if (!location || !location.value.trim()) {
-                showModalError('יש לבחור כתובת מהחיפוש.');
-                document.getElementById('item-location-search').focus();
-                return false;
-            }
-        }
-        return true;
     }
 
     function handleTypeChange(e) {
@@ -691,7 +672,7 @@
         <div class="mt-4 space-y-3 text-sm">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="font-semibold text-slate-600">כתובת מלאה (לקריאה בלבד)</label>
+              <label class="font-semibold text-slate-600">כתובת</label>
               <input type="text" id="item-location" class="form-input w-full p-2 mt-1 bg-slate-100" readonly>
             </div>
             <div>
@@ -713,16 +694,15 @@
       const label = "flex items-center gap-3 text-lg font-bold text-slate-700 mb-3";
       switch(step) {
         case 1: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום <span class="text-red-500">*</span></label><input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">`; break;
-        case 2: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד?</label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`; break;
-        case 3: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום</label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`; break;
+        case 2: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד? <span class="text-red-500">*</span></label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`; break;
+        case 3: c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום <span class="text-red-500">*</span></label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`; break;
         case 4:
           c.innerHTML = createLocationHtml();
           initOSMAutocomplete();
           
+          // תיקון למרכוז המפה
           const itemBeingEdited = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
-          if (itemBeingEdited && itemBeingEdited.coords) {
-              initAddEditMap(itemBeingEdited.coords);
-          } else {
+          if (!itemBeingEdited || !itemBeingEdited.coords) {
               const destName = document.getElementById('item-destination')?.value;
               if (destName) {
                   const geocodeAndInit = async (name) => {
@@ -734,16 +714,16 @@
                               const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
                               initAddEditMap(loc);
                           } else {
-                              initAddEditMap();
+                              initAddEditMap(); // Fallback to default
                           }
                       } catch (e) {
                           console.error("Geocoding destination failed:", e);
-                          initAddEditMap();
+                          initAddEditMap(); // Fallback to default
                       }
                   };
                   geocodeAndInit(destName);
               } else {
-                  initAddEditMap();
+                  initAddEditMap(); // Fallback if no destination is selected
               }
           }
           break;
@@ -858,6 +838,14 @@
                     <span>מרחק אווירי: <b>${item.airDistanceKm.toFixed(1)} ק"מ</b></span>
                   </div>` : '';
 
+              // <!-- ======================= 📍 תיקון #2: שינוי כפתור ניווט 📍 ======================= -->
+              // שינינו את תגית a לתגית button והוספנו class ו-dataset כדי להפעיל את המודאל
+              const hasCoords = !!item.coords;
+              const navigateButton = `
+                <button data-id="${item.id}" class="navigate-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition ${!hasCoords ? 'opacity-50 cursor-not-allowed' : ''}" title="נווט למקום" ${!hasCoords ? 'disabled' : ''}>
+                    <i class="fa-solid fa-diamond-turn-right"></i>
+                </button>`;
+
               card.innerHTML = `
                 <div class="flex-grow">
                   <div class="flex justify-between items-start mb-2">
@@ -869,8 +857,7 @@
                 </div>
                 <div class="mt-auto pt-3 border-t flex items-center justify-between gap-2">
                   <div class="flex gap-2">
-                    <!-- ======================= 📍 שינוי #1: כפתור ניווט חדש 📍 ======================= -->
-                    <button class="nav-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition" title="נווט"><i class="fa-solid fa-diamond-turn-right"></i></button>
+                    ${navigateButton}
                     ${item.link ? `<a href="${item.link}" target="_blank" class="action-btn bg-green-100 text-green-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-green-200 transition" title="אתר"><i class="fa-solid fa-link"></i></a>` : ''}
                   </div>
                   <div class="flex gap-2">
@@ -912,6 +899,8 @@
           ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity"></a>`).join('')}
         </div>`;
       }
+      
+      const navigateButtonInModal = item.coords ? `<button data-id="${item.id}" class="navigate-btn flex-1 text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition"><i class="fa-solid fa-diamond-turn-right mr-2"></i>נווט</button>` : '';
 
       wrap.innerHTML = `
         <button id="details-modal-close" class="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
@@ -929,7 +918,7 @@
           ${item.coords ? `<div id="details-map" class="w-full h-48 rounded-lg shadow-md"></div>` : ''}
         </div>
         <div class="p-4 bg-slate-100 border-t flex flex-wrap justify-center gap-3">
-          <button data-id="${item.id}" class="nav-btn-modal flex-1 text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition"><i class="fa-solid fa-diamond-turn-right mr-2"></i>נווט</button>
+          ${navigateButtonInModal}
           ${item.link ? `<a href="${item.link}" target="_blank" class="flex-1 text-center bg-green-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-green-600 transition"><i class="fa-solid fa-link mr-2"></i>אתר</a>` : ''}
           <button data-id="${item.id}" class="edit-btn-modal flex-1 text-center bg-slate-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-slate-700 transition"><i class="fas fa-pencil mr-2"></i>ערוך</button>
         </div>
@@ -937,7 +926,15 @@
       detailsModal.classList.remove('hidden'); detailsModal.classList.add('flex');
       document.getElementById('details-modal-close').addEventListener('click', closeDetailsModal);
       document.querySelector('.edit-btn-modal').addEventListener('click', (e)=>{ closeDetailsModal(); openModalHandler(e.currentTarget.dataset.id); });
-      document.querySelector('.nav-btn-modal').addEventListener('click', (e) => { openNavChoiceModal(e.currentTarget.dataset.id); });
+      const navBtn = document.querySelector('#details-modal-content .navigate-btn');
+      if (navBtn) {
+        navBtn.addEventListener('click', (e) => {
+            const id = e.currentTarget.dataset.id;
+            const itemToNav = allItems.find(i => i.id === id);
+            if(itemToNav) openNavigationChoiceModal(itemToNav);
+        });
+      }
+
       if (item.coords) initDetailsMap(item.coords);
     }
 
@@ -946,35 +943,19 @@
       detailsMap = null; detailsMarker = null;
     }
 
-    // ---------- Navigation Modal ----------
-    function openNavChoiceModal(itemId) {
-      const item = allItems.find(i => i.id === itemId);
-      if (!item) return;
-
-      const googleMapsLink = document.getElementById('nav-google-maps');
-      const wazeLink = document.getElementById('nav-waze');
-      const osmLink = document.getElementById('nav-osm');
-
-      if (item.coords) {
-        googleMapsLink.href = `https://www.google.com/maps/search/?api=1&query=${item.coords.lat},${item.coords.lng}`;
-        wazeLink.href = `https://waze.com/ul?ll=${item.coords.lat},${item.coords.lng}&navigate=yes`;
-        osmLink.href = `https://www.openstreetmap.org/?mlat=${item.coords.lat}&mlon=${item.coords.lng}#map=17/${item.coords.lat}/${item.coords.lng}`;
-      } else if (item.location) {
-        googleMapsLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`;
-        wazeLink.href = `https://waze.com/ul?q=${encodeURIComponent(item.location)}`;
-        osmLink.href = `https://www.openstreetmap.org/search?query=${encodeURIComponent(item.location)}`;
-      } else {
-        alert('לא קיימים פרטי מיקום עבור מקום זה.');
-        return;
-      }
-      
-      navChoiceModal.classList.remove('hidden');
-      navChoiceModal.classList.add('flex');
+    // --- Navigation Modal Logic ---
+    function openNavigationChoiceModal(item) {
+        if (!item.coords) return;
+        const { lat, lng } = item.coords;
+        document.getElementById('nav-link-google').href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        document.getElementById('nav-link-waze').href = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+        document.getElementById('nav-link-osm').href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
+        navigationModal.classList.remove('hidden');
+        navigationModal.classList.add('flex');
     }
-
-    function closeNavChoiceModal() {
-        navChoiceModal.classList.add('hidden');
-        navChoiceModal.classList.remove('flex');
+    function closeNavigationModal() {
+        navigationModal.classList.add('hidden');
+        navigationModal.classList.remove('flex');
     }
 
     // ---------- אירועים ----------
@@ -993,20 +974,16 @@
       openModalBtn.addEventListener('click', () => openModalHandler());
       closeModalBtn.addEventListener('click', closeModalHandler);
 
-      nextBtn.addEventListener('click', () => { 
-        if (validateCurrentStep()) {
-          if (currentModalStep < totalModalSteps) { currentModalStep++; updateModalView(); } 
-        }
-      });
+      nextBtn.addEventListener('click', () => { if (currentModalStep < totalModalSteps) { currentModalStep++; updateModalView(); } });
       backStepBtn.addEventListener('click', () => { if (currentModalStep > 1) { currentModalStep--; updateModalView(); } });
 
       getLocationBtn.addEventListener('click', handleGetLocation);
       detailsModal.addEventListener('click', (e)=>{ if (e.target.id==='details-modal') closeDetailsModal(); });
       
-      // Events for Nav Choice Modal
-      document.getElementById('nav-choice-cancel').addEventListener('click', closeNavChoiceModal);
-      navChoiceModal.addEventListener('click', (e) => { if (e.target.id === 'nav-choice-modal') closeNavChoiceModal(); });
-      document.querySelectorAll('#nav-choice-modal a').forEach(a => a.addEventListener('click', closeNavChoiceModal));
+      // אירועים למודאל ניווט
+      closeNavigationModalBtn.addEventListener('click', closeNavigationModal);
+      navigationModal.addEventListener('click', (e) => { if (e.target.id === 'navigation-choice-modal') closeNavigationModal(); });
+
 
       form.addEventListener('keydown', e => {
         if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
@@ -1023,9 +1000,7 @@
         const item = allItems.find(i=>i.id===id);
         if (actionBtn) {
           e.stopPropagation();
-          if (actionBtn.matches('.nav-btn')) {
-            openNavChoiceModal(id);
-          } else if (actionBtn.matches('.delete-btn')) {
+          if (actionBtn.matches('.delete-btn')) {
             const confirmBtn = document.getElementById('delete-modal-confirm');
             const title = document.getElementById('delete-modal-title');
             title.textContent = `האם למחוק את "${item?.name||''}"?`;
@@ -1038,6 +1013,9 @@
             deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
           } else if (actionBtn.matches('.edit-btn')) {
             openModalHandler(id);
+          } else if (actionBtn.matches('.navigate-btn')) {
+            // טיפול בלחיצה על כפתור הניווט החדש
+            if (item) openNavigationChoiceModal(item);
           }
           return;
         }
@@ -1064,11 +1042,14 @@
         const gv = id => document.getElementById(id) ? document.getElementById(id).value : null;
 
         const name = gv('item-name');
-        const location = gv('item-location');
-
         if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
-        if (!location || location.trim()==='') { showModalError('יש לבחור כתובת מהחיפוש.'); return; }
-
+        
+        // ======================= 📍 תיקון #3: הוספת שדה כתובת חובה 📍 =======================
+        const locationText = gv('item-location');
+        if (!locationText || locationText.trim() === '') {
+            showModalError('בחירת כתובת ומיקום על המפה היא שדה חובה.');
+            return;
+        }
 
         let finalType = gv('item-type');
         if (finalType === 'אחר') {
@@ -1096,6 +1077,11 @@
           photos = selectedOSMPlaceDetails.photos?.length ? selectedOSMPlaceDetails.photos : photos;
         }
 
+        if (!coords) {
+            showModalError('יש למקם נעץ על המפה או לבחור מקום מהחיפוש.');
+            return;
+        }
+
         const data = {
           name: name,
           destination: gv('item-destination'),
@@ -1104,7 +1090,7 @@
           description: gv('item-description'),
           isKosher: isRestaurant ? gv('item-kosher') : null,
           foodType: finalFoodType,
-          location: location,
+          location: locationText,
           hours: gv('item-hours'),
           link: gv('item-link'),
           reservation: gv('item-reservation'),
@@ -1153,7 +1139,7 @@
     // ---------- Init ----------
     async function initPage() {
       const urlParams = new URLSearchParams(window.location.search);
-      tripId = urlParams.get('id'); // תוקן ל-'id' כדי להיות תואם לדפים אחרים
+      tripId = urlParams.get('id') || urlParams.get('tripId');
       if (!tripId) {
         alert("שגיאה: לא נמצא מזהה טיול.");
         location.href = 'index.html';
@@ -1206,4 +1192,3 @@
   </script>
 </body>
 </html>
-
