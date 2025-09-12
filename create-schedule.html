@@ -258,6 +258,23 @@
     </div>
   </div>
 
+  <!-- *** NEW: Hotel Selection Modal *** -->
+  <div id="hotel-select-modal" class="modal fixed inset-0 z-[100] items-center justify-center p-4 bg-black/70">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-md shadow-xl">
+        <header class="p-4 border-b">
+            <h4 class="text-lg font-bold text-slate-800">בחר מלון</h4>
+        </header>
+        <main class="p-4 space-y-2">
+            <p class="text-slate-600 text-sm">נמצאו מספר מלונות רלוונטיים לתאריך זה. אנא בחר את המלון הרצוי מהרשימה:</p>
+            <select id="hotel-select-dropdown" class="w-full p-2 border rounded-lg bg-white"></select>
+        </main>
+        <footer class="p-4 bg-slate-50 flex justify-end gap-3 rounded-b-2xl">
+            <button id="hotel-select-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-200 font-semibold">ביטול</button>
+            <button id="hotel-select-ok" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">בחר</button>
+        </footer>
+    </div>
+  </div>
+  
   <!-- MODAL: יצירת/עריכת פריט -->
   <div id="item-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4 bg-black/60">
     <div class="modal-content bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-xl">
@@ -580,36 +597,19 @@
     </div>
   </div>
 
-  <!-- *** NEW: MODAL for Hotel Selection *** -->
-  <div id="hotel-select-modal" class="modal fixed inset-0 z-[85] items-center justify-center p-4 bg-black/60">
-    <div class="modal-content bg-white rounded-2xl w-full max-w-md shadow-xl">
-        <header class="p-4 border-b">
-            <h4 class="text-lg font-bold">בחירת מלון</h4>
-        </header>
-        <main id="hotel-select-list" class="p-4 space-y-2 max-h-80 overflow-y-auto">
-            <!-- Hotel options will be injected here by JS -->
-        </main>
-        <footer class="p-4 bg-slate-50 flex justify-end gap-2 rounded-b-2xl">
-            <button id="hotel-select-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
-            <button id="hotel-select-confirm" class="px-4 py-2 bg-blue-600 text-white rounded-lg">בחירה</button>
-        </footer>
-    </div>
-  </div>
-
-
   <!-- תיבת הצעות כללית -->
   <div id="global-typeahead" class="typeahead"></div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
       getFirestore, doc, getDoc, setDoc, addDoc, updateDoc,
       collection, getDocs, onSnapshot, serverTimestamp, orderBy, query, deleteDoc,
       writeBatch,
       enableIndexedDbPersistence,
       enableMultiTabIndexedDbPersistence
-    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
@@ -639,7 +639,7 @@
     const urlDate = p.get('date');
     if (!tripId) { alert('חסר tripId'); location.href='index.html'; }
 
-    // *** NEW DOM Refs ***
+    // *** NEW DOM Refs for Modals ***
     const helpBtn = document.getElementById('help-btn');
     const helpModal = document.getElementById('help-modal');
     const helpClose = document.getElementById('help-close');
@@ -650,9 +650,9 @@
     const confirmOk = document.getElementById('confirm-ok');
     const confirmCancel = document.getElementById('confirm-cancel');
     const hotelSelectModal = document.getElementById('hotel-select-modal');
-    const hotelSelectList = document.getElementById('hotel-select-list');
+    const hotelSelectDropdown = document.getElementById('hotel-select-dropdown');
+    const hotelSelectOk = document.getElementById('hotel-select-ok');
     const hotelSelectCancel = document.getElementById('hotel-select-cancel');
-    const hotelSelectConfirm = document.getElementById('hotel-select-confirm');
     
     // Existing DOM refs...
     const dateToggle = document.getElementById('date-toggle');
@@ -801,7 +801,7 @@
       orange:  {bg:'bg-orange-50', border:'border-orange-300', text:'text-orange-800'},
     };
     
-    // Confirmation Modal Logic
+    // Generic Confirmation Modal Logic
     let confirmResolve = null;
     function showConfirm({ title, message, confirmText = 'אישור' }) {
         confirmTitle.textContent = title;
@@ -823,23 +823,20 @@
 
     // *** NEW: Hotel Selection Modal Logic ***
     let hotelSelectResolve = null;
-    function showHotelSelect(hotels) {
-        hotelSelectList.innerHTML = hotels.map((h, i) => `
-            <label class="block p-3 rounded-lg border hover:bg-slate-50 cursor-pointer">
-                <input type="radio" name="hotel-choice" value="${i}" class="ml-2" ${i === 0 ? 'checked' : ''}>
-                <span class="font-semibold">${h.name || '(ללא שם)'}</span>
-                <span class="text-sm text-slate-600 block pr-6">${h.address || 'לא צוינה כתובת'}</span>
-            </label>
-        `).join('');
+    function showHotelSelectModal(hotels) {
+        hotelSelectDropdown.innerHTML = hotels.map((h, index) => {
+            const label = h.name || h.address || `מלון מס׳ ${index + 1}`;
+            return `<option value="${index}">${label} (${h.dates})</option>`;
+        }).join('');
         hotelSelectModal.classList.add('show');
         return new Promise(resolve => {
             hotelSelectResolve = resolve;
         });
     }
-    hotelSelectConfirm.addEventListener('click', () => {
+    hotelSelectOk.addEventListener('click', () => {
         if (hotelSelectResolve) {
-            const selectedRadio = hotelSelectList.querySelector('input[name="hotel-choice"]:checked');
-            hotelSelectResolve(selectedRadio ? parseInt(selectedRadio.value, 10) : null);
+            const selectedIndex = parseInt(hotelSelectDropdown.value, 10);
+            hotelSelectResolve(selectedIndex);
         }
         hotelSelectModal.classList.remove('show');
     });
@@ -849,6 +846,7 @@
     });
 
 
+    // Initial loading logic
     onAuthStateChanged(auth, async (u)=>{
       if (!u){ location.href='login.html'; return; }
       user=u;
@@ -901,7 +899,7 @@
         const time = `${it.startTime || ''}${it.endTime ? ' – ' + it.endTime : ''}`;
         const dist = (it.distanceFromPreviousMeters!=null)
           ? `<span class="text-xs text-slate-500"> • מרחק קודם: ${(it.distanceFromPreviousMeters/1000).toFixed(2)} ק״מ</span>` : '';
-        const addr = it.address?.label ? `<div class="text-xs text-slate-500 mt-1"><i class="fa-solid fa-location-dot ml-1"></i>${it.address.label}</div>` : '';
+        const addr = it.address?.label ? `<div class="text-xs text-slate-500 mt-1"><i class="fa-solid fa-location-dot"></i> ${it.address.label}</div>` : '';
         const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs);
         const needsTxt = [
           it.needsVerifyAddress?'כתובת':null,
@@ -913,7 +911,7 @@
             <div class="font-bold ${needs?'text-red-800':'text-slate-800'}">${it.title || '(ללא כותרת)'}</div>
             <div class="text-sm font-semibold ${needs?'text-red-700':'text-slate-600'}">${time}${dist}</div>
           </div>
-          ${needs?`<div class="mt-1"><span class="badge-verify"><i class="fa-solid fa-circle-exclamation ml-1"></i> דרוש אימות${needsTxt?': '+needsTxt:''}</span></div>`:''}
+          ${needs?`<div class="mt-1"><span class="badge-verify"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${needsTxt?': '+needsTxt:''}</span></div>`:''}
           ${it.summary ? `<div class="text-slate-700 mt-1">${it.summary}</div>`:''}
           ${addr}
         </button>`;
@@ -952,7 +950,7 @@
         refsHtml
       ].filter(Boolean).join(' ');
       if (it.address?.label){
-        viewAddress.innerHTML = `<i class="fa-solid fa-location-dot ml-1"></i> ${it.address.label}`;
+        viewAddress.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${it.address.label}`;
         navWaze.href  = `https://waze.com/ul?q=${encodeURIComponent(it.address.label)}`;
         navGmaps.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}`;
         navWaze.classList.remove('hidden'); navGmaps.classList.remove('hidden');
@@ -1311,42 +1309,52 @@
       } else rTime.textContent='לא נמצא מסלול.';
     });
 
-    // *** MODIFIED: Logic for "Use Hotel Address" to handle multiple hotels ***
-    async function findHotelsForDate(ddmmyyyy, destName) {
-        const qSnap = await getDocs(collection(db, 'trips', tripId, 'logistics'));
-        const allHotels = qSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.type === 'hotel');
-        if (!allHotels.length) return [];
-        const inRange = (range) => expandRange(range || '').includes(ddmmyyyy);
-        const byDest = allHotels.filter(h => (h.destination === destName) && inRange(h.dates));
-        if (byDest.length > 0) return byDest;
-        return allHotels.filter(h => inRange(h.dates));
-    }
-    
-    function applyMainModalHotelAddress(h) {
+    // *** MODIFIED: Logic to handle hotel selection ***
+    function applyHotelAddress(h, inputEl, map, marker) {
         if (!h) return;
-        addrInput.value = h.address || h.name || '';
+        inputEl.value = h.address || h.name || '';
         const c = h.coords || h.location || null;
-        if (c?.lat && c?.lng){
-            if(!addrMarker) addrMarker=L.marker([c.lat,c.lng]).addTo(addrMap);
-            else addrMarker.setLatLng([c.lat,c.lng]);
-            addrMarker._data = {label:addrInput.value, lat:c.lat, lng:c.lng};
-            addrMap.setView([c.lat,c.lng], 15);
+        if (c?.lat && c?.lng) {
+            let currentMarker = marker; // Use a local variable
+            if (!currentMarker) {
+                currentMarker = L.marker([c.lat, c.lng]).addTo(map);
+            } else {
+                currentMarker.setLatLng([c.lat, c.lng]);
+            }
+            currentMarker._data = { label: inputEl.value, lat: c.lat, lng: c.lng };
+            map.setView([c.lat, c.lng], 15);
+
+            // This is tricky because marker is passed by value. We need to update the global ref.
+            if (inputEl === addrInput) addrMarker = currentMarker;
+            if (inputEl === vAddrInput) vAddrMarker = currentMarker;
         }
     }
 
-    useHotelBtn.addEventListener('click', async ()=>{
+    useHotelBtn.addEventListener('click', async () => {
         const hotels = await findHotelsForDate(selectedDate, selectedDestName);
-        if (hotels.length === 0) return alert('אין מלון מוגדר לתאריך זה.');
-        
+        if (!hotels.length) {
+            return alert('אין מלון מוגדר לתאריך זה.');
+        }
         if (hotels.length === 1) {
-            applyMainModalHotelAddress(hotels[0]);
+            applyHotelAddress(hotels[0], addrInput, addrMap, addrMarker);
         } else {
-            const selectedIndex = await showHotelSelect(hotels);
+            const selectedIndex = await showHotelSelectModal(hotels);
             if (selectedIndex !== null) {
-                applyMainModalHotelAddress(hotels[selectedIndex]);
+                applyHotelAddress(hotels[selectedIndex], addrInput, addrMap, addrMarker);
             }
         }
     });
+
+    async function findHotelsForDate(ddmmyyyy, destName){
+      const qSnap = await getDocs(collection(db,'trips',tripId,'logistics'));
+      const allHotels = qSnap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.type==='hotel');
+      const inRange = (range) => expandRange(range).includes(ddmmyyyy);
+      // Find all hotels that match the destination and date range
+      const matchingHotels = allHotels.filter(h => 
+        (h.destination === destName || !h.destination) && inRange(h.dates || '')
+      );
+      return matchingHotels; // Return array of all matches
+    }
 
     function renderSelectedRefs(){
       selectedRefsWrap.innerHTML = selectedRefs.length ? selectedRefs.map((r,i)=>(
@@ -1500,23 +1508,18 @@
         await updateDoc(doc(db,'trips',tripId,'schedules',dayDocId,'items',b.id), { distanceFromPreviousMeters: dist });
       }
     }
-
     addBackHotel.addEventListener('click', async ()=>{
       if (!inputStart.value) return alert('בחר שעת התחלה לחזרה למלון.');
-      
       const hotels = await findHotelsForDate(selectedDate, selectedDestName);
-      if (hotels.length === 0) return alert('לא נמצא מלון לתאריך זה.');
-      
-      let h;
-      if (hotels.length === 1) {
-          h = hotels[0];
-      } else {
-          const selectedIndex = await showHotelSelect(hotels);
-          if (selectedIndex === null) return; // User cancelled
-          h = hotels[selectedIndex];
-      }
-      if (!h) return alert('לא נבחר מלון.');
+      if (!hotels.length) return alert('לא נמצא מלון לתאריך זה.');
 
+      let h = hotels[0];
+      if(hotels.length > 1) {
+        const selectedIndex = await showHotelSelectModal(hotels);
+        if(selectedIndex === null) return; // User cancelled
+        h = hotels[selectedIndex];
+      }
+      
       await saveItemCore({
         title:'חזרה למלון',
         startTime: inputStart.value, endTime:null,
@@ -1526,11 +1529,9 @@
         refs: [],
         requiresRefs:false
       }, null);
-
       itemModal.classList.remove('show');
       hideTypeahead();
     });
-
     openBlockBtns.forEach(b=>{
       b.addEventListener('click', ()=>{
         const el=document.querySelector(b.dataset.open);
@@ -1651,7 +1652,7 @@
                 reflectDayTitleUI();
             }
             const hotels = await findHotelsForDate(selectedDate, selectedDestName);
-            const hotel = hotels.length > 0 ? hotels[0] : null;
+            const hotel = hotels.length > 0 ? hotels[0] : null; // simplified for AI: pick first if exists
 
             for (const it of parsed.items) {
                 const payload = {
@@ -1795,28 +1796,18 @@
       } else vRouteTime.textContent='לא נמצא מסלול.';
     });
     
-    function applyVerifyModalHotelAddress(h) {
-        if (!h) return;
-        vAddrInput.value = h.address || h.name || '';
-        const c = h.coords || h.location || null;
-        if (c?.lat && c?.lng){
-            if(!vAddrMarker) vAddrMarker=L.marker([c.lat,c.lng]).addTo(vAddrMap);
-            else vAddrMarker.setLatLng([c.lat,c.lng]);
-            vAddrMarker._data = {label:vAddrInput.value, lat:c.lat, lng:c.lng};
-            vAddrMap.setView([c.lat,c.lng], 15);
-        }
-    }
-
-    vUseHotel.addEventListener('click', async ()=>{
+    // *** MODIFIED: Logic to handle hotel selection in verification modal ***
+    vUseHotel.addEventListener('click', async () => {
         const hotels = await findHotelsForDate(selectedDate, selectedDestName);
-        if (hotels.length === 0) return alert('אין מלון מוגדר לתאריך זה.');
-        
+        if (!hotels.length) {
+            return alert('אין מלון מוגדר לתאריך זה.');
+        }
         if (hotels.length === 1) {
-            applyVerifyModalHotelAddress(hotels[0]);
+            applyHotelAddress(hotels[0], vAddrInput, vAddrMap, vAddrMarker);
         } else {
-            const selectedIndex = await showHotelSelect(hotels);
+            const selectedIndex = await showHotelSelectModal(hotels);
             if (selectedIndex !== null) {
-                applyVerifyModalHotelAddress(hotels[selectedIndex]);
+                applyHotelAddress(hotels[selectedIndex], vAddrInput, vAddrMap, vAddrMarker);
             }
         }
     });
@@ -1837,9 +1828,9 @@
       }
       if (!vBlockRoute.classList.contains('hidden')){
         const from = vRouteMarkers[0]?._data ? {label:vRouteMarkers[0]._data.label, lat:vRouteMarkers[0]._data.lat, lng:vRouteMarkers[0]._data.lng}
-                           : (vRouteFrom.value.trim()? {label:vRouteFrom.value.trim(), lat:null, lng:null}: null);
+                       : (vRouteFrom.value.trim()? {label:vRouteFrom.value.trim(), lat:null, lng:null}: null);
         const to   = vRouteMarkers[1]?._data ? {label:vRouteMarkers[1]._data.label, lat:vRouteMarkers[1]._data.lat, lng:vRouteMarkers[1]._data.lng}
-                           : (vRouteTo.value.trim()? {label:vRouteTo.value.trim(), lat:null, lng:null}: null);
+                       : (vRouteTo.value.trim()? {label:vRouteTo.value.trim(), lat:null, lng:null}: null);
         newTravel = (from || to) ? { from, to, mode: vRouteMode.value, timeText: vRouteTime.textContent || null } : null;
       }
       const needsVerifyAddress = !!(newAddress && !(newAddress.lat!=null && newAddress.lng!=null));
@@ -1864,8 +1855,8 @@
       btn.addEventListener('click', ()=>{
         pickedNoteColor = btn.dataset.color;
         noteColorHidden.value = pickedNoteColor;
-        document.querySelectorAll('.note-color').forEach(b=> b.classList.remove('ring-2','ring-offset-2', 'ring-blue-500'));
-        btn.classList.add('ring-2','ring-offset-2', 'ring-blue-500');
+        document.querySelectorAll('.note-color').forEach(b=> b.classList.remove('ring-2','ring-offset-2'));
+        btn.classList.add('ring-2','ring-offset-2');
       });
     });
     function openNoteModal(note=null){
@@ -1877,8 +1868,7 @@
       pickedNoteColor = note?.color || 'yellow';
       noteColorHidden.value = pickedNoteColor;
       document.querySelectorAll('.note-color').forEach(b=>{
-        b.classList.remove('ring-2','ring-offset-2', 'ring-blue-500');
-        if (b.dataset.color===pickedNoteColor) b.classList.add('ring-2','ring-offset-2', 'ring-blue-500');
+        if (b.dataset.color===pickedNoteColor) b.classList.add('ring-2','ring-offset-2'); else b.classList.remove('ring-2','ring-offset-2');
       });
       noteModal.classList.add('show');
     }
