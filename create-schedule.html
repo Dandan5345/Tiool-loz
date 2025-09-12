@@ -777,8 +777,8 @@
     let pickedNoteColor = 'yellow';
     let editingNoteId = null;
     let user=null, tripData=null;
-    let selectedDate = null; // *** BUGFIX: Initialize to null, will be set in onAuthStateChanged
-    let selectedDestName = null; // *** BUGFIX: Add state for destination name
+    let selectedDate = null; 
+    let selectedDestName = null; 
     let dayDocId=null, dayDocRef=null;
     let dayTitle=null;
     let items=[], notes=[];
@@ -1297,14 +1297,13 @@
 
     // --- HOTEL SELECTION LOGIC (NEW AND MODIFIED) ---
 
-    // Find all hotels for a given date, preferring hotels in the specified destination.
-    async function findAllHotelsForDate(ddmmyyyy, destName) {
+    // Find all hotels for a given date.
+    async function findAllHotelsForDate(ddmmyyyy) {
         const qSnap = await getDocs(collection(db, 'trips', tripId, 'logistics'));
         const allHotels = qSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.type === 'hotel');
         const inRange = (range) => expandRange(range || '').includes(ddmmyyyy);
         const hotelsForDate = allHotels.filter(h => inRange(h.dates));
-        const hotelsInDest = hotelsForDate.filter(h => h.destination === destName);
-        return hotelsInDest.length > 0 ? hotelsInDest : hotelsForDate;
+        return hotelsForDate;
     }
 
     // Opens the modal to select one of multiple hotels.
@@ -1337,7 +1336,7 @@
 
     // Main handler for using a hotel's address. Checks for multiple hotels.
     async function handleUseHotelAddress(addrInputEl, mapInstance, markerInstance, markerUpdateCallback) {
-        const hotels = await findAllHotelsForDate(selectedDate, selectedDestName);
+        const hotels = await findAllHotelsForDate(selectedDate);
         if (hotels.length === 0) {
             alert('אין מלון מוגדר לתאריך זה.');
             return;
@@ -1535,7 +1534,7 @@
     // MODIFIED Event listener for "Back to hotel" button
     addBackHotel.addEventListener('click', async () => {
         if (!inputStart.value) return alert('בחר שעת התחלה לחזרה למלון.');
-        const hotels = await findAllHotelsForDate(selectedDate, selectedDestName);
+        const hotels = await findAllHotelsForDate(selectedDate);
         if (hotels.length === 0) {
             return alert('לא נמצא מלון לתאריך זה.');
         }
@@ -1682,9 +1681,9 @@ match(m.linkBook)[1].trim(); continue; }
                 dayTitle = parsed.dayTitle;
                 reflectDayTitleUI();
             }
-            // MODIFIED to use the new function
-            const allHotelsForDate = await findAllHotelsForDate(selectedDate, selectedDestName);
-            const hotel = allHotelsForDate.length > 0 ? allHotelsForDate[0] : null;
+            // MODIFIED to use the new function and logic
+            const allHotelsForDate = await findAllHotelsForDate(selectedDate);
+            const hotel = allHotelsForDate.length === 1 ? allHotelsForDate[0] : null; // Only use if there's exactly one
 
             for (const it of parsed.items) {
                 const payload = {
@@ -1915,3 +1914,4 @@ match(m.linkBook)[1].trim(); continue; }
   </script>
 </body>
 </html>
+
