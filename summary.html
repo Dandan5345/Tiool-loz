@@ -60,6 +60,12 @@
         .autocomplete-suggestion:hover {
             background-color: #f3f4f6;
         }
+
+        /* Notification Banner */
+        #notification-banner {
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+            transform: translateY(-100%);
+        }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -67,6 +73,11 @@
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
         <p class="text-xl font-bold text-slate-700">טוען נתונים, נא להמתין...</p>
+    </div>
+    
+    <!-- Notification Banner for errors and messages -->
+    <div id="notification-banner" class="fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12">
+        <p id="notification-message"></p>
     </div>
 
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
@@ -189,43 +200,23 @@
 
 
     <script type="module">
-        // Using a stable Firebase version
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import {
+        // Using a recent stable Firebase version
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
             getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
-            serverTimestamp, deleteDoc, updateDoc,
-            enableIndexedDbPersistence, 
-            enableMultiTabIndexedDbPersistence
-        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+            serverTimestamp, deleteDoc, updateDoc, initializeFirestore, persistentLocalCache, persistentMultipleTabManager
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- Firebase Configuration ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
-        
-        // --- App Initialization ---
+        // --- Firebase Configuration & Initialization ---
+        // These will be provided by the environment, with fallbacks for local development
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "AIzaSy...", authDomain: "...", projectId: "..." }; // Replace with your actual config for local testing
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // --- Offline persistence (IndexedDB) ---
-        enableIndexedDbPersistence(db).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('IndexedDB persistence failed-precondition. Trying multi-tab…', err);
-            enableMultiTabIndexedDbPersistence(db).catch(e => {
-              console.warn('Multi-tab persistence error:', e);
-            });
-          } else if (err.code === 'unimplemented') {
-            console.warn('Browser does not support IndexedDB persistence.');
-          } else {
-            console.warn('Persistence error:', err);
-          }
+        const db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
         });
 
         // --- Global State & Constants ---
@@ -246,6 +237,8 @@
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
+            notificationBanner: document.getElementById('notification-banner'),
+            notificationMessage: document.getElementById('notification-message'),
             pageTitle: document.getElementById('page-title'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             authContainer: document.getElementById('auth-container'),
@@ -276,24 +269,48 @@
             grandTotalContainer: document.getElementById('grand-total-container'),
         };
 
+        // --- Notification System ---
+        function showNotification(message, type = 'error') {
+            DOM.notificationMessage.textContent = message;
+            DOM.notificationBanner.className = `fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12 ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
+            
+            DOM.notificationBanner.classList.remove('opacity-0', '-translate-y-12');
+            DOM.notificationBanner.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                DOM.notificationBanner.classList.remove('opacity-100', 'translate-y-0');
+                DOM.notificationBanner.classList.add('opacity-0', '-translate-y-12');
+            }, 5000);
+        }
+
         // --- Page Initialization ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
-                window.location.href = 'index.html';
+                showNotification("שגיאה: לא נמצא מזהה טיול. מחזיר אותך לדף הבית.");
+                setTimeout(() => window.location.href = 'index.html', 3000);
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                         // The onAuthStateChanged listener will be triggered again with the signed-in user
+                    } catch (error) {
+                        console.error("Authentication Error:", error);
+                        showNotification("שגיאת התחברות. נסה לרענן את הדף.");
+                    }
+                } else if (user) {
                     currentUser = user;
                     loadPageData();
                     setupAuthUI(user);
-                } else {
-                    window.location.href = 'login.html';
                 }
             });
         }
@@ -305,17 +322,18 @@
             const tripSnap = await getDoc(tripRef);
 
             if (!tripSnap.exists()) {
-                alert("הטיול לא נמצא.");
-                window.location.href = 'index.html';
+                showNotification("הטיול לא נמצא. מחזיר אותך לדף הבית.");
+                setTimeout(() => window.location.href = 'index.html', 3000);
                 return;
             }
 
             const tripDataFromSnap = tripSnap.data();
-            const canAccess = tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid);
+            // Allow access if user is owner or in the editors array
+            const canAccess = tripDataFromSnap.owner === currentUser.uid || (tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid));
 
             if (!canAccess) {
-                alert('אין לך הרשאה לערוך את הלו"ז.');
-                location.href = 'index.html';
+                showNotification('אין לך הרשאה לצפות בתוכן זה.');
+                setTimeout(() => location.href = 'index.html', 3000);
                 return;
             }
             
@@ -333,7 +351,7 @@
                 DOM.loadingOverlay.style.display = 'none';
             }, (error) => {
                 console.error("Snapshot error:", error);
-                alert("שגיאה בטעינת נתוני הלוגיסטיקה.");
+                showNotification("שגיאה בטעינת נתוני הלוגיסטיקה.");
                 DOM.loadingOverlay.style.display = 'none';
             });
         }
@@ -412,7 +430,7 @@
         function renderCards(container, items, cardCreator) {
             container.innerHTML = '';
             if (items.length === 0) {
-                container.innerHTML = `<div class="text-center bg-white/20 p-8 rounded-xl col-span-full"><p class="text-white text-lg">עדיין לא נוספו פריטים בקטגוריה זו.</p></div>`;
+                container.innerHTML = `<div class="text-center bg-white/30 backdrop-blur-sm p-8 rounded-xl col-span-full"><p class="text-white text-lg drop-shadow">עדיין לא נוספו פריטים בקטגוריה זו. לחצו על 'הוספת פריט לוגיסטי' כדי להתחיל!</p></div>`;
                 return;
             }
             items.sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).forEach(item => {
@@ -423,17 +441,17 @@
 
         function createHotelCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
-            card.dataset.action = 'view-details'; // For opening the details modal
+            card.dataset.action = 'view-details';
 
             card.innerHTML = `
                 <div class="flex-grow">
                     <div class="flex justify-between items-start">
                        <h4 class="font-bold text-lg text-slate-800">${item.name || 'מלון ללא שם'}</h4>
                        <div class="flex gap-2">
-                         <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}"><i class="fas fa-pencil"></i></button>
-                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${item.name || 'מלון'}"><i class="fas fa-trash"></i></button>
+                         <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
+                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${item.name || 'מלון'}" title="מחיקה"><i class="fas fa-trash"></i></button>
                        </div>
                     </div>
                     <p class="text-sm text-slate-500 mb-3">${item.destination || ''} | ${item.dates || ''}</p>
@@ -449,44 +467,36 @@
 
         function createTransportCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
 
             let title, icon, details;
             switch (item.type) {
                 case 'flight':
-                    title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+                    title = `טיסה`;
                     icon = 'fa-plane-departure';
-                    details = `<p class="text-sm text-slate-500">${item.airline || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.dates || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} ← ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.dates || ''}</p>`;
                     break;
                 case 'car_rental':
-                    title = `רכב שכור: ${item.destination || ''}`;
+                    title = `רכב שכור`;
                     icon = 'fa-car';
-                    details = `<p class="text-sm text-slate-500">${item.booked_via || ''}</p><p class="text-sm text-slate-600 font-semibold">$${(item.price || 0).toLocaleString()}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.destination || ''}</p><p class="text-sm text-slate-500">${item.booked_via || ''} | $${(item.price || 0).toLocaleString()}</p>`;
                     break;
                 case 'ferry':
-                    title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
+                    title = `מעבורת`;
                     icon = 'fa-ship';
-                    details = `<p class="text-sm text-slate-500">${item.company || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from_destination || '?'} ← ${item.to_destination || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'train':
-                    title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
+                    title = `רכבת`;
                     icon = 'fa-train';
-                    details = `<p class="text-sm text-slate-500">${item.company || ''}</p><p class="text-sm text-slate-600 font-semibold">${item.date || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from_station || '?'} ← ${item.to_station || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'ride':
-                    title = `הסעה: ${item.from_address?.split(',')[0] || ''} ← ${item.to_address?.split(',')[0] || ''}`;
+                    title = `הסעה / מונית`;
                     icon = 'fa-taxi';
-                    const rideDate = item.date ? `${item.date} | ` : '';
-                    const pickup = `איסוף ב-${item.pickup_time || 'לא צוין'}`;
-                    details = `<p class="text-sm text-slate-500">${rideDate}${pickup}</p>`;
-                    const extraInfo = [];
-                    if (item.company) extraInfo.push(item.company);
-                    if (item.driver_name) extraInfo.push(`נהג: ${item.driver_name}`);
-                    if (extraInfo.length > 0) {
-                        details += `<p class="text-xs text-slate-600 font-semibold mt-1">${extraInfo.join(' | ')}</p>`;
-                    }
+                    details = `<p class="font-semibold text-slate-700">${item.from_address?.split(',')[0] || '?'} ← ${item.to_address?.split(',')[0] || '?'}</p><p class="text-sm text-slate-500">${item.date || ''} | ${item.pickup_time || ''}</p>`;
                     break;
                 default:
                     title = "מעבר לא ידוע";
@@ -495,20 +505,22 @@
             }
 
             card.innerHTML = `
-                <div class="flex justify-between items-start flex-grow">
-                    <div class="flex items-center gap-3">
-                        <i class="fas ${icon} fa-2x text-sky-500"></i>
-                        <div>
-                            <h4 class="font-bold text-lg text-slate-800">${title}</h4>
-                            ${details}
+                <div class="flex-grow">
+                     <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-3">
+                            <i class="fas ${icon} fa-2x text-sky-500 w-8 text-center"></i>
+                            <div>
+                                <h4 class="font-bold text-lg text-slate-800">${title}</h4>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
+                            <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>
-                    <div class="flex gap-2">
-                         <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}"><i class="fas fa-pencil"></i></button>
-                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}"><i class="fas fa-trash"></i></button>
-                    </div>
+                    <div class="pr-11">${details}</div>
                 </div>
-                 <div class="mt-auto pt-4 border-t text-center">
+                <div class="mt-auto pt-4 border-t text-center">
                    <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
                 </div>`;
             return card;
@@ -529,6 +541,7 @@
         function openModal(itemToEdit = null) {
             resetModalState();
             if (itemToEdit) {
+                DOM.modalTitle.textContent = 'עריכת פריט';
                 editingItem = { id: itemToEdit.id };
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
@@ -576,7 +589,7 @@
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
                 hotel: [
                     { title: "פרטי המלון", fields: [{id: 'name', label: 'שם המלון'}, {id: 'booked_via', label: 'הוזמן דרך?'}] },
-                    { title: "תאריכים ומחיר", fields: [{id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange'}, {id: 'price', label: 'מחיר (בדולרים)', type: 'number'}] },
+                    { title: "תאריכים ומחיר", fields: [{id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange'}, {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'}] },
                     { title: "מיקום המלון", fields: [
                         {id: 'destination', label: 'יעד (עיר, אזור)', type: 'text'},
                         {id: 'address', label: 'כתובת מדויקת', type: 'addressmap'}
@@ -605,6 +618,7 @@
                         { id: 'driver_name', label: 'שם הנהג (אופציונלי)'},
                         { id: 'driver_phone', label: 'טלפון הנהג (אופציונלי)', type: 'tel'},
                         { id: 'vehicle_number', label: 'מספר רכב (אופציונלי)'},
+                        { id: 'vehicle_details', label: 'פרטי הרכב (לדוגמה: מרצדס שחורה)', type: 'text'}, // <-- שדה חדש
                         { id: 'price', label: 'מחיר (בדולרים, 0 אם חינם)', type: 'number'},
                     ]},
                     { title: "פרטים נוספים", fields: [
@@ -749,9 +763,9 @@
             switch(field.type) {
                 case 'radio':
                     return `<div class="space-y-2">
-                        <label class="block text-sm font-semibold text-slate-600">${field.label}</label>
+                        <label class="block text-sm font-semibold text-slate-600">${field.label || ''}</label>
                         <div class="flex flex-wrap gap-4">${field.options.map(opt => `
-                            <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500">
+                            <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors">
                                 <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="form-radio">
                                 <span>${opt.label || opt}</span>
                             </label>`).join('')}
@@ -954,6 +968,8 @@
             delete finalData.mainType;
             delete finalData.subType;
 
+            // This function recursively removes properties with `undefined` values,
+            // which are not allowed by Firestore.
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
                 if (Array.isArray(obj)) return obj.map(item => cleanDataForFirebase(item));
@@ -1004,12 +1020,12 @@
             if (!address) return { success: false, message: 'לא הוזנה כתובת.' };
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
 
             try {
                 const response = await fetch(url, { 
                     signal: controller.signal,
-                    headers: { 'Accept-Language': 'en' } // Request results in English for better matching
+                    headers: { 'Accept-Language': 'en' }
                 });
                 const data = await response.json();
                 if (data && data.length > 0) {
@@ -1059,7 +1075,7 @@
             } else {
                 DOM.modalError.textContent = result.message;
                 
-                // Clear old coordinates if search fails, to avoid saving stale data
+                // Clear old coordinates if search fails
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (modalState.data[legId]) delete modalState.data[legId].coords;
@@ -1083,7 +1099,7 @@
                     const route = data.routes[0];
                     return {
                         success: true,
-                        geometry: route.geometry.coordinates.map(c => [c[1], c[0]]), // OSRM is lng,lat; Leaflet is lat,lng
+                        geometry: route.geometry.coordinates.map(c => [c[1], c[0]]),
                         duration: route.duration, // in seconds
                         distance: route.distance, // in meters
                     };
@@ -1392,7 +1408,6 @@
         });
 
         document.addEventListener('click', e => {
-            // Close any open autocomplete suggestions if clicking outside
             const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[oninput*="debouncedAutocomplete"]');
             if (!isAutocomplete) {
                 document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
@@ -1451,7 +1466,7 @@
                 console.error('Autocomplete error:', error);
             }
         }
-        window.debouncedAutocomplete = debouncedAutocomplete; // Make it globally accessible for oninput attribute
+        window.debouncedAutocomplete = debouncedAutocomplete;
 
         // --- Sidebar Activation ---
         const toggleSidebar = () => {
@@ -1495,7 +1510,10 @@
             switch(item.type) {
                 case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
                 case 'ride': contentHtml += generateRideDetailsHTML(item); break;
-                // Add cases for flight, car_rental etc. as needed
+                case 'flight': contentHtml += generateFlightDetailsHTML(item); break;
+                case 'car_rental': contentHtml += generateCarRentalDetailsHTML(item); break;
+                case 'ferry': contentHtml += generateFerryDetailsHTML(item); break;
+                case 'train': contentHtml += generateTrainDetailsHTML(item); break;
                 default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
             }
             
@@ -1512,7 +1530,6 @@
                 initDetailsMap(item);
             }, 10);
 
-            // Add close listener
             document.getElementById('details-modal-close-btn').addEventListener('click', closeDetailsModal);
         }
 
@@ -1528,6 +1545,7 @@
             }, 300);
         }
 
+        // --- Details HTML Generators ---
         function generateHotelDetailsHTML(item) {
              return `
                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
@@ -1566,13 +1584,89 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
                      <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
                 ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
+            `;
+        }
+
+        function generateFlightDetailsHTML(item) {
+            const title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+            const numSeats = item.seats?.length || 1;
+            const totalPrice = (item.price_per_person || 0) * numSeats;
+            return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.dates || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לאדם:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל (${numSeats} נוסעים):</strong> $${totalPrice.toLocaleString()}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
+                </div>
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container"></div>' : ''}
+            `;
+        }
+
+        function generateCarRentalDetailsHTML(item) {
+            return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                </div>
+            `;
+        }
+        
+        function generateFerryDetailsHTML(item) {
+             const title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
+             return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                </div>
+            `;
+        }
+        
+        function generateTrainDetailsHTML(item) {
+             const title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
+             return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                </div>
             `;
         }
 
@@ -1595,18 +1689,32 @@
             } else if (item.type === 'ride' && item.route_geometry) {
                  let route_geometry = item.route_geometry;
                  if(typeof route_geometry === 'string') {
-                    try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+                     try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
                  }
                  if(route_geometry) {
-                    const latlngs = route_geometry.map(coord => L.latLng(coord[0], coord[1]));
-                    if (item.from_coords) L.marker([item.from_coords.lat, item.from_coords.lon]).addTo(layerGroup).bindPopup('התחלה');
-                    if (item.to_coords) L.marker([item.to_coords.lat, item.to_coords.lon]).addTo(layerGroup).bindPopup('סיום');
-                    const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
-                    detailsMap.fitBounds(polyline.getBounds(), {padding: [20, 20]});
+                     const latlngs = route_geometry.map(coord => L.latLng(coord[0], coord[1]));
+                     if (item.from_coords) L.marker([item.from_coords.lat, item.from_coords.lon]).addTo(layerGroup).bindPopup('התחלה');
+                     if (item.to_coords) L.marker([item.to_coords.lat, item.to_coords.lon]).addTo(layerGroup).bindPopup('סיום');
+                     const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
+                     detailsMap.fitBounds(polyline.getBounds(), {padding: [20, 20]});
                  }
+            } else if (item.type === 'flight') {
+                const points = [];
+                const allLegs = [item.from, ...(item.connections || []), item.to];
+                allLegs.forEach(leg => {
+                    if (leg && leg.coords) {
+                        const coords = [leg.coords.lat, leg.coords.lng || leg.coords.lon];
+                        points.push(coords);
+                        L.marker(coords).addTo(layerGroup).bindPopup(leg.destination || '');
+                    }
+                });
+                if (points.length > 1) {
+                    L.polyline(points, {color: '#3b82f6', weight: 3, dashArray: '10, 10'}).addTo(layerGroup);
+                    detailsMap.fitBounds(points, { padding: [50, 50] });
+                } else if (points.length === 1) {
+                    detailsMap.setView(points[0], 8);
+                }
             }
-             // Add logic for other types like 'flight' if needed
-
             setTimeout(() => detailsMap.invalidateSize(), 100);
         }
 
