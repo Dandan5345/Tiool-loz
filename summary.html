@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ניהול לוגיסטיקה</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -12,34 +12,67 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
 
     <style>
-        body { font-family: 'Assistant', sans-serif; }
-        
-        /* Sidebar Styles */
-        #sidebar { transition: transform 0.3s ease-in-out; }
-        .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
-        .submenu.open { max-height: 1200px; }
-        .chevron-icon { transition: transform 0.3s ease-out; }
-        
+        html { height: 100%; }
+        body { 
+            font-family: 'Assistant', sans-serif;
+            min-height: 100%;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* General Styles */
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+            border: 1px solid rgba(226, 232, 240, 0.7);
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+            cursor: pointer;
+        }
+        .card:hover {
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+            transform: translateY(-3px);
+        }
+        .icon-chip {
+            width: 56px; height: 56px;
+            border-radius: 9999px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #e0f2fe, #bfdbfe);
+            border: 1px solid #93c5fd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .icon-chip i { color: #2563eb; }
+
+        .price-chip {
+            background: #e6f2ff; border: 1px solid #cfe3ff; color: #1e3a8a;
+            font-weight: 800; border-radius: 9999px; padding: .35rem .8rem;
+            white-space: nowrap;
+        }
+
+        .action-button {
+            transition: transform 0.2s ease;
+        }
+        .action-button:hover {
+            transform: scale(1.1);
+        }
+
         /* Modal Styles */
-        .modal { transition: opacity 0.3s ease; }
-        .modal-content { transition: transform 0.3s ease; }
+        .modal-overlay { transition: opacity 0.3s ease; }
+        .modal-content-container { transition: transform 0.3s ease; }
         .modal-step { display: none; animation: fadeIn 0.5s; }
         .modal-step.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
+
         /* Map Styles */
-        .leaflet-container { width: 100%; border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
-        .small-map-container { height: 200px; }
-        .final-map-container { height: 300px; }
+        .leaflet-container { border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
+        .small-map-container { height: 250px; }
+        .final-map-container { height: 350px; }
         .details-map-container { height: 250px; }
         .litepicker { z-index: 100 !important; }
-
-        /* Loading Overlay */
-        #loading-overlay { transition: opacity 0.5s ease-in-out; }
 
         /* Autocomplete Styles */
         .autocomplete-suggestions {
@@ -51,7 +84,7 @@
             max-height: 150px;
             overflow-y: auto;
             z-index: 9999;
-            width: calc(100% - 40px); /* Adjust width to not cover the button */
+            width: calc(100% - 40px);
         }
         .autocomplete-suggestion {
             padding: 0.5rem;
@@ -61,29 +94,34 @@
             background-color: #f3f4f6;
         }
 
-        /* Notification Banner */
-        #notification-banner {
-            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
-            transform: translateY(-100%);
+        /* Custom Scrollbar for better UX */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-100 custom-scrollbar">
 
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
-        <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
+        <i class="fas fa-plane-departure text-5xl text-blue-600 animate-spin"></i>
         <p class="text-xl font-bold text-slate-700">טוען נתונים, נא להמתין...</p>
     </div>
     
-    <!-- Notification Banner for errors and messages -->
-    <div id="notification-banner" class="fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12">
-        <p id="notification-message"></p>
-    </div>
-
-    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+    <div id="page-bg" class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/50"></div>
 
-    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
+    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto custom-scrollbar">
         <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
             <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
             <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
@@ -112,21 +150,23 @@
             <div class="max-w-7xl mx-auto space-y-12">
                 <div class="text-center">
                     <h2 class="text-5xl font-extrabold text-white drop-shadow-lg">הלוגיסטיקה של הטיול</h2>
-                    <p class="mt-4 text-xl text-slate-200 max-w-2xl mx-auto">כל המלונות, הטיסות, הרכבים, הרכבות והמעבורות במקום אחד.</p>
+                    <p class="mt-4 text-xl text-slate-200 max-w-2xl mx-auto drop-shadow">כל המלונות, הטיסות, הרכבים, הרכבות והמעבורות במקום אחד.</p>
                     <button id="open-add-modal-btn" class="mt-8 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
-                        <i class="fas fa-plus mr-2"></i>הוספת פריט לוגיסטי
+                        <i class="fas fa-plus ml-2"></i>הוספת פריט לוגיסטי
                     </button>
                 </div>
 
                 <section id="hotel-summary">
                     <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">🏨 סיכום המלונות שלנו</h3>
                     <div id="hotel-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <p class="text-white/80 text-center col-span-full">טוען סיכום מלונות...</p>
                     </div>
                 </section>
 
                 <section id="transport-summary">
                     <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום המעברים שלנו</h3>
                     <div id="transport-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                         <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
                     </div>
                 </section>
 
@@ -152,14 +192,15 @@
             </div>
         </main>
     </div>
-    
-    <div id="item-modal" class="modal fixed inset-0 bg-black/60 z-[70] hidden items-center justify-center p-4 opacity-0">
-        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
+
+    <!-- Modals -->
+    <div id="item-modal" class="modal-overlay fixed inset-0 bg-black/60 z-[70] hidden items-center justify-center p-4 opacity-0">
+        <div class="modal-content-container bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
             <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                 <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת פריט חדש</h3>
                 <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
             </div>
-            <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-6"></form>
+            <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar"></form>
             <div class="p-4 bg-slate-100 border-t flex justify-between items-center rounded-b-2xl">
                 <button type="button" id="modal-back-btn" class="py-2 px-5 rounded-lg hover:bg-slate-200 transition hidden font-semibold">אחורה</button>
                 <div id="modal-error-message" class="text-red-500 text-sm font-bold h-5 flex-grow text-center"></div>
@@ -169,8 +210,8 @@
         </div>
     </div>
     
-    <div id="delete-confirm-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center opacity-0">
-       <div class="modal-content bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full transform scale-95">
+    <div id="delete-confirm-modal" class="modal-overlay fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center opacity-0">
+       <div class="modal-content-container bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full transform scale-95">
             <div class="text-red-500 mb-4"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
             <h3 id="delete-modal-title" class="text-xl font-bold text-slate-800 mb-4">האם למחוק?</h3>
             <div class="flex justify-center gap-4 mt-6">
@@ -180,27 +221,13 @@
         </div>
     </div>
     
-    <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-[75] hidden items-center justify-center p-4 opacity-0">
-        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
-             <!-- Details content will be injected here -->
+    <div id="details-modal" class="modal-overlay fixed inset-0 bg-black/60 z-[75] hidden items-center justify-center p-4 opacity-0">
+        <div class="modal-content-container bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
+            <!-- Details content will be injected here -->
         </div>
     </div>
-
-    <div id="address-picker-modal" class="modal fixed inset-0 bg-black/60 z-[85] hidden items-center justify-center p-4 opacity-0">
-        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col transform scale-95">
-            <div class="p-5 border-b flex justify-between items-center">
-                <h3 class="text-xl font-bold text-slate-800">בחירת כתובת מהטיול</h3>
-                <button id="address-picker-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
-            </div>
-            <div id="address-picker-content" class="p-4 overflow-y-auto">
-                <!-- Addresses will be loaded here -->
-            </div>
-        </div>
-    </div>
-
 
     <script type="module">
-        // Using a recent stable Firebase version
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -209,7 +236,6 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Firebase Configuration & Initialization ---
-        // Reverted to the original configuration provided
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -218,7 +244,6 @@
             messagingSenderId: "226069823505",
             appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
         };
-
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -230,19 +255,16 @@
         let allItems = [];
         let editingItem = null; 
         let itemToDelete = null;
-        let logisticsUnsubscribe = null; // To detach the listener
-        let detailsMap = null; // For the details modal map
+        let logisticsUnsubscribe = null;
+        let detailsMap = null;
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
             maps: {}, mapLayers: {}, datePicker: null,
         };
-        let currentAddressPickerTarget = null; // To know which input to fill
 
         // --- DOM Elements ---
         const DOM = {
             loadingOverlay: document.getElementById('loading-overlay'),
-            notificationBanner: document.getElementById('notification-banner'),
-            notificationMessage: document.getElementById('notification-message'),
             pageTitle: document.getElementById('page-title'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             authContainer: document.getElementById('auth-container'),
@@ -266,34 +288,17 @@
             deleteConfirmBtn: document.getElementById('delete-modal-confirm'),
             deleteCancelBtn: document.getElementById('delete-modal-cancel'),
             detailsModal: document.getElementById('details-modal'),
-            addressPickerModal: document.getElementById('address-picker-modal'),
-            addressPickerContent: document.getElementById('address-picker-content'),
-            addressPickerCloseBtn: document.getElementById('address-picker-close-btn'),
             logisticsSummaryBody: document.getElementById('logistics-summary-tbody'),
             grandTotalContainer: document.getElementById('grand-total-container'),
         };
 
-        // --- Notification System ---
-        function showNotification(message, type = 'error') {
-            DOM.notificationMessage.textContent = message;
-            DOM.notificationBanner.className = `fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12 ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
-            
-            DOM.notificationBanner.classList.remove('opacity-0', '-translate-y-12');
-            DOM.notificationBanner.classList.add('opacity-100', 'translate-y-0');
-
-            setTimeout(() => {
-                DOM.notificationBanner.classList.remove('opacity-100', 'translate-y-0');
-                DOM.notificationBanner.classList.add('opacity-0', '-translate-y-12');
-            }, 5000);
-        }
-
         // --- Page Initialization ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('tripId') || urlParams.get('id'); // Fix: Accept 'tripId' or 'id' from URL
+            tripId = urlParams.get('tripId') || urlParams.get('id');
             if (!tripId) {
-                showNotification("שגיאה: לא נמצא מזהה טיול. מחזיר אותך לדף הבית.");
-                setTimeout(() => window.location.href = 'index.html', 3000);
+                console.error("שגיאה: לא נמצא מזהה טיול. מחזיר אותך לדף הבית.");
+                setTimeout(() => window.location.href = 'index.html', 100);
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
@@ -304,9 +309,8 @@
                     loadPageData();
                     setupAuthUI(user);
                 } else {
-                    // Reverted to original logic: redirect to login if not authenticated
-                    showNotification("נדרשת התחברות. מעביר לדף הכניסה...", "info");
-                    setTimeout(() => window.location.href = 'login.html', 2500);
+                    console.error("נדרשת התחברות. מעביר לדף הכניסה...");
+                    setTimeout(() => window.location.href = 'login.html', 100);
                 }
             });
         }
@@ -318,18 +322,17 @@
             const tripSnap = await getDoc(tripRef);
 
             if (!tripSnap.exists()) {
-                showNotification("הטיול לא נמצא. מחזיר אותך לדף הבית.");
-                setTimeout(() => window.location.href = 'index.html', 3000);
+                console.error("הטיול לא נמצא. מחזיר אותך לדף הבית.");
+                setTimeout(() => window.location.href = 'index.html', 100);
                 return;
             }
 
             const tripDataFromSnap = tripSnap.data();
-            // Allow access if user is owner or in the editors array
             const canAccess = tripDataFromSnap.owner === currentUser.uid || (tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid));
 
             if (!canAccess) {
-                showNotification('אין לך הרשאה לצפות בתוכן זה.');
-                setTimeout(() => location.href = 'index.html', 3000);
+                console.error('אין לך הרשאה לצפות בתוכן זה.');
+                setTimeout(() => location.href = 'index.html', 100);
                 return;
             }
             
@@ -344,11 +347,12 @@
             logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
                 allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderApp();
-                DOM.loadingOverlay.style.display = 'none';
+                DOM.loadingOverlay.classList.add('opacity-0');
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
             }, (error) => {
                 console.error("Snapshot error:", error);
-                showNotification("שגיאה בטעינת נתוני הלוגיסטיקה.");
-                DOM.loadingOverlay.style.display = 'none';
+                DOM.loadingOverlay.classList.add('opacity-0');
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
             });
         }
 
@@ -437,23 +441,27 @@
 
         function createHotelCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
+            card.className = "card p-5 flex flex-col justify-between";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
 
             card.innerHTML = `
-                <div class="flex-grow">
-                    <div class="flex justify-between items-start">
-                       <h4 class="font-bold text-lg text-slate-800">${item.name || 'מלון ללא שם'}</h4>
-                       <div class="flex gap-2">
-                         <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
-                         <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${item.name || 'מלון'}" title="מחיקה"><i class="fas fa-trash"></i></button>
-                       </div>
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="icon-chip bg-blue-100 border-blue-200"><i class="fas fa-hotel fa-lg text-blue-600"></i></div>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-lg text-slate-800">${item.name || 'מלון ללא שם'}</h4>
+                            <p class="text-sm text-slate-500 truncate">${item.destination || ''}</p>
+                        </div>
                     </div>
-                    <p class="text-sm text-slate-500 mb-3">${item.destination || ''} | ${item.dates || ''}</p>
-                    <ul class="space-y-2 text-slate-600 text-sm mb-4">
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> $${item.price ? item.price.toLocaleString() : 'לא צוין'}</li>
-                    </ul>
+                    <div class="flex gap-2">
+                        <button class="edit-btn text-slate-400 hover:text-blue-500 action-button" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
+                        <button class="delete-btn text-slate-400 hover:text-red-500 action-button" data-id="${item.id}" data-name="${item.name || 'מלון'}" title="מחיקה"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="mt-4 flex flex-col gap-2 text-sm text-slate-600">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-calendar-days fa-fw text-sky-500"></i> <span>${item.dates || 'לא צוין תאריך'}</span></div>
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-green-500"></i> <span>מחיר: <strong class="font-mono text-slate-800">$${(item.price || 0).toLocaleString()}</strong></span></div>
                 </div>
                 <div class="mt-auto pt-4 border-t text-center">
                    <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
@@ -463,58 +471,62 @@
 
         function createTransportCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
+            card.className = "card p-5 flex flex-col justify-between";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
 
-            let title, icon, details;
+            let title, icon, subtitle;
             switch (item.type) {
                 case 'flight':
                     title = `טיסה`;
                     icon = 'fa-plane-departure';
-                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} ← ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.dates || ''}</p>`;
+                    subtitle = `${item.from?.destination || '?'} ← ${item.to?.destination || '?'}`;
                     break;
                 case 'car_rental':
                     title = `רכב שכור`;
                     icon = 'fa-car';
-                    details = `<p class="font-semibold text-slate-700">${item.destination || ''}</p><p class="text-sm text-slate-500">${item.booked_via || ''} | $${(item.price || 0).toLocaleString()}</p>`;
+                    subtitle = `ב${item.destination || ''}`;
                     break;
                 case 'ferry':
                     title = `מעבורת`;
                     icon = 'fa-ship';
-                    details = `<p class="font-semibold text-slate-700">${item.from_destination || '?'} ← ${item.to_destination || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
+                    subtitle = `${item.from_destination || '?'} ← ${item.to_destination || '?'}`;
                     break;
                 case 'train':
                     title = `רכבת`;
                     icon = 'fa-train';
-                    details = `<p class="font-semibold text-slate-700">${item.from_station || '?'} ← ${item.to_station || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
+                    subtitle = `${item.from_station || '?'} ← ${item.to_station || '?'}`;
                     break;
                 case 'ride':
                     title = `הסעה / מונית`;
                     icon = 'fa-taxi';
-                    details = `<p class="font-semibold text-slate-700">${item.from_address?.split(',')[0] || '?'} ← ${item.to_address?.split(',')[0] || '?'}</p><p class="text-sm text-slate-500">${item.date || ''} | ${item.pickup_time || ''}</p>`;
+                    subtitle = `מ${item.from_address?.split(',')[0] || '?'}`;
                     break;
                 default:
-                    title = "מעבר לא ידוע";
-                    icon = 'fa-question-circle';
-                    details = '';
+                    title = "מעבר";
+                    icon = 'fa-question';
+                    subtitle = '';
             }
 
+            const price = item.type === 'flight' ? (item.price_per_person * (item.seats?.length || 1)) : (item.price || 0);
+
             card.innerHTML = `
-                <div class="flex-grow">
-                     <div class="flex justify-between items-start mb-2">
-                        <div class="flex items-center gap-3">
-                            <i class="fas ${icon} fa-2x text-sky-500 w-8 text-center"></i>
-                            <div>
-                                <h4 class="font-bold text-lg text-slate-800">${title}</h4>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
-                            <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="icon-chip bg-emerald-100 border-emerald-200"><i class="fas ${icon} fa-lg text-emerald-600"></i></div>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-lg text-slate-800">${title}</h4>
+                            <p class="text-sm text-slate-500 truncate">${subtitle}</p>
                         </div>
                     </div>
-                    <div class="pr-11">${details}</div>
+                    <div class="flex gap-2">
+                        <button class="edit-btn text-slate-400 hover:text-blue-500 action-button" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
+                        <button class="delete-btn text-slate-400 hover:text-red-500 action-button" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="mt-4 flex flex-col gap-2 text-sm text-slate-600">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-calendar-days fa-fw text-sky-500"></i> <span>${item.dates || item.date || 'לא צוין תאריך'}</span></div>
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-green-500"></i> <span>מחיר: <strong class="font-mono text-slate-800">$${price.toLocaleString()}</strong></span></div>
                 </div>
                 <div class="mt-auto pt-4 border-t text-center">
                    <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
@@ -541,15 +553,14 @@
                 editingItem = { id: itemToEdit.id };
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
-                modalState.data = JSON.parse(JSON.stringify(itemToEdit)); // Deep copy
+                modalState.data = JSON.parse(JSON.stringify(itemToEdit));
                 
-                // BUG FIX: Parse stringified geometry on load
                 if (modalState.data.type === 'ride' && modalState.data.route_geometry && typeof modalState.data.route_geometry === 'string') {
                     try {
                         modalState.data.route_geometry = JSON.parse(modalState.data.route_geometry);
                     } catch (e) {
                         console.error("Failed to parse route geometry:", e);
-                        delete modalState.data.route_geometry; // Clear invalid data
+                        delete modalState.data.route_geometry;
                     }
                 }
             } else {
@@ -562,8 +573,7 @@
             DOM.modal.classList.remove('hidden');
             setTimeout(() => {
                 DOM.modal.classList.remove('opacity-0');
-                DOM.modal.querySelector('.modal-content').classList.remove('scale-95');
-                
+                DOM.modal.querySelector('.modal-content-container').classList.remove('scale-95');
                 initializeFieldPlugins();
                 setTimeout(() => {
                     Object.values(modalState.maps).forEach(map => map?.invalidateSize());
@@ -573,7 +583,7 @@
 
         function closeModal() {
             DOM.modal.classList.add('opacity-0');
-            DOM.modal.querySelector('.modal-content').classList.add('scale-95');
+            DOM.modal.querySelector('.modal-content-container').classList.add('scale-95');
             setTimeout(() => {
                 DOM.modal.classList.add('hidden');
                 resetModalState();
@@ -614,7 +624,7 @@
                         { id: 'driver_name', label: 'שם הנהג (אופציונלי)'},
                         { id: 'driver_phone', label: 'טלפון הנהג (אופציונלי)', type: 'tel'},
                         { id: 'vehicle_number', label: 'מספר רכב (אופציונלי)'},
-                        { id: 'vehicle_details', label: 'פרטי הרכב (לדוגמה: מרצדס שחורה)', type: 'text'}, // <-- שדה חדש
+                        { id: 'vehicle_details', label: 'פרטי הרכב (לדוגמה: מרצדס שחורה)', type: 'text'},
                         { id: 'price', label: 'מחיר (בדולרים, 0 אם חינם)', type: 'number'},
                     ]},
                     { title: "פרטים נוספים", fields: [
@@ -704,7 +714,7 @@
         function generateStepContent() {
             const stepDefinitions = getStepDefinition();
             if (!stepDefinitions || stepDefinitions.length === 0) {
-                DOM.modalForm.innerHTML = `<p>שגיאה: לא נמצאו שלבים להגדרה.</p>`;
+                DOM.modalForm.innerHTML = `<p class="text-center text-red-500">שגיאה: לא נמצאו שלבים להגדרה.</p>`;
                 return;
             }
 
@@ -713,7 +723,7 @@
             
             if (!stepDef) {
                 console.error("Invalid step definition for step:", modalState.currentStep);
-                DOM.modalForm.innerHTML = `<p>שגיאה: שלב לא תקין.</p>`;
+                DOM.modalForm.innerHTML = `<p class="text-center text-red-500">שגיאה: שלב לא תקין.</p>`;
                 return;
             }
 
@@ -744,9 +754,6 @@
                 <label class="block"><span class="text-sm font-semibold text-slate-600">${label}</span>
                     <div class="flex items-center mt-1">
                         <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." oninput="window.debouncedAutocomplete(event)" autocomplete="off">
-                        <button type="button" data-action="open-address-picker" data-target-input="${id}" class="p-2 text-slate-500 hover:text-blue-600 shrink-0" title="פנקס כתובות">
-                            <i class="fas fa-book-atlas"></i>
-                        </button>
                     </div>
                 </label>
                 <div id="${id}-suggestions" class="autocomplete-suggestions"></div>
@@ -781,8 +788,8 @@
                 case 'routemap':
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           ${renderAutocompleteAddressInput('from_address', 'מאיפה?')}
-                           ${renderAutocompleteAddressInput('to_address', 'לאיפה?')}
+                            ${renderAutocompleteAddressInput('from_address', 'מאיפה?')}
+                            ${renderAutocompleteAddressInput('to_address', 'לאיפה?')}
                         </div>
                         <div class="text-center my-4">
                            <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
@@ -798,7 +805,7 @@
                             ${renderFlightLeg('from', 'מאיפה?', modalState.data, 'מאיזו עיר ממריאים?')}
                             ${renderFlightLeg('to', 'לאיפה?', modalState.data, 'באיזו עיר נוחתים?')}
                             <div id="connections-container" class="space-y-4">${(modalState.data.connections || []).map((conn, i) => renderFlightLeg(`connection-${i}`, `קונקשן ${i+1}`, conn)).join('')}</div>
-                            <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף קונקשן</button>
+                            <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus ml-1"></i>הוסף קונקשן</button>
                             <hr class="my-6"/>
                             <h5 class="text-lg font-bold text-slate-700">מפת מסלול מסכמת</h5>
                             <div class="text-center">
@@ -819,14 +826,14 @@
                     return `<fieldset class="border p-4 rounded-lg">
                         <legend class="px-2 font-semibold">מקומות ישיבה</legend>
                         <div id="seats-container" class="flex flex-wrap gap-2"></div>
-                        <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף מקום ישיבה</button>
+                        <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus ml-1"></i>הוסף מקום ישיבה</button>
                     </fieldset>`;
                 case 'daterange':
                 case 'date':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <input type="text" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="לחץ לבחירת תאריכים">
                                 </label>`;
-                default: // text, url, number, time, tel
+                default:
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="${field.placeholder || ''}">
                                 </label>`;
@@ -848,7 +855,7 @@
                     <label><span class="text-sm font-semibold text-slate-600">${destinationLabel}</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
                     <label><span class="text-sm font-semibold text-slate-600">שם שדה תעופה</span><input type="text" id="${id}_airport_name" value="${legData.airport_name || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: JFK"></label>
                     <div class="md:col-span-2">
-                         ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
+                            ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
                     </div>
                     <div class="md:col-span-2 text-center">
                         <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
@@ -910,7 +917,6 @@
                 } else if (field.type === 'routemap') {
                     modalState.data.from_address = document.getElementById('from_address').value;
                     modalState.data.to_address = document.getElementById('to_address').value;
-                    // Other route data (coords, geometry, etc.) is saved during calculation
                     return; 
                 } else if (field.type === 'flightroute') {
                     const collectLegData = (legId, existingData = {}) => ({
@@ -936,7 +942,7 @@
                 else {
                     const input = document.getElementById(field.id);
                     if (input) {
-                         value = field.type === 'number' ? parseFloat(input.value) || 0 : input.value;
+                        value = field.type === 'number' ? parseFloat(input.value) || 0 : input.value;
                     }
                 }
                 
@@ -956,7 +962,6 @@
             const finalData = { ...modalState.data };
             finalData.type = modalState.subType || modalState.mainType;
             
-            // BUG FIX: Stringify nested array before saving to Firestore
             if (finalData.type === 'ride' && finalData.route_geometry && Array.isArray(finalData.route_geometry)) {
                 finalData.route_geometry = JSON.stringify(finalData.route_geometry);
             }
@@ -964,13 +969,10 @@
             delete finalData.mainType;
             delete finalData.subType;
 
-            // This function recursively removes properties with `undefined` values,
-            // which are not allowed by Firestore.
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
                 if (Array.isArray(obj)) return obj.map(item => cleanDataForFirebase(item));
                 if (typeof obj !== 'object' || obj instanceof Date) return obj;
-
 
                 const newObj = {};
                 for (const key in obj) {
@@ -1055,7 +1057,6 @@
                 
                 L.marker(coords).addTo(layerGroup);
                 
-                // Save coordinates to the state
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (!modalState.data[legId]) modalState.data[legId] = {};
@@ -1065,13 +1066,12 @@
                     if (modalState.data.connections && modalState.data.connections[index]) {
                         modalState.data.connections[index].coords = coords;
                     }
-                } else { // hotel
-                     modalState.data.coords = coords;
+                } else {
+                    modalState.data.coords = coords;
                 }
             } else {
                 DOM.modalError.textContent = result.message;
                 
-                // Clear old coordinates if search fails
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (modalState.data[legId]) delete modalState.data[legId].coords;
@@ -1080,7 +1080,7 @@
                     if (modalState.data.connections?.[index]) {
                         delete modalState.data.connections[index].coords;
                     }
-                } else { // hotel
+                } else {
                    if (modalState.data.coords) delete modalState.data.coords;
                 }
             }
@@ -1096,8 +1096,8 @@
                     return {
                         success: true,
                         geometry: route.geometry.coordinates.map(c => [c[1], c[0]]),
-                        duration: route.duration, // in seconds
-                        distance: route.distance, // in meters
+                        duration: route.duration,
+                        distance: route.distance,
                     };
                 } else {
                     return { success: false, message: 'לא נמצא מסלול.' };
@@ -1192,7 +1192,7 @@
             DOM.deleteModal.classList.remove('hidden');
             setTimeout(() => {
                 DOM.deleteModal.classList.remove('opacity-0');
-                DOM.deleteModal.querySelector('.modal-content').classList.remove('scale-95');
+                DOM.deleteModal.querySelector('.modal-content-container').classList.remove('scale-95');
             }, 10);
         }
 
@@ -1209,300 +1209,22 @@
 
         function closeDeleteModal() {
             DOM.deleteModal.classList.add('opacity-0');
-            DOM.deleteModal.querySelector('.modal-content').classList.add('scale-95');
+            DOM.deleteModal.querySelector('.modal-content-container').classList.add('scale-95');
             setTimeout(() => {
                 DOM.deleteModal.classList.add('hidden');
                 itemToDelete = null;
             }, 300);
         }
         
-        // --- Address Picker Modal ---
-        function getKnownAddresses() {
-            const addresses = new Map();
-            const addAddress = (name, address) => {
-                if (address && !addresses.has(address)) {
-                    addresses.set(address, name);
-                }
-            };
-
-            allItems.forEach(item => {
-                switch (item.type) {
-                    case 'hotel':
-                        if (item.address) addAddress(`🏨 ${item.name}`, item.address);
-                        break;
-                    case 'flight':
-                        if (item.from?.airport_address) addAddress(`✈️ ${item.from.airport_name || item.from.destination}`, item.from.airport_address);
-                        if (item.to?.airport_address) addAddress(`✈️ ${item.to.airport_name || item.to.destination}`, item.to.airport_address);
-                        (item.connections || []).forEach(c => {
-                           if (c.airport_address) addAddress(`✈️ ${c.airport_name || c.destination}`, c.airport_address);
-                        });
-                        break;
-                    case 'ferry':
-                         if (item.from_destination) addAddress(`🚢 מעבורת מ-${item.from_destination}`, item.from_destination);
-                         if (item.to_destination) addAddress(`🚢 מעבורת אל-${item.to_destination}`, item.to_destination);
-                         break;
-                    case 'train':
-                         if (item.from_station) addAddress(`🚆 רכבת מ-${item.from_station}`, item.from_station);
-                         if (item.to_station) addAddress(`🚆 רכבת אל-${item.to_station}`, item.to_station);
-                         break;
-                }
-            });
-            return Array.from(addresses, ([address, name]) => ({ name, address }));
-        }
-
-        function openAddressPicker(targetInputId) {
-            currentAddressPickerTarget = targetInputId;
-            const knownAddresses = getKnownAddresses();
-            DOM.addressPickerContent.innerHTML = '';
-            
-            if (knownAddresses.length === 0) {
-                DOM.addressPickerContent.innerHTML = '<p class="text-slate-500 text-center">לא נמצאו כתובות שמורות בטיול.</p>';
-            } else {
-                const list = document.createElement('ul');
-                list.className = 'space-y-2';
-                knownAddresses.forEach(({ name, address }) => {
-                    const li = document.createElement('li');
-                    li.className = 'p-3 hover:bg-slate-100 rounded-md cursor-pointer border';
-                    li.dataset.address = address;
-                    li.innerHTML = `<p class="font-semibold text-slate-700">${name}</p><p class="text-sm text-slate-500">${address}</p>`;
-                    list.appendChild(li);
-                });
-                DOM.addressPickerContent.appendChild(list);
-            }
-
-            DOM.addressPickerModal.classList.remove('hidden');
-            setTimeout(() => {
-                DOM.addressPickerModal.classList.remove('opacity-0');
-                DOM.addressPickerModal.querySelector('.modal-content').classList.remove('scale-95');
-            }, 10);
-        }
-
-        function closeAddressPicker() {
-            DOM.addressPickerModal.classList.add('opacity-0');
-            DOM.addressPickerModal.querySelector('.modal-content').classList.add('scale-95');
-            setTimeout(() => {
-                DOM.addressPickerModal.classList.add('hidden');
-                currentAddressPickerTarget = null;
-            }, 300);
-        }
-
-        // --- Utility Functions ---
-        function formatDuration(seconds) {
-            if (seconds === undefined || seconds === null) return '-';
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        }
-
-        function formatDistance(meters) {
-            if (meters === undefined || meters === null) return '-';
-            return `${(meters / 1000).toFixed(1)} ק"מ`;
-        }
-
-
-        // --- Event Listeners ---
-        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
-        DOM.modalCloseBtn.addEventListener('click', closeModal);
-        DOM.modalForm.addEventListener('submit', handleFormSubmit);
-        
-        DOM.modalNextBtn.addEventListener('click', () => {
-            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
-            if (collectStepData()) {
-                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
-                generateStepContent();
-                updateModalNav();
-                setTimeout(() => {
-                    initializeFieldPlugins();
-                    Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-                }, 10);
-            }
-        });
-
-        DOM.modalBackBtn.addEventListener('click', () => {
-            collectStepData();
-            if (modalState.currentStep === 1) {
-                if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
-                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
-            } else {
-                modalState.currentStep--;
-            }
-            generateStepContent();
-            updateModalNav();
-            setTimeout(() => {
-                initializeFieldPlugins();
-                Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-            }, 10);
-        });
-
-        DOM.modalForm.addEventListener('click', async e => {
-            const target = e.target.closest('button');
-            if (!target) return;
-            const { action, legId, targetInput } = target.dataset;
-
-            const handleSearch = async (searchFunction) => {
-                const originalText = target.innerHTML;
-                target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                target.disabled = true;
-                try {
-                    await searchFunction();
-                } finally {
-                    target.innerHTML = originalText;
-                    target.disabled = false;
-                }
-            };
-            
-            if (action === 'open-address-picker') {
-                openAddressPicker(targetInput);
-            } else if (action === 'find-address') {
-                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value));
-            } else if (action === 'find-flight-leg') {
-                const address = document.getElementById(`${legId}_airport_address`).value;
-                await handleSearch(() => findAddressOnMap(legId, address));
-            } else if(action === 'calculate-ride-route') {
-                await handleSearch(async () => {
-                    const fromAddress = document.getElementById('from_address').value;
-                    const toAddress = document.getElementById('to_address').value;
-                    modalState.data.from_address = fromAddress;
-                    modalState.data.to_address = toAddress;
-
-                    DOM.modalError.textContent = 'מחשב מסלול...';
-                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
-
-                    if (!fromResult.success || !toResult.success) {
-                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
-                        return;
-                    }
-
-                    modalState.data.from_coords = fromResult.coords;
-                    modalState.data.to_coords = toResult.coords;
-                    
-                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
-                    if (routeResult.success) {
-                        DOM.modalError.textContent = '';
-                        modalState.data.route_geometry = routeResult.geometry;
-                        modalState.data.route_duration = routeResult.duration;
-                        modalState.data.route_distance = routeResult.distance;
-                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
-                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
-
-                        const map = modalState.maps['ride-route'];
-                        if (map) {
-                           drawRouteOnMap(map, 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
-                        }
-
-                    } else {
-                        DOM.modalError.textContent = routeResult.message;
-                    }
-                });
-            } else if (target.id === 'add-connection-btn') {
-                addConnection();
-            } else if (target.id === 'calculate-final-route-btn') {
-                showFinalRouteOnMap();
-            } else if (target.id === 'add-seat-btn') {
-                addSeatInput();
-            }
-        });
-
-        document.addEventListener('click', e => {
-            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[oninput*="debouncedAutocomplete"]');
-            if (!isAutocomplete) {
-                document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
-            }
-            const editBtn = e.target.closest('.edit-btn');
-            if (editBtn) {
-                e.stopPropagation();
-                const item = allItems.find(i => i.id === editBtn.dataset.id);
-                if (item) openModal(item);
-                return;
-            }
-            
-            const deleteBtn = e.target.closest('.delete-btn');
-            if (deleteBtn) {
-                e.stopPropagation();
-                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
-                return;
-            }
-
-            const card = e.target.closest('[data-action="view-details"]');
-            if (card) {
-                 const item = allItems.find(i => i.id === card.dataset.id);
-                 if (item) openDetailsModal(item);
-            }
-        });
-
-        // --- Address Autocomplete ---
-        async function handleAddressAutocomplete(event) {
-            const input = event.target;
-            const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
-            if (!suggestionsContainer) return;
-
-            const query = input.value;
-
-            if (query.length < 3) {
-                suggestionsContainer.innerHTML = '';
-                return;
-            }
-
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
-                const data = await response.json();
-                
-                suggestionsContainer.innerHTML = '';
-                data.forEach(place => {
-                    const suggestionDiv = document.createElement('div');
-                    suggestionDiv.textContent = place.display_name;
-                    suggestionDiv.className = 'autocomplete-suggestion';
-                    suggestionDiv.addEventListener('click', () => {
-                        input.value = place.display_name;
-                        suggestionsContainer.innerHTML = '';
-                    });
-                    suggestionsContainer.appendChild(suggestionDiv);
-                });
-            } catch (error) {
-                console.error('Autocomplete error:', error);
-            }
-        }
-        window.debouncedAutocomplete = debouncedAutocomplete;
-
-        // --- Sidebar Activation ---
-        const toggleSidebar = () => {
-            DOM.sidebar.classList.toggle('translate-x-full');
-            DOM.overlay.classList.toggle('hidden');
-        };
-        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
-        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
-        DOM.overlay.addEventListener('click', toggleSidebar);
-
-        // --- Delete Modal Listeners ---
-        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
-        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
-
-        // --- Address Picker Listeners ---
-        DOM.addressPickerCloseBtn.addEventListener('click', closeAddressPicker);
-        DOM.addressPickerContent.addEventListener('click', (e) => {
-            const targetLi = e.target.closest('li[data-address]');
-            if (targetLi && currentAddressPickerTarget) {
-                const address = targetLi.dataset.address;
-                const input = document.getElementById(currentAddressPickerTarget);
-                if (input) {
-                    input.value = address;
-                }
-                closeAddressPicker();
-            }
-        });
-        
-        // --- Details Modal ---
         function openDetailsModal(item) {
             let contentHtml = '';
-            // Generic Header
             contentHtml += `
                 <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                     <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
                     <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
                 </div>
-                <div class="flex-grow overflow-y-auto p-6 space-y-6">`;
+                <div class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">`;
 
-            // Specific content based on type
             switch(item.type) {
                 case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
                 case 'ride': contentHtml += generateRideDetailsHTML(item); break;
@@ -1510,19 +1232,16 @@
                 case 'car_rental': contentHtml += generateCarRentalDetailsHTML(item); break;
                 case 'ferry': contentHtml += generateFerryDetailsHTML(item); break;
                 case 'train': contentHtml += generateTrainDetailsHTML(item); break;
-                default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
+                default: contentHtml += `<p class="text-center text-slate-500">אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
             }
             
-            contentHtml += `</div>`; // Close content wrapper
-            DOM.detailsModal.querySelector('.modal-content').innerHTML = contentHtml;
+            contentHtml += `</div>`;
+            DOM.detailsModal.innerHTML = contentHtml;
 
-            // Show modal
             DOM.detailsModal.classList.remove('hidden');
             setTimeout(() => {
                 DOM.detailsModal.classList.remove('opacity-0');
-                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
-                
-                // Initialize map after modal is visible
+                DOM.detailsModal.querySelector('.modal-content-container').classList.remove('scale-95');
                 initDetailsMap(item);
             }, 10);
 
@@ -1531,7 +1250,7 @@
 
         function closeDetailsModal() {
             DOM.detailsModal.classList.add('opacity-0');
-            DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
+            DOM.detailsModal.querySelector('.modal-content-container').classList.add('scale-95');
             setTimeout(() => {
                 DOM.detailsModal.classList.add('hidden');
                 if (detailsMap) {
@@ -1554,8 +1273,8 @@
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-2 gap-4">
-                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}" ${item.address ? '' : 'disabled'}>ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                 </div>
                 ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
             `;
@@ -1584,8 +1303,8 @@
                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 <div class="grid grid-cols-1 gap-4">
+                    <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
                 ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
             `;
@@ -1624,7 +1343,7 @@
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                  <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
         }
@@ -1642,7 +1361,7 @@
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                  <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
         }
@@ -1661,7 +1380,7 @@
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                  <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
         }
@@ -1751,7 +1470,7 @@
                     grandTotal += category.total;
                 }
             }
-             DOM.logisticsSummaryBody.innerHTML += `
+            DOM.logisticsSummaryBody.innerHTML += `
                 <tr class="font-bold bg-slate-100 text-slate-800">
                     <td class="p-3">סה"כ</td>
                     <td class="p-3 font-mono text-left">$${grandTotal.toLocaleString()}</td>
@@ -1762,11 +1481,191 @@
                 <p class="text-slate-500 mt-1">עלות כוללת משוערת</p>
             `;
         }
+        
+        // --- Utility Functions ---
+        function formatDuration(seconds) {
+            if (seconds === undefined || seconds === null) return '-';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
 
+        function formatDistance(meters) {
+            if (meters === undefined || meters === null) return '-';
+            return `${(meters / 1000).toFixed(1)} ק"מ`;
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
+        DOM.modalCloseBtn.addEventListener('click', closeModal);
+        DOM.modalForm.addEventListener('submit', handleFormSubmit);
+        
+        DOM.modalNextBtn.addEventListener('click', () => {
+            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
+            if (collectStepData()) {
+                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
+                generateStepContent();
+                updateModalNav();
+                setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+                }, 10);
+            }
+        });
+
+        DOM.modalBackBtn.addEventListener('click', () => {
+            collectStepData();
+            if (modalState.currentStep === 1) {
+                if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
+                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
+            } else {
+                modalState.currentStep--;
+            }
+            generateStepContent();
+            updateModalNav();
+            setTimeout(() => {
+                initializeFieldPlugins();
+                Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+            }, 10);
+        });
+
+        DOM.modalForm.addEventListener('click', async e => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            const { action, legId } = target.dataset;
+
+            const handleSearch = async (searchFunction) => {
+                const originalText = target.innerHTML;
+                target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                target.disabled = true;
+                try {
+                    await searchFunction();
+                } finally {
+                    target.innerHTML = originalText;
+                    target.disabled = false;
+                }
+            };
+            
+            if (action === 'find-address') {
+                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value));
+            } else if (action === 'find-flight-leg') {
+                const address = document.getElementById(`${legId}_airport_address`).value;
+                await handleSearch(() => findAddressOnMap(legId, address));
+            } else if(action === 'calculate-ride-route') {
+                await handleSearch(async () => {
+                    const fromAddress = document.getElementById('from_address').value;
+                    const toAddress = document.getElementById('to_address').value;
+                    modalState.data.from_address = fromAddress;
+                    modalState.data.to_address = toAddress;
+
+                    DOM.modalError.textContent = 'מחשב מסלול...';
+                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
+
+                    if (!fromResult.success || !toResult.success) {
+                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
+                        return;
+                    }
+
+                    modalState.data.from_coords = fromResult.coords;
+                    modalState.data.to_coords = toResult.coords;
+                    
+                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
+                    if (routeResult.success) {
+                        DOM.modalError.textContent = '';
+                        modalState.data.route_geometry = routeResult.geometry;
+                        modalState.data.route_duration = routeResult.duration;
+                        modalState.data.route_distance = routeResult.distance;
+                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
+                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
+                        const map = modalState.maps['ride-route'];
+                        if (map) {
+                           drawRouteOnMap(map, 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
+                        }
+                    } else {
+                        DOM.modalError.textContent = routeResult.message;
+                    }
+                });
+            } else if (target.id === 'add-connection-btn') {
+                addConnection();
+            } else if (target.id === 'calculate-final-route-btn') {
+                showFinalRouteOnMap();
+            } else if (target.id === 'add-seat-btn') {
+                addSeatInput();
+            }
+        });
+
+        document.addEventListener('click', e => {
+            const editBtn = e.target.closest('.edit-btn');
+            if (editBtn) {
+                e.stopPropagation();
+                const item = allItems.find(i => i.id === editBtn.dataset.id);
+                if (item) openModal(item);
+                return;
+            }
+            
+            const deleteBtn = e.target.closest('.delete-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
+                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
+                return;
+            }
+
+            const card = e.target.closest('[data-action="view-details"]');
+            if (card) {
+                const item = allItems.find(i => i.id === card.dataset.id);
+                if (item) openDetailsModal(item);
+            }
+        });
+
+        // --- Address Autocomplete ---
+        async function handleAddressAutocomplete(event) {
+            const input = event.target;
+            const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
+            if (!suggestionsContainer) return;
+
+            const query = input.value;
+
+            if (query.length < 3) {
+                suggestionsContainer.innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+                const data = await response.json();
+                
+                suggestionsContainer.innerHTML = '';
+                data.forEach(place => {
+                    const suggestionDiv = document.createElement('div');
+                    suggestionDiv.textContent = place.display_name;
+                    suggestionDiv.className = 'autocomplete-suggestion';
+                    suggestionDiv.addEventListener('click', () => {
+                        input.value = place.display_name;
+                        suggestionsContainer.innerHTML = '';
+                    });
+                    suggestionsContainer.appendChild(suggestionDiv);
+                });
+            } catch (error) {
+                console.error('Autocomplete error:', error);
+            }
+        }
+        window.debouncedAutocomplete = debouncedAutocomplete;
+
+        // --- Sidebar Activation ---
+        const toggleSidebar = () => {
+            DOM.sidebar.classList.toggle('translate-x-full');
+            DOM.overlay.classList.toggle('hidden');
+        };
+        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
+        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
+        DOM.overlay.addEventListener('click', toggleSidebar);
+
+        // --- Delete Modal Listeners ---
+        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
+        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
+        
         // --- Start the page ---
         initPage();
     </script>
 </body>
 </html>
-
-
