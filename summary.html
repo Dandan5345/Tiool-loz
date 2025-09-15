@@ -13,29 +13,40 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
 
     <style>
-        html { height: 100%; }
-        body { 
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #3b82f6;
+            --accent-color: #f9a8d4;
+            --surface-color: #ffffff;
+            --background-color: #f1f5f9;
+        }
+
+        body {
             font-family: 'Assistant', sans-serif;
-            min-height: 100%;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f0f4f8, #e2e8f0);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
 
-        /* General Styles */
         .card {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+            background: var(--surface-color);
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(226, 232, 240, 0.7);
-            transition: box-shadow 0.3s ease, transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
             cursor: pointer;
         }
         .card:hover {
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
-            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transform: translateY(-4px);
         }
+
         .icon-chip {
             width: 56px; height: 56px;
             border-radius: 9999px;
@@ -52,6 +63,19 @@
             font-weight: 800; border-radius: 9999px; padding: .35rem .8rem;
             white-space: nowrap;
         }
+        .vehicle-number-chip {
+            background: #d1fae5;
+            border: 1px solid #6ee7b7;
+            color: #065f46;
+            font-weight: 700;
+            border-radius: 9999px;
+            padding: .25rem .75rem;
+            font-size: 0.875rem;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
         .action-button {
             transition: transform 0.2s ease;
@@ -60,21 +84,18 @@
             transform: scale(1.1);
         }
 
-        /* Modal Styles */
         .modal-overlay { transition: opacity 0.3s ease; }
         .modal-content-container { transition: transform 0.3s ease; }
         .modal-step { display: none; animation: fadeIn 0.5s; }
         .modal-step.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Map Styles */
         .leaflet-container { border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
         .small-map-container { height: 250px; }
         .final-map-container { height: 350px; }
         .details-map-container { height: 250px; }
         .litepicker { z-index: 100 !important; }
 
-        /* Autocomplete Styles */
         .autocomplete-suggestions {
             position: absolute;
             background-color: white;
@@ -93,54 +114,48 @@
         .autocomplete-suggestion:hover {
             background-color: #f3f4f6;
         }
-
-        /* Custom Scrollbar for better UX */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-slate-100 custom-scrollbar">
 
+    <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
-        <i class="fas fa-plane-departure text-5xl text-blue-600 animate-spin"></i>
+        <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
         <p class="text-xl font-bold text-slate-700">טוען נתונים, נא להמתין...</p>
     </div>
     
-    <div id="page-bg" class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
-    <div class="fixed inset-0 z-0 bg-black/50"></div>
+    <!-- Page Background -->
+    <div class="fixed inset-0 z-0 bg-gray-900"></div>
+    <div class="fixed inset-0 z-0 bg-gradient-to-br from-blue-700 to-indigo-800 opacity-60"></div>
+    <div class="fixed inset-0 z-0 bg-dots-pattern"></div>
 
-    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto custom-scrollbar">
-        <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto custom-scrollbar transition-transform duration-300">
+        <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white z-10">
             <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
-            <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500 transition-colors"><i class="fas fa-times fa-lg"></i></button>
         </div>
         <nav id="main-menu" class="p-4 space-y-2"></nav>
     </aside>
     <div id="overlay" class="fixed inset-0 bg-black/60 z-50 hidden"></div>
 
+    <!-- Main Content -->
     <div class="relative z-10">
-        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
+        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-40 shadow-sm rounded-b-xl">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
                     <div class="flex items-center gap-4">
-                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
+                        <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600 transition-colors" title="חזרה לדף הטיול"><i class="fas fa-arrow-left fa-lg"></i></a>
                         <h1 id="page-title" class="text-xl font-bold text-slate-800">ניהול לוגיסטיקה</h1>
                     </div>
                     <div class="flex items-center gap-4">
                         <div id="auth-container" class="flex items-center"></div>
-                        <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
+                        <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 focus:outline-none transition-colors"><i class="fas fa-bars fa-lg"></i></button>
                     </div>
                 </div>
             </div>
@@ -166,7 +181,7 @@
                 <section id="transport-summary">
                     <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">✈️ סיכום המעברים שלנו</h3>
                     <div id="transport-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                         <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
+                           <p class="text-white/80 text-center col-span-full">טוען סיכום מעברים...</p>
                     </div>
                 </section>
 
@@ -198,11 +213,11 @@
         <div class="modal-content-container bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
             <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                 <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת פריט חדש</h3>
-                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                <button id="modal-close-btn" class="text-slate-400 hover:text-red-500 transition-colors"><i class="fas fa-times fa-lg"></i></button>
             </div>
             <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar"></form>
             <div class="p-4 bg-slate-100 border-t flex justify-between items-center rounded-b-2xl">
-                <button type="button" id="modal-back-btn" class="py-2 px-5 rounded-lg hover:bg-slate-200 transition hidden font-semibold">אחורה</button>
+                <button type="button" id="modal-back-btn" class="py-2 px-5 rounded-lg hover:bg-slate-200 transition font-semibold">אחורה</button>
                 <div id="modal-error-message" class="text-red-500 text-sm font-bold h-5 flex-grow text-center"></div>
                 <button type="button" id="modal-next-btn" class="py-2 px-5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">הבא</button>
                 <button type="submit" form="item-form" id="modal-finish-btn" class="py-2 px-5 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition hidden">שמור פריט</button>
@@ -229,21 +244,18 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
             serverTimestamp, deleteDoc, updateDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Firebase Configuration & Initialization ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
+        // DO NOT EDIT: These are global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -303,23 +315,36 @@
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     currentUser = user;
-                    loadPageData();
+                    await loadPageData();
                     setupAuthUI(user);
                 } else {
-                    console.error("נדרשת התחברות. מעביר לדף הכניסה...");
-                    setTimeout(() => window.location.href = 'login.html', 100);
+                    if (initialAuthToken) {
+                         try {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            console.log("Signed in with custom token.");
+                        } catch (error) {
+                            console.error("Custom token sign-in failed:", error);
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        await signInAnonymously(auth);
+                    }
                 }
             });
         }
 
         async function loadPageData() {
             if (logisticsUnsubscribe) logisticsUnsubscribe(); 
+            if (!currentUser) {
+                console.error("אין משתמש מחובר.");
+                return;
+            }
 
-            const tripRef = doc(db, "trips", tripId);
-            const tripSnap = await getDoc(tripRef);
+            const tripDocRef = doc(db, `artifacts/${appId}/public/data/trips`, tripId);
+            const tripSnap = await getDoc(tripDocRef);
 
             if (!tripSnap.exists()) {
                 console.error("הטיול לא נמצא. מחזיר אותך לדף הבית.");
@@ -341,7 +366,7 @@
             DOM.pageTitle.textContent = `לוגיסטיקה - ${tripData.name}`;
             buildSidebarMenu();
 
-            const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+            const logisticsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips/${tripId}/logistics`);
             const q = query(logisticsCollectionRef);
 
             logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
@@ -367,10 +392,10 @@
         }
 
         function setupAuthUI(user) {
-            const userDocRef = doc(db, "users", user.uid);
+            const userDocRef = doc(db, `artifacts/${appId}/users`, user.uid);
             getDoc(userDocRef).then(docSnap => {
-                const name = docSnap.exists() ? docSnap.data().name : 'משתמש';
-                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${name} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
+                const name = docSnap.exists() ? docSnap.data().name : 'אורח';
+                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${name} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500 transition-colors"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
                 document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth).then(() => window.location.href = 'index.html'));
             });
         }
@@ -383,10 +408,10 @@
                 const destinationDiv = document.createElement('div');
                 const button = document.createElement('button');
                 button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
-                button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down chevron-icon"></i>`;
+                button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down chevron-icon transition-transform"></i>`;
                 
                 const submenu = document.createElement('div');
-                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
+                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200 transition-all duration-300 overflow-hidden max-h-0';
                 
                 const dates = generateDatesFromRange(dest.dates);
                 dates.forEach(dateStr => {
@@ -398,7 +423,7 @@
                 });
 
                 button.addEventListener('click', () => {
-                    submenu.classList.toggle('open');
+                    submenu.classList.toggle('max-h-0');
                     button.querySelector('i').classList.toggle('rotate-180');
                 });
 
@@ -476,6 +501,8 @@
             card.dataset.action = 'view-details';
 
             let title, icon, subtitle;
+            let extraChip = '';
+
             switch (item.type) {
                 case 'flight':
                     title = `טיסה`;
@@ -501,6 +528,9 @@
                     title = `הסעה / מונית`;
                     icon = 'fa-taxi';
                     subtitle = `מ${item.from_address?.split(',')[0] || '?'}`;
+                    if (item.vehicle_number) {
+                        extraChip = `<div class="vehicle-number-chip"><i class="fa-solid fa-car-side"></i> ${item.vehicle_number}</div>`;
+                    }
                     break;
                 default:
                     title = "מעבר";
@@ -528,8 +558,9 @@
                     <div class="flex items-center gap-2"><i class="fa-solid fa-calendar-days fa-fw text-sky-500"></i> <span>${item.dates || item.date || 'לא צוין תאריך'}</span></div>
                     <div class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-green-500"></i> <span>מחיר: <strong class="font-mono text-slate-800">$${price.toLocaleString()}</strong></span></div>
                 </div>
-                <div class="mt-auto pt-4 border-t text-center">
-                   <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
+                <div class="flex justify-between items-center mt-auto pt-4 border-t text-center">
+                    <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
+                    ${extraChip}
                 </div>`;
             return card;
         }
@@ -855,7 +886,7 @@
                     <label><span class="text-sm font-semibold text-slate-600">${destinationLabel}</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
                     <label><span class="text-sm font-semibold text-slate-600">שם שדה תעופה</span><input type="text" id="${id}_airport_name" value="${legData.airport_name || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: JFK"></label>
                     <div class="md:col-span-2">
-                            ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
+                                ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
                     </div>
                     <div class="md:col-span-2 text-center">
                         <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
@@ -988,7 +1019,7 @@
             const cleanedData = cleanDataForFirebase(finalData);
 
             try {
-                const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+                const logisticsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips/${tripId}/logistics`);
                 if (editingItem && editingItem.id) {
                     await updateDoc(doc(logisticsCollectionRef, editingItem.id), cleanedData);
                 } else {
@@ -1199,7 +1230,7 @@
         async function confirmDeletion() {
             if (!itemToDelete) return;
             try {
-                await deleteDoc(doc(db, "trips", tripId, "logistics", itemToDelete.id));
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/trips/${tripId}/logistics`, itemToDelete.id));
             } catch (error) {
                 console.error("Failed to delete item:", error);
             } finally {
@@ -1221,7 +1252,7 @@
             contentHtml += `
                 <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                     <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
-                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500 transition-colors"><i class="fas fa-times fa-lg"></i></button>
                 </div>
                 <div class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">`;
 
@@ -1274,7 +1305,7 @@
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-2 gap-4">
                      <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}" ${item.address ? '' : 'disabled'}>ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}" ${item.address ? '' : 'disabled'}>ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                 </div>
                 ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
             `;
@@ -1302,9 +1333,9 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                    <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                    <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
                 ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
             `;
@@ -1341,8 +1372,8 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-1 gap-4">
                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
@@ -1359,8 +1390,8 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-1 gap-4">
                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
@@ -1378,8 +1409,8 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-1 gap-4">
                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}" ${item.booking_link ? '' : 'disabled'}>קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                 </div>
             `;
