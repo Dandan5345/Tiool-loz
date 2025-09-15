@@ -14,7 +14,7 @@
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
-
+    
     <style>
         body { 
             font-family: 'Assistant', sans-serif;
@@ -222,22 +222,16 @@
     <script type="module">
         // Using a recent stable Firebase version
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
-            serverTimestamp, deleteDoc, updateDoc
+            serverTimestamp, deleteDoc, updateDoc, setLogLevel
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Firebase Configuration & Initialization ---
-        // Reverted to the original configuration provided
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
+        setLogLevel('debug');
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -275,7 +269,7 @@
             transportContainer: document.getElementById('transport-cards-container'),
             modal: document.getElementById('item-modal'),
             modalTitle: document.getElementById('modal-title'),
-            modalForm: document.getElementById('modal-form'),
+            modalForm: document.getElementById('item-form'),
             modalNextBtn: document.getElementById('modal-next-btn'),
             modalBackBtn: document.getElementById('modal-back-btn'),
             modalFinishBtn: document.getElementById('modal-finish-btn'),
@@ -308,25 +302,24 @@
         }
 
         // --- Page Initialization ---
-        function initPage() {
+        async function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('tripId') || urlParams.get('id'); // Fix: Accept 'tripId' or 'id' from URL
+            tripId = urlParams.get('tripId') || urlParams.get('id');
             if (!tripId) {
                 showNotification("שגיאה: לא נמצא מזהה טיול. מחזיר אותך לדף הבית.");
-                setTimeout(() => window.location.href = 'index.html', 3000);
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+            
+            await signInAnonymously(auth);
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     currentUser = user;
-                    loadPageData();
+                    await loadPageData();
                     setupAuthUI(user);
                 } else {
-                    // Reverted to original logic: redirect to login if not authenticated
-                    showNotification("נדרשת התחברות. מעביר לדף הכניסה...", "info");
-                    setTimeout(() => window.location.href = 'login.html', 2500);
+                    console.log("User signed out.");
                 }
             });
         }
@@ -334,31 +327,22 @@
         async function loadPageData() {
             if (logisticsUnsubscribe) logisticsUnsubscribe(); 
 
-            const tripRef = doc(db, "trips", tripId);
+            const tripRef = doc(db, "artifacts", appId, "public/data", tripId);
             const tripSnap = await getDoc(tripRef);
 
             if (!tripSnap.exists()) {
                 showNotification("הטיול לא נמצא. מחזיר אותך לדף הבית.");
-                setTimeout(() => window.location.href = 'index.html', 3000);
                 return;
             }
 
             const tripDataFromSnap = tripSnap.data();
-            // Allow access if user is owner or in the editors array
-            const canAccess = tripDataFromSnap.owner === currentUser.uid || (tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid));
-
-            if (!canAccess) {
-                showNotification('אין לך הרשאה לצפות בתוכן זה.');
-                setTimeout(() => location.href = 'index.html', 3000);
-                return;
-            }
             
             tripData = tripDataFromSnap;
             document.title = `לוגיסטיקה - ${tripData.name}`;
             DOM.pageTitle.textContent = `לוגיסטיקה - ${tripData.name}`;
             buildSidebarMenu();
 
-            const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+            const logisticsCollectionRef = collection(db, "artifacts", appId, "public/data", tripId, "logistics");
             const q = query(logisticsCollectionRef);
 
             logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
@@ -383,12 +367,13 @@
         }
 
         function setupAuthUI(user) {
-            const userDocRef = doc(db, "users", user.uid);
-            getDoc(userDocRef).then(docSnap => {
-                const name = docSnap.exists() ? docSnap.data().name : 'משתמש';
-                DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-300 hidden sm:block">שלום, ${name} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-300 hover:text-red-400"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
-                document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth).then(() => window.location.href = 'index.html'));
-            });
+             const userDocRef = doc(db, "artifacts", appId, "users", user.uid, "profile");
+             getDoc(userDocRef).then(docSnap => {
+                 const name = docSnap.exists() ? docSnap.data().name : 'משתמש';
+                 DOM.authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-300 hidden sm:block">שלום, ${name} 👋</span>`;
+             }).catch(err => {
+                 console.error("Failed to fetch user profile:", err);
+             });
         }
 
         function buildSidebarMenu() {
@@ -1021,7 +1006,7 @@
             const cleanedData = cleanDataForFirebase(finalData);
 
             try {
-                const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+                const logisticsCollectionRef = collection(db, "artifacts", appId, "public/data", tripId, "logistics");
                 if (editingItem && editingItem.id) {
                     await updateDoc(doc(logisticsCollectionRef, editingItem.id), cleanedData);
                 } else {
@@ -1234,7 +1219,7 @@
         async function confirmDeletion() {
             if (!itemToDelete) return;
             try {
-                await deleteDoc(doc(db, "trips", tripId, "logistics", itemToDelete.id));
+                await deleteDoc(doc(db, "artifacts", appId, "public/data", tripId, "logistics", itemToDelete.id));
             } catch (error) {
                 console.error("Failed to delete item:", error);
             } finally {
