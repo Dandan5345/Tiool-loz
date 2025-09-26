@@ -1224,7 +1224,7 @@
             const debouncedAutocomplete = debounce(handleAddressAutocomplete, 400);
             document.querySelectorAll('input[id*="address"], input[id*="location"], input[id*="station"], input[id*="destination"]').forEach(input => {
                  if (input.type === 'text') {
-                      input.addEventListener('input', () => debouncedAutocomplete(input));
+                     input.addEventListener('input', () => debouncedAutocomplete(input));
                  }
             });
         }
@@ -1300,7 +1300,7 @@
                 else {
                     const input = document.getElementById(field.id);
                     if (input) {
-                         value = field.type === 'number' ? (input.value ? parseFloat(input.value) : null) : input.value;
+                        value = field.type === 'number' ? (input.value ? parseFloat(input.value) : null) : input.value;
                     }
                 }
                 
@@ -1674,13 +1674,13 @@
                         });
                         break;
                     case 'ferry':
-                         if (item.from_destination) addAddress(`🚢 מעבורת מ-${item.from_destination}`, item.from_destination);
-                         if (item.to_destination) addAddress(`🚢 מעבורת אל-${item.to_destination}`, item.to_destination);
-                         break;
+                        if (item.from_destination) addAddress(`🚢 מעבורת מ-${item.from_destination}`, item.from_destination);
+                        if (item.to_destination) addAddress(`🚢 מעבורת אל-${item.to_destination}`, item.to_destination);
+                        break;
                     case 'train':
-                         if (item.from_station) addAddress(`🚆 רכבת מ-${item.from_station}`, item.from_station);
-                         if (item.to_station) addAddress(`🚆 רכבת אל-${item.to_station}`, item.to_station);
-                         break;
+                        if (item.from_station) addAddress(`🚆 רכבת מ-${item.from_station}`, item.from_station);
+                        if (item.to_station) addAddress(`🚆 רכבת אל-${item.to_station}`, item.to_station);
+                        break;
                 }
             });
             return Array.from(addresses, ([address, name]) => ({ name, address }));
@@ -1728,6 +1728,24 @@
         DOM.modalForm.addEventListener('submit', handleFormSubmit);
         
         DOM.modalNextBtn.addEventListener('click', () => {
+            // UPDATED: Handle special case for flight search step
+            const isFlightSearchStep = modalState.subType === 'flight' && !modalState.flightDataFound && !editingItem;
+            if (isFlightSearchStep) {
+                // This logic mirrors the "skip-flight-search" button's action
+                modalState.flightDataFound = true;
+                modalState.currentStep = 1; // Start flight form from step 1
+                generateStepContent();
+                updateModalNav();
+                setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => {
+                        if (m) google.maps.event.trigger(m, 'resize');
+                    });
+                }, 100);
+                return; // Stop further execution
+            }
+
+            // Original logic for all other steps
             const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
             if (collectStepData()) {
                 modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
@@ -1738,7 +1756,7 @@
                     Object.values(modalState.maps).forEach(m => {
                         if (m) google.maps.event.trigger(m, 'resize');
                     });
-                }, 10);
+                }, 100);
             }
         });
 
@@ -1758,7 +1776,7 @@
                 Object.values(modalState.maps).forEach(m => {
                     if (m) google.maps.event.trigger(m, 'resize');
                 });
-            }, 10);
+            }, 100);
         });
         
         async function searchFlightWithWorker(num, date) {
@@ -1899,8 +1917,10 @@
                 updateModalNav();
                  setTimeout(() => {
                      initializeFieldPlugins();
-                     Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-                 }, 10);
+                     Object.values(modalState.maps).forEach(m => {
+                        if (m) google.maps.event.trigger(m, 'resize');
+                    });
+                 }, 100);
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
             } else if (target.id === 'calculate-final-route-btn') {
@@ -1939,6 +1959,39 @@
 
         // --- Autocomplete and Search Logic ---
 
+        // NEW: Handles selection from autocomplete, filling multiple fields and updating the map.
+        async function handlePlaceSelection(prediction, inputElement) {
+            if (!prediction || !inputElement) return;
+
+            // 1. Fill related text fields (name, destination)
+            const baseId = inputElement.id.replace('_airport_address', ''); // e.g., 'from', 'to', 'connection-0'
+            const nameInput = document.getElementById(`${baseId}_airport_name`);
+            const destinationInput = document.getElementById(`${baseId}_destination`);
+
+            if (nameInput) nameInput.value = prediction.structured_formatting.main_text;
+            if (destinationInput) destinationInput.value = prediction.structured_formatting.main_text;
+
+            // 2. Determine mapKey for this input
+            let mapKey;
+            const inputId = inputElement.id;
+             if (inputId.startsWith('from_airport')) { mapKey = 'from'; } 
+             else if (inputId.startsWith('to_airport')) { mapKey = 'to'; } 
+             else if (inputId.startsWith('connection')) { mapKey = inputId.replace('_airport_address', '');} 
+             else { return; } // Only act for flight legs
+
+            // 3. Geocode, update address input, place marker, and save coordinates
+            const formattedAddress = await findAddressOnMap(mapKey, null, prediction.place_id);
+            if (formattedAddress) {
+                inputElement.value = formattedAddress;
+            }
+
+            // 4. Update the final route map in real-time
+            if (modalState.subType === 'flight') {
+                setTimeout(showFinalRouteOnMap, 100);
+            }
+        }
+
+
         // Function for the search button click. Finds a specific place.
         async function findPlaceAndFill(inputElement) {
             const query = inputElement.value;
@@ -1968,7 +2021,7 @@
                 mapKey = 'ride-route';
             } else {
                  // Fallback for other simple cases like ferry/train destinations
-                mapKey = inputId.replace('_destination', '').replace('_station','').replace('_location', '');
+                 mapKey = inputId.replace('_destination', '').replace('_station','').replace('_location', '');
             }
 
             placesService.findPlaceFromQuery(request, async (results, status) => {
@@ -1977,6 +2030,10 @@
                     const formattedAddress = await findAddressOnMap(mapKey, place.formatted_address, place.place_id);
                     if (formattedAddress) {
                         inputElement.value = formattedAddress; // Update input with full, correct address
+                    }
+                    // UPDATED: Refresh final route map after a manual search on a flight leg
+                    if (modalState.subType === 'flight') {
+                       setTimeout(showFinalRouteOnMap, 100);
                     }
                 } else {
                     DOM.modalError.textContent = 'המקום לא נמצא. נסה ניסוח אחר.';
@@ -2008,13 +2065,15 @@
             suggestionsContainer.innerHTML = '';
             predictions.forEach(prediction => {
                 const suggestionDiv = document.createElement('div');
-                suggestionDiv.textContent = prediction.description;
                 suggestionDiv.className = 'autocomplete-suggestion';
+                // Add icons for airports for better UI
+                const isAirport = prediction.types.includes('airport');
+                suggestionDiv.innerHTML = `<i class="fas ${isAirport ? 'fa-plane-departure' : 'fa-map-marker-alt'} fa-fw text-slate-400 mr-2"></i> ${prediction.description}`;
+                
                 suggestionDiv.addEventListener('click', () => {
-                    // CORRECTED: On suggestion click, just fill the input.
-                    // The user will then click the "Find" button to update the map.
-                    input.value = prediction.description;
-                    suggestionsContainer.innerHTML = '';
+                    // UPDATED: On suggestion click, trigger the full place selection process
+                    suggestionsContainer.innerHTML = ''; // Hide suggestions immediately
+                    handlePlaceSelection(prediction, input);
                 });
                 suggestionsContainer.appendChild(suggestionDiv);
             });
@@ -2092,6 +2151,7 @@
 
         // --- Details HTML Generators ---
         function generateHotelDetailsHTML(item) {
+
              let starsHtml = '';
             if (item.stars && item.stars > 0) {
                 starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
@@ -2134,18 +2194,18 @@
             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
-                      <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
+                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
+                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
@@ -2162,14 +2222,14 @@
             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
-                      <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
-                      <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
+                       <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
+                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
@@ -2180,13 +2240,13 @@
             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0). toLocaleString()}</div>
+                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0). toLocaleString()}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
@@ -2201,12 +2261,12 @@
              return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
@@ -2221,13 +2281,13 @@
              return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
-                      <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                      <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
+                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
