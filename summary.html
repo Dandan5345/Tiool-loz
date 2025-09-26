@@ -18,6 +18,19 @@
     <style>
         body { font-family: 'Assistant', sans-serif; }
         
+        /* --- General Improvements --- */
+        .gradient-bg {
+            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         /* Sidebar Styles */
         #sidebar { transition: transform 0.3s ease-in-out; }
         .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
@@ -80,8 +93,9 @@
         <p id="notification-message"></p>
     </div>
 
-    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
-    <div class="fixed inset-0 z-0 bg-black/50"></div>
+    <!-- Improved Background -->
+    <div class="fixed inset-0 z-0 gradient-bg"></div>
+    <div class="fixed inset-0 z-0 bg-black/30"></div>
 
     <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
         <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
@@ -200,7 +214,6 @@
 
 
     <script type="module">
-        // Using a recent stable Firebase version
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -209,7 +222,6 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Firebase Configuration & Initialization ---
-        // Reverted to the original configuration provided
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -290,7 +302,7 @@
         // --- Page Initialization ---
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('tripId') || urlParams.get('id'); // Fix: Accept 'tripId' or 'id' from URL
+            tripId = urlParams.get('tripId') || urlParams.get('id');
             if (!tripId) {
                 showNotification("שגיאה: לא נמצא מזהה טיול. מחזיר אותך לדף הבית.");
                 setTimeout(() => window.location.href = 'index.html', 3000);
@@ -304,7 +316,6 @@
                     loadPageData();
                     setupAuthUI(user);
                 } else {
-                    // Reverted to original logic: redirect to login if not authenticated
                     showNotification("נדרשת התחברות. מעביר לדף הכניסה...", "info");
                     setTimeout(() => window.location.href = 'login.html', 2500);
                 }
@@ -324,7 +335,6 @@
             }
 
             const tripDataFromSnap = tripSnap.data();
-            // Allow access if user is owner or in the editors array
             const canAccess = tripDataFromSnap.owner === currentUser.uid || (tripDataFromSnap.editors && tripDataFromSnap.editors.includes(currentUser.uid));
 
             if (!canAccess) {
@@ -437,6 +447,7 @@
 
         function createHotelCard(item) {
             const card = document.createElement('div');
+            // Design Change: The whole card is now clickable
             card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
@@ -455,17 +466,22 @@
                         <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> $${item.price ? item.price.toLocaleString() : 'לא צוין'}</li>
                     </ul>
                 </div>
-                <div class="mt-auto pt-4 border-t text-center">
-                   <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
-                </div>`;
+                <!-- Design Change: Removed the "click for details" text, as the card is clickable -->
+            `;
             return card;
         }
 
         function createTransportCard(item) {
             const card = document.createElement('div');
+             // Design Change: The whole card is now clickable
             card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
+            
+            // Feature: Calculate total price based on travelers
+            const travelers = item.travelers || 1;
+            const price_per_person = item.price_per_person || item.price || 0;
+            const totalPrice = price_per_person * travelers;
 
             let title, icon, details;
             switch (item.type) {
@@ -477,7 +493,7 @@
                 case 'car_rental':
                     title = `רכב שכור`;
                     icon = 'fa-car';
-                    details = `<p class="font-semibold text-slate-700">${item.destination || ''}</p><p class="text-sm text-slate-500">${item.booked_via || ''} | $${(item.price || 0).toLocaleString()}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.destination || ''}</p><p class="text-sm text-slate-500">${item.booked_via || ''}</p>`;
                     break;
                 case 'ferry':
                     title = `מעבורת`;
@@ -503,21 +519,22 @@
             card.innerHTML = `
                 <div class="flex-grow">
                      <div class="flex justify-between items-start mb-2">
-                        <div class="flex items-center gap-3">
-                            <i class="fas ${icon} fa-2x text-sky-500 w-8 text-center"></i>
-                            <div>
-                                <h4 class="font-bold text-lg text-slate-800">${title}</h4>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
-                            <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </div>
-                    <div class="pr-11">${details}</div>
+                         <div class="flex items-center gap-3">
+                             <i class="fas ${icon} fa-2x text-sky-500 w-8 text-center"></i>
+                             <div>
+                                 <h4 class="font-bold text-lg text-slate-800">${title}</h4>
+                             </div>
+                         </div>
+                         <div class="flex gap-2">
+                             <button class="edit-btn text-slate-400 hover:text-blue-500" data-id="${item.id}" title="עריכה"><i class="fas fa-pencil"></i></button>
+                             <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
+                         </div>
+                     </div>
+                     <div class="pr-11">${details}</div>
                 </div>
-                <div class="mt-auto pt-4 border-t text-center">
-                   <span class="text-sm text-blue-600 font-semibold">לחץ לפרטים נוספים...</span>
+                <div class="mt-auto pt-4 border-t flex justify-between items-center text-slate-700">
+                    <div class="flex items-center gap-1 text-sm"><i class="fa-solid fa-users text-slate-400"></i><span>${travelers}</span></div>
+                    <div class="font-bold text-lg">$${totalPrice.toLocaleString()}</div>
                 </div>`;
             return card;
         }
@@ -543,7 +560,7 @@
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
                 modalState.data = JSON.parse(JSON.stringify(itemToEdit)); // Deep copy
                 
-                // BUG FIX: Parse stringified geometry on load
+                // Bug Fix: Parse stringified geometry on load
                 if (modalState.data.type === 'ride' && modalState.data.route_geometry && typeof modalState.data.route_geometry === 'string') {
                     try {
                         modalState.data.route_geometry = JSON.parse(modalState.data.route_geometry);
@@ -602,6 +619,7 @@
                     {value: 'ferry', label: '🚢 מעבורת'},
                     {value: 'train', label: '🚆 רכבת'}
                 ] }] },
+                // Feature: Added travelers field and changed price to price_per_person for transport types
                 ride: [
                     { title: "מסלול הנסיעה", fields: [{ id: 'routemap', type: 'routemap'}] },
                     { title: "פרטי הזמנה", fields: [
@@ -614,8 +632,9 @@
                         { id: 'driver_name', label: 'שם הנהג (אופציונלי)'},
                         { id: 'driver_phone', label: 'טלפון הנהג (אופציונלי)', type: 'tel'},
                         { id: 'vehicle_number', label: 'מספר רכב (אופציונלי)'},
-                        { id: 'vehicle_details', label: 'פרטי הרכב (לדוגמה: מרצדס שחורה)', type: 'text'}, // <-- שדה חדש
-                        { id: 'price', label: 'מחיר (בדולרים, 0 אם חינם)', type: 'number'},
+                        { id: 'vehicle_details', label: 'פרטי הרכב (לדוגמה: מרצדס שחורה)', type: 'text'},
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number'},
                     ]},
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
@@ -635,7 +654,8 @@
                         {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני'},
                     ]},
                     { title: "עלות ופרטים נוספים", fields: [
-                        {id: 'price', label: 'מחיר (בדולרים)', type: 'number'},
+                        {id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'},
                         {id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
                     ]}
@@ -648,7 +668,8 @@
                         { id: 'dates', label: 'תאריך טיסה', type: 'date' },
                         { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
                         { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
-                        { id: 'price_per_person', label: 'מחיר לאדם (בדולרים)', type: 'number' },
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
                     ]},
                     { title: "כבודה, ישיבה ופרטים נוספים", fields: [ 
                         { id: 'luggage', type: 'luggage' }, 
@@ -666,7 +687,8 @@
                         { id: 'date', label: 'תאריך', type: 'date' },
                         { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
                         { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
-                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number' },
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
                     ]},
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
@@ -683,7 +705,8 @@
                         { id: 'date', label: 'תאריך', type: 'date' },
                         { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
                         { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
-                        { id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number' },
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
                     ]},
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
@@ -743,7 +766,7 @@
             <div class="relative">
                 <label class="block"><span class="text-sm font-semibold text-slate-600">${label}</span>
                     <div class="flex items-center mt-1">
-                        <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." oninput="window.debouncedAutocomplete(event)" autocomplete="off">
+                        <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." data-autocomplete-target="true" autocomplete="off">
                         <button type="button" data-action="open-address-picker" data-target-input="${id}" class="p-2 text-slate-500 hover:text-blue-600 shrink-0" title="פנקס כתובות">
                             <i class="fas fa-book-atlas"></i>
                         </button>
@@ -754,22 +777,22 @@
         }
 
         function renderField(field) {
-            const value = modalState.data[field.id] || '';
+            const value = modalState.data[field.id] || field.default || '';
             
             switch(field.type) {
                 case 'radio':
                     return `<div class="space-y-2">
-                        <label class="block text-sm font-semibold text-slate-600">${field.label || ''}</label>
-                        <div class="flex flex-wrap gap-4">${field.options.map(opt => `
-                            <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors">
-                                <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="form-radio">
-                                <span>${opt.label || opt}</span>
-                            </label>`).join('')}
-                        </div></div>`;
+                            <label class="block text-sm font-semibold text-slate-600">${field.label || ''}</label>
+                            <div class="flex flex-wrap gap-4">${field.options.map(opt => `
+                                <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors">
+                                    <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="form-radio">
+                                    <span>${opt.label || opt}</span>
+                                </label>`).join('')}
+                            </div></div>`;
                 case 'textarea':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
-                                </label>`;
+                                        <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
+                                        </label>`;
                 case 'addressmap':
                     return `<div>
                         ${renderAutocompleteAddressInput(field.id, field.label)}
@@ -824,12 +847,12 @@
                 case 'daterange':
                 case 'date':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                <input type="text" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="לחץ לבחירת תאריכים">
-                                </label>`;
+                                        <input type="text" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="לחץ לבחירת תאריכים">
+                                        </label>`;
                 default: // text, url, number, time, tel
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="${field.placeholder || ''}">
-                                </label>`;
+                                        <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="${field.placeholder || ''}">
+                                        </label>`;
             }
         }
         
@@ -869,6 +892,14 @@
                 });
             }
             
+            // Bug Fix: Address paste issue
+            document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
+                input.removeEventListener('input', debouncedAutocompleteWrapper);
+                input.addEventListener('input', debouncedAutocompleteWrapper);
+                input.removeEventListener('paste', pasteHandler);
+                input.addEventListener('paste', pasteHandler);
+            });
+
             if (document.getElementById('map-container')) initMap('map-container', 'hotel');
             if (document.querySelector('[id^="map-from"]')) initMap('map-from', 'from');
             if (document.querySelector('[id^="map-to"]')) initMap('map-to', 'to');
@@ -910,7 +941,6 @@
                 } else if (field.type === 'routemap') {
                     modalState.data.from_address = document.getElementById('from_address').value;
                     modalState.data.to_address = document.getElementById('to_address').value;
-                    // Other route data (coords, geometry, etc.) is saved during calculation
                     return; 
                 } else if (field.type === 'flightroute') {
                     const collectLegData = (legId, existingData = {}) => ({
@@ -956,7 +986,6 @@
             const finalData = { ...modalState.data };
             finalData.type = modalState.subType || modalState.mainType;
             
-            // BUG FIX: Stringify nested array before saving to Firestore
             if (finalData.type === 'ride' && finalData.route_geometry && Array.isArray(finalData.route_geometry)) {
                 finalData.route_geometry = JSON.stringify(finalData.route_geometry);
             }
@@ -964,13 +993,10 @@
             delete finalData.mainType;
             delete finalData.subType;
 
-            // This function recursively removes properties with `undefined` values,
-            // which are not allowed by Firestore.
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
                 if (Array.isArray(obj)) return obj.map(item => cleanDataForFirebase(item));
                 if (typeof obj !== 'object' || obj instanceof Date) return obj;
-
 
                 const newObj = {};
                 for (const key in obj) {
@@ -1055,7 +1081,6 @@
                 
                 L.marker(coords).addTo(layerGroup);
                 
-                // Save coordinates to the state
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (!modalState.data[legId]) modalState.data[legId] = {};
@@ -1071,7 +1096,6 @@
             } else {
                 DOM.modalError.textContent = result.message;
                 
-                // Clear old coordinates if search fails
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (modalState.data[legId]) delete modalState.data[legId].coords;
@@ -1168,6 +1192,11 @@
             container.appendChild(div.firstChild);
             
             initMap(`map-connection-${index}`, `connection-${index}`);
+            // Re-attach paste listeners for the new inputs
+            document.querySelectorAll('#fieldset-connection-' + index + ' input[data-autocomplete-target="true"]').forEach(input => {
+                input.addEventListener('input', debouncedAutocompleteWrapper);
+                input.addEventListener('paste', pasteHandler);
+            });
             setTimeout(() => modalState.maps[`connection-${index}`]?.invalidateSize(), 10);
         }
 
@@ -1404,7 +1433,7 @@
         });
 
         document.addEventListener('click', e => {
-            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[oninput*="debouncedAutocomplete"]');
+            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[data-autocomplete-target="true"]');
             if (!isAutocomplete) {
                 document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
             }
@@ -1425,14 +1454,24 @@
 
             const card = e.target.closest('[data-action="view-details"]');
             if (card) {
-                 const item = allItems.find(i => i.id === card.dataset.id);
-                 if (item) openDetailsModal(item);
+               const item = allItems.find(i => i.id === card.dataset.id);
+               if (item) openDetailsModal(item);
             }
         });
 
-        // --- Address Autocomplete ---
-        async function handleAddressAutocomplete(event) {
-            const input = event.target;
+        // --- Address Autocomplete & Paste Fix ---
+        function debouncedAutocompleteWrapper(event) {
+            debouncedAutocomplete(event.target);
+        }
+
+        function pasteHandler(e) {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            e.target.value = pastedText;
+            debouncedAutocomplete(e.target);
+        }
+
+        async function handleAddressAutocomplete(input) {
             const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
             if (!suggestionsContainer) return;
 
@@ -1462,7 +1501,6 @@
                 console.error('Autocomplete error:', error);
             }
         }
-        window.debouncedAutocomplete = debouncedAutocomplete;
 
         // --- Sidebar Activation ---
         const toggleSidebar = () => {
@@ -1544,21 +1582,21 @@
         // --- Details HTML Generators ---
         function generateHotelDetailsHTML(item) {
              return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">יעד:</strong> ${item.destination || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">כתובת:</strong> ${item.address || '-'}</div>
-                </div>
-                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                <div class="grid grid-cols-2 gap-4">
-                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
-                </div>
-                ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
-            `;
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">יעד:</strong> ${item.destination || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">כתובת:</strong> ${item.address || '-'}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-2 gap-4">
+                      <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                 </div>
+                 ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
+             `;
         }
         
         function generateRideDetailsHTML(item) {
@@ -1581,7 +1619,8 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-1 gap-4">
@@ -1593,8 +1632,8 @@
 
         function generateFlightDetailsHTML(item) {
             const title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
-            const numSeats = item.seats?.length || 1;
-            const totalPrice = (item.price_per_person || 0) * numSeats;
+            const travelers = item.travelers || (item.seats?.length || 1);
+            const totalPrice = (item.price_per_person || 0) * travelers;
             return `
                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -1602,8 +1641,9 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.dates || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לאדם:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל (${numSeats} נוסעים):</strong> $${totalPrice.toLocaleString()}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
+                    <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
@@ -1620,7 +1660,8 @@
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0).toLocaleString()}</div>
                 </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                  <div class="grid grid-cols-1 gap-4">
@@ -1631,38 +1672,42 @@
         
         function generateFerryDetailsHTML(item) {
              const title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
+             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
              return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
-                </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                </div>
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                 </div>
+                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                  <div class="grid grid-cols-1 gap-4">
+                      <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
             `;
         }
         
         function generateTrainDetailsHTML(item) {
              const title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
+             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
              return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
-                </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                </div>
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                 </div>
+                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                  <div class="grid grid-cols-1 gap-4">
+                      <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
             `;
         }
 
@@ -1727,13 +1772,14 @@
 
             allItems.forEach(item => {
                 if (categories[item.type]) {
-                    let price = 0;
-                    if (item.type === 'flight') {
-                        const numSeats = item.seats?.length || 1;
-                        price = (item.price_per_person || 0) * numSeats;
-                    } else {
-                        price = item.price || 0;
-                    }
+                    // Feature Update: Consistent price calculation for all transport
+                    const travelers = item.travelers || 1;
+                    const price_per_person = item.price_per_person || 0;
+                    // For 'hotel' and 'car_rental', the price is total, not per person.
+                    const price = (item.type === 'hotel' || item.type === 'car_rental') 
+                        ? (item.price || 0) 
+                        : price_per_person * travelers;
+                    
                     categories[item.type].total += price;
                 }
             });
@@ -1768,4 +1814,3 @@
     </script>
 </body>
 </html>
-
