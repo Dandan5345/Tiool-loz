@@ -993,18 +993,49 @@
         }
 
         function initializeFieldPlugins() {
+            // FIX: Add a dedicated paste event listener to all text-based inputs in the modal
+            // This prevents the browser from incorrectly pasting extra text from the page.
+            document.querySelectorAll(
+                '#item-form input[type="text"], ' +
+                '#item-form input[type="url"], ' +
+                '#item-form input[type="tel"], ' +
+                '#item-form input[type="number"], ' +
+                '#item-form textarea'
+            ).forEach(input => {
+                // Use a property on the element itself to check if the listener is already attached.
+                if (input.hasPasteListener) {
+                    return;
+                }
+                input.hasPasteListener = true;
+
+                input.addEventListener('paste', (e) => {
+                    // Prevent the default paste action which is causing the issue.
+                    e.preventDefault();
+
+                    // Get only the plain text from the clipboard.
+                    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+                    // Manually insert the clean text. This is a robust way to handle it.
+                    const { selectionStart, selectionEnd, value } = e.target;
+                    e.target.value = value.substring(0, selectionStart) + text + value.substring(selectionEnd);
+                    
+                    // Update the cursor position.
+                    const newCursorPosition = selectionStart + text.length;
+                    e.target.setSelectionRange(newCursorPosition, newCursorPosition);
+
+                    // Dispatch an 'input' event so that other functionalities like autocomplete still work.
+                    e.target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                });
+            });
+
             const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
             
             document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
                 const debouncedWrapper = (event) => debouncedAutocomplete(event.target);
-                
-                // FIX #1: The 'input' event listener is sufficient to handle pastes correctly
-                // and is safer than a custom paste handler that overrides default browser behavior.
-                // A custom 'paste' handler was causing issues with pasting content.
                 input.addEventListener('input', debouncedWrapper);
             });
 
-            // **FIX**: Initialize maps and populate with existing data if editing
+            // Initialize maps and populate with existing data if editing
             if (document.getElementById('map-container')) {
                 initMap('map-container', 'hotel');
                 if (modalState.data.coords) placeMarker('hotel', modalState.data.coords);
@@ -2018,3 +2049,4 @@
     </script>
 </body>
 </html>
+
