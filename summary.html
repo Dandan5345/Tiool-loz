@@ -82,18 +82,6 @@
             border: none; cursor: pointer;
         }
 
-        /* Spinner for buttons */
-        .spinner-icon {
-            display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            border-radius: 50%;
-            border: 2px solid currentColor;
-            border-top-color: transparent;
-            animation: spin 0.6s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
     </style>
 </head>
 <body class="bg-slate-100">
@@ -211,7 +199,7 @@
     
     <div id="details-modal" class="modal fixed inset-0 bg-black/60 z-[75] hidden items-center justify-center p-4 opacity-0">
         <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col transform scale-95">
-             <!-- Details content will be injected here -->
+            <!-- Details content will be injected here -->
         </div>
     </div>
 
@@ -263,8 +251,6 @@
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
             maps: {}, mapLayers: {},
-            flightFlowStage: 'search', // 'search', 'verify', 'details', 'extras'
-            flightApiResult: null,
         };
         let currentAddressPickerTarget = null; // To know which input to fill
 
@@ -317,9 +303,9 @@
             }, 5000);
         }
 
-        // --- Date & Time Formatting Utilities ---
+        // --- Date Formatting Utilities ---
         function formatDateToInput(d) { // Converts DD/MM/YYYY to YYYY-MM-DD
-            if (!d || d.indexOf('/') === -1) return d; // Return as is if not in expected format
+            if (!d || d.indexOf('/') === -1) return '';
             const parts = d.split('/');
             if (parts.length !== 3) return '';
             return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
@@ -328,14 +314,14 @@
         function formatDateFromInput(d) { // Converts YYYY-MM-DD to DD/MM/YYYY
             if (!d) return '';
             const parts = d.split('-');
-            if (parts.length !== 3) return d; // Return as is if not in expected format
+            if (parts.length !== 3) return '';
             return `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
         
-        function extractLocalTime(s){
-            if(!s)return "";
-            const m=s.match(/(?:T|\s)(\d{2}:\d{2})/);
-            return m?m[1]:"";
+        function extractLocalTime(s) { 
+            if (!s) return ""; 
+            const m = s.match(/(?:T|\s)(\d{2}:\d{2})/); 
+            return m ? m[1] : ""; 
         }
 
         // --- Page Initialization ---
@@ -348,6 +334,14 @@
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+            
+            // Set default date for flight search to today
+            const today = new Date();
+            today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+            const todayStr = today.toISOString().slice(0, 10);
+            if (!modalState.data.flight_date_search) {
+                modalState.data.flight_date_search = todayStr;
+            }
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
@@ -581,8 +575,6 @@
             modalState = {
                 mainType: null, subType: null, currentStep: 1, data: {},
                 maps: {}, mapLayers: {},
-                flightFlowStage: 'search',
-                flightApiResult: null,
             };
             editingItem = null;
         }
@@ -596,11 +588,6 @@
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
                 modalState.data = JSON.parse(JSON.stringify(itemToEdit));
                 
-                // If editing a flight, bypass the search step
-                if (modalState.subType === 'flight') {
-                    modalState.flightFlowStage = 'verify'; 
-                }
-                
                 if (modalState.data.type === 'ride' && modalState.data.route_geometry && typeof modalState.data.route_geometry === 'string') {
                     try {
                         modalState.data.route_geometry = JSON.parse(modalState.data.route_geometry);
@@ -610,7 +597,6 @@
                     }
                 }
 
-                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
                 const type = itemToEdit.type;
                 if (type === 'hotel' && itemToEdit.dates) {
                     const [start, end] = itemToEdit.dates.split(' - ');
@@ -626,6 +612,9 @@
 
             } else {
                 DOM.modalTitle.textContent = 'הוספת פריט חדש';
+                 const today = new Date();
+                today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+                modalState.data.flight_date_search = today.toISOString().slice(0, 10);
             }
             
             generateStepContent();
@@ -653,6 +642,43 @@
         }
         
         function getStepDefinition() {
+            const flightAddSteps = [
+                { title: "חיפוש פרטי טיסה", fields: [{ id: 'flight_search', type: 'flight_search' }] },
+                { title: "אימות מיקומי שדות תעופה", fields: [{ id: 'flight_verify_locations', type: 'flight_verify_locations' }] },
+                { title: "פרטי הטיסה", fields: [
+                    { id: 'airline', label: 'חברת תעופה' },
+                    { id: 'flight_number', label: 'מספר טיסה'},
+                    { id: 'date', label: 'תאריך טיסה', type: 'date' },
+                    { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
+                    { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
+                    { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                    { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
+                ]},
+                { title: "כבודה, ישיבה ופרטים נוספים", fields: [ 
+                    { id: 'luggage', type: 'luggage' }, 
+                    { id: 'seats', type: 'seats' },
+                    {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
+                ]}
+            ];
+
+            const flightEditSteps = [
+                 { title: "פרטי הטיסה", fields: [
+                    { id: 'airline', label: 'חברת תעופה' },
+                    { id: 'flight_number', label: 'מספר טיסה'},
+                    { id: 'date', label: 'תאריך טיסה', type: 'date' },
+                    { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
+                    { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
+                    { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                    { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
+                ]},
+                { title: "אימות מיקומי שדות תעופה", fields: [{ id: 'flight_verify_locations', type: 'flight_verify_locations' }] },
+                { title: "כבודה, ישיבה ופרטים נוספים", fields: [ 
+                    { id: 'luggage', type: 'luggage' }, 
+                    { id: 'seats', type: 'seats' },
+                    {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
+                ]}
+            ];
+
             const steps = {
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
                 hotel: [
@@ -678,22 +704,7 @@
                     {value: 'ferry', label: '🚢 מעבורת'},
                     {value: 'train', label: '🚆 רכבת'}
                 ] }] },
-                flight_search: { title: "חיפוש טיסה אוטומטי", fields: [{ type: 'flight_search_form' }] },
-                flight_verify_address: { title: "אימות כתובות ויצירת מסלול", fields: [ { id: 'flightroute', type: 'flightroute'} ]},
-                flight_details: { title: "פרטי הטיסה", fields: [
-                    { id: 'airline', label: 'חברת תעופה' },
-                    { id: 'flight_number', label: 'מספר טיסה'},
-                    { id: 'date', label: 'תאריך טיסה', type: 'date' },
-                    { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
-                    { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
-                    { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
-                    { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
-                ]},
-                flight_extras: { title: "כבודה, ישיבה ופרטים נוספים", fields: [ 
-                    { id: 'luggage', type: 'luggage' }, 
-                    { id: 'seats', type: 'seats' },
-                    {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
-                ]},
+                flight: editingItem ? flightEditSteps : flightAddSteps,
                 ride: [
                     { title: "מסלול הנסיעה", fields: [{ id: 'routemap', type: 'routemap'}] },
                     { title: "פרטי הזמנה", fields: [
@@ -715,28 +726,69 @@
                         { id: 'additional_details', label: 'פירוט נוסף (הערות, נקודת מפגש וכו\')', type: 'textarea'}
                     ]}
                 ],
-                car_rental: [ { title: "פרטי השכרת הרכב", fields: [ {id: 'destination', label: 'לאיזה יעד?', type: 'text'}, {id: 'booked_via', label: 'דרך איפה הוזמן?'}, {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?', type: 'text_autocomplete'}, ]}, { title: "תאריכים וסוג", fields: [ {id: 'pickup_date', label: 'תאריך איסוף', type: 'date'}, {id: 'return_date', label: 'תאריך החזרה', type: 'date'}, {id: 'pickup_time', label: 'שעת איסוף', type: 'time'}, {id: 'return_time', label: 'שעת החזרה', type: 'time'}, {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני'}, ]}, { title: "עלות ופרטים נוספים", fields: [ {id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2}, {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'}, {id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'}, {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'} ]} ],
-                ferry: [ { title: "פרטי המעבורת", fields: [ { id: 'company', label: 'חברה מפעילה' }, { id: 'from_destination', label: 'נקודת יציאה', type: 'text_autocomplete' }, { id: 'to_destination', label: 'נקודת הגעה', type: 'text_autocomplete' }, ]}, { title: "תאריכים ועלות", fields: [ { id: 'date', label: 'תאריך', type: 'date' }, { id: 'departure_time', label: 'שעת יציאה', type: 'time' }, { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' }, { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2}, { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' }, ]}, { title: "פרטים נוספים", fields: [ { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'}, {id: 'additional_details', label: 'פירוט נוסף (סוג כרטיס, סיפון וכו\')', type: 'textarea'} ]} ],
-                train: [ { title: "פרטי הרכבת", fields: [ { id: 'company', label: 'חברה מפעילה' }, { id: 'from_station', label: 'תחנת יציאה', type: 'text_autocomplete' }, { id: 'to_station', label: 'תחנת הגעה', type: 'text_autocomplete' }, ]}, { title: "תאריכים ועלות", fields: [ { id: 'date', label: 'תאריך', type: 'date' }, { id: 'departure_time', label: 'שעת יציאה', type: 'time' }, { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' }, { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2}, { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' }, ]}, { title: "פרטים נוספים", fields: [ { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'}, { id: 'seat_info', label: 'פרטי מושבים (אופציונלי)', type: 'text'}, {id: 'additional_details', label: 'פירוט נוסף (מחלקה, קרון וכו\')', type: 'textarea'} ]} ]
+                car_rental: [
+                    { title: "פרטי השכרת הרכב", fields: [
+                        {id: 'destination', label: 'לאיזה יעד?', type: 'text'},
+                        {id: 'booked_via', label: 'דרך איפה הוזמן?'},
+                        {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?', type: 'text_autocomplete'},
+                    ]},
+                    { title: "תאריכים וסוג", fields: [
+                        {id: 'pickup_date', label: 'תאריך איסוף', type: 'date'},
+                        {id: 'return_date', label: 'תאריך החזרה', type: 'date'},
+                        {id: 'pickup_time', label: 'שעת איסוף', type: 'time'},
+                        {id: 'return_time', label: 'שעת החזרה', type: 'time'},
+                        {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני'},
+                    ]},
+                    { title: "עלות ופרטים נוספים", fields: [
+                        {id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'},
+                        {id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
+                        {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
+                    ]}
+                ],
+                ferry: [
+                    { title: "פרטי המעבורת", fields: [
+                        { id: 'company', label: 'חברה מפעילה' },
+                        { id: 'from_destination', label: 'נקודת יציאה', type: 'text_autocomplete' },
+                        { id: 'to_destination', label: 'נקודת הגעה', type: 'text_autocomplete' },
+                    ]},
+                    { title: "תאריכים ועלות", fields: [
+                        { id: 'date', label: 'תאריך', type: 'date' },
+                        { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
+                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
+                    ]},
+                    { title: "פרטים נוספים", fields: [
+                        { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
+                        {id: 'additional_details', label: 'פירוט נוסף (סוג כרטיס, סיפון וכו\')', type: 'textarea'}
+                    ]}
+                ],
+                train: [
+                    { title: "פרטי הרכבת", fields: [
+                        { id: 'company', label: 'חברה מפעילה' },
+                        { id: 'from_station', label: 'תחנת יציאה', type: 'text_autocomplete' },
+                        { id: 'to_station', label: 'תחנת הגעה', type: 'text_autocomplete' },
+                    ]},
+                    { title: "תאריכים ועלות", fields: [
+                        { id: 'date', label: 'תאריך', type: 'date' },
+                        { id: 'departure_time', label: 'שעת יציאה', type: 'time' },
+                        { id: 'arrival_time', label: 'שעת הגעה משוערת', type: 'time' },
+                        { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
+                        { id: 'price_per_person', label: 'מחיר לנוסע (בדולרים)', type: 'number' },
+                    ]},
+                    { title: "פרטים נוספים", fields: [
+                        { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
+                        { id: 'seat_info', label: 'פרטי מושבים (אופציונלי)', type: 'text'},
+                        {id: 'additional_details', label: 'פירוט נוסף (מחלקה, קרון וכו\')', type: 'textarea'}
+                    ]}
+                ]
             };
-
+            
+            if (editingItem) return steps[modalState.subType || modalState.mainType];
             if (!modalState.mainType) return [steps.start];
             if (modalState.mainType === 'hotel') return steps.hotel;
             if (modalState.mainType === 'transport' && !modalState.subType) return [steps.transport];
-            
-            if (modalState.subType === 'flight') {
-                if (editingItem) {
-                    return [steps.flight_verify_address, steps.flight_details, steps.flight_extras];
-                }
-                switch (modalState.flightFlowStage) {
-                    case 'search': return [steps.flight_search];
-                    case 'verify': return [steps.flight_verify_address];
-                    case 'details': return [steps.flight_details];
-                    case 'extras': return [steps.flight_extras];
-                    default: return [steps.flight_search];
-                }
-            }
-
             if (modalState.subType) return steps[modalState.subType];
             return [];
         }
@@ -820,42 +872,19 @@
                                     <label class="flex flex-col items-center justify-center gap-2 p-4 border-2 rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors hover:border-blue-400">
                                         <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="hidden">
                                         <span class="text-2xl">${opt.label.split(' ')[0]}</span>
-                                        <span class="font-bold text-slate-700">${opt.label.split(' ')[1]}</span>
+                                        <span class="font-bold text-slate-700">${opt.label.split(' ').slice(1).join(' ')}</span>
                                     </label>`).join('')}
                                 </div></div>`;
                 case 'textarea':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
                                 </label>`;
-                case 'flight_search_form':
-                    const today = new Date();
-                    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-                    const defaultDate = today.toISOString().slice(0, 10);
-                    return `<div class="bg-slate-50 p-4 rounded-lg space-y-4">
-                        <p class="text-sm text-slate-600">הזינו את מספר הטיסה והתאריך כדי למצוא את פרטיה באופן אוטומטי.</p>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <label class="block"><span class="text-sm font-semibold text-slate-600">מספר טיסה</span>
-                                <input type="text" id="flight_number_search" class="mt-1 block w-full p-2 border rounded-md shadow-sm uppercase" placeholder="לדוגמה: LY2523">
-                            </label>
-                            <label class="block"><span class="text-sm font-semibold text-slate-600">תאריך טיסה</span>
-                                <input type="date" id="flight_date_search" value="${defaultDate}" class="mt-1 block w-full p-2 border rounded-md shadow-sm">
-                            </label>
-                        </div>
-                        <div class="flex flex-col sm:flex-row gap-2">
-                             <button type="button" data-action="search-flight-api" class="flex-grow w-full py-2 px-5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                                <i class="fas fa-search"></i> <span>חיפוש</span>
-                             </button>
-                             <button type="button" data-action="skip-to-manual-flight" class="flex-grow w-full py-2 px-5 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition">
-                                <i class="fas fa-pencil-alt"></i> מילוי ידני
-                             </button>
-                        </div>
-                    </div>`;
                 case 'addressmap':
                     return `<div>
-                        ${renderAutocompleteAddressInput(field.id, field.label)}
-                        <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
-                        <div id="map-container" class="mt-4 small-map-container"></div>
-                    </div>`;
+                            ${renderAutocompleteAddressInput(field.id, field.label)}
+                            <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
+                            <div id="map-container" class="mt-4 small-map-container"></div>
+                        </div>`;
                 case 'text_autocomplete':
                     return renderAutocompleteAddressInput(field.id, field.label);
                 case 'routemap':
@@ -872,20 +901,38 @@
                             <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
                         </div>
                         <div id="map-ride-route" class="mt-4 final-map-container"></div>`;
-                case 'flightroute':
+                case 'flight_search':
                     return `
-                        <div class="space-y-4">
-                            ${renderFlightLeg('from', 'מאיפה?', modalState.data, 'מאיזו עיר ממריאים?')}
-                            ${renderFlightLeg('to', 'לאיפה?', modalState.data, 'באיזו עיר נוחתים?')}
-                            <div id="connections-container" class="space-y-4">${(modalState.data.connections || []).map((conn, i) => renderFlightLeg(`connection-${i}`, `קונקשן ${i+1}`, conn)).join('')}</div>
-                            <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף קונקשן</button>
-                            <hr class="my-6"/>
-                            <h5 class="text-lg font-bold text-slate-700">מפת מסלול מסכמת</h5>
-                            <div class="text-center">
-                                <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
-                            </div>
-                            <div id="map-final-route" class="mt-4 final-map-container"></div>
-                        </div>`;
+                        <div class="space-y-4 bg-slate-50 p-4 rounded-lg">
+                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <label class="block"><span class="text-sm font-semibold text-slate-600">מספר טיסה</span>
+                                    <input type="text" id="flight_number_search" value="${modalState.data.flight_number_search || ''}" class="mt-1 block w-full p-2 border rounded-md uppercase" placeholder="לדוגמה: LY2523">
+                                </label>
+                                <label class="block"><span class="text-sm font-semibold text-slate-600">תאריך</span>
+                                    <input type="date" id="flight_date_search" value="${modalState.data.flight_date_search}" class="mt-1 block w-full p-2 border rounded-md">
+                                </label>
+                             </div>
+                             <button type="button" data-action="search-flight-details" class="w-full py-2 px-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
+                                <i class="fas fa-search mr-2"></i>מצא פרטי טיסה
+                             </button>
+                        </div>
+                        <div class="text-center my-4">
+                            <button type="button" data-action="skip-flight-search" class="text-sm text-slate-500 hover:text-slate-700 hover:underline">או, דלג ומלא ידנית</button>
+                        </div>
+                    `;
+                case 'flight_verify_locations':
+                    return `
+                        <div class="space-y-6">
+                            ${renderFlightLeg('from', 'המראה', modalState.data, 'שדה תעופה (המראה)')}
+                            ${renderFlightLeg('to', 'נחיתה', modalState.data, 'שדה תעופה (נחיתה)')}
+                             <hr class="my-4"/>
+                             <h5 class="text-lg font-bold text-slate-700">מפת מסלול מסכמת</h5>
+                             <div class="text-center">
+                                 <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
+                             </div>
+                             <div id="map-final-route" class="mt-4 final-map-container"></div>
+                        </div>
+                    `;
                 case 'luggage':
                     return `<fieldset class="border p-4 rounded-lg">
                         <legend class="px-2 font-semibold">פרטי כבודה (לנוסע)</legend>
@@ -928,7 +975,9 @@
                     <label><span class="text-sm font-semibold text-slate-600">${destinationLabel}</span><input type="text" id="${id}_destination" value="${legData.destination || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: ניו יורק"></label>
                     <label><span class="text-sm font-semibold text-slate-600">שם שדה תעופה</span><input type="text" id="${id}_airport_name" value="${legData.airport_name || ''}" class="mt-1 block w-full p-2 border rounded-md" placeholder="לדוגמה: JFK"></label>
                     <div class="md:col-span-2">
-                         ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
+                        <label class="block"><span class="text-sm font-semibold text-slate-600">כתובת / קוד שדה תעופה</span>
+                             <input type="text" id="${id}_airport_address" value="${legData.airport_address || ''}" class="mt-1 block w-full p-2 border rounded-md">
+                        </label>
                     </div>
                     <div class="md:col-span-2 text-center">
                         <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
@@ -966,7 +1015,6 @@
                 input.addEventListener('paste', pasteHandler);
             });
 
-            // Initialize maps and populate with existing data if editing
             if (document.getElementById('map-container')) {
                 initMap('map-container', 'hotel');
                 if (modalState.data.coords) placeMarker('hotel', modalState.data.coords);
@@ -1003,16 +1051,12 @@
         
         function updateModalNav() {
             const stepDefinitions = getStepDefinition();
-            const isFirstStep = modalState.currentStep === 1;
             const isLastStep = modalState.currentStep >= stepDefinitions.length;
-            
             const isChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
-            const isFlightSearchStep = modalState.subType === 'flight' && modalState.flightFlowStage === 'search';
 
-            DOM.modalBackBtn.classList.toggle('hidden', isFirstStep && (isChoiceStep || isFlightSearchStep));
-            // BUG FIX: Show 'Next' button on choice steps, even if they are technically the "last" step of that view.
-            DOM.modalNextBtn.classList.toggle('hidden', (isLastStep && !isChoiceStep) || isFlightSearchStep);
-            DOM.modalFinishBtn.classList.toggle('hidden', !isLastStep || isChoiceStep || isFlightSearchStep);
+            DOM.modalBackBtn.classList.toggle('hidden', modalState.currentStep === 1 && isChoiceStep);
+            DOM.modalNextBtn.classList.toggle('hidden', isLastStep && !isChoiceStep);
+            DOM.modalFinishBtn.classList.toggle('hidden', !isLastStep || isChoiceStep);
         }
 
         function collectStepData() {
@@ -1026,15 +1070,12 @@
                 if (field.type === 'radio') {
                     const checked = document.querySelector(`input[name="${field.id}"]:checked`);
                     value = checked ? checked.value : null;
-                } else if (field.type === 'flight_search_form') {
-                    // This step is handled by its own button, not by general data collection
-                    return;
                 } else if (field.type === 'routemap') {
                     modalState.data.from_address = document.getElementById('from_address').value;
                     modalState.data.to_address = document.getElementById('to_address').value;
                     return; 
-                } else if (field.type === 'flightroute') {
-                    const collectLegData = (legId, existingData = {}) => ({
+                } else if (field.type === 'flight_verify_locations') {
+                     const collectLegData = (legId, existingData = {}) => ({
                         destination: document.getElementById(`${legId}_destination`)?.value,
                         airport_name: document.getElementById(`${legId}_airport_name`)?.value,
                         airport_address: document.getElementById(`${legId}_airport_address`)?.value,
@@ -1043,9 +1084,9 @@
                     
                     modalState.data.from = collectLegData('from', modalState.data.from);
                     modalState.data.to = collectLegData('to', modalState.data.to);
-                    modalState.data.connections = (modalState.data.connections || []).map((conn, i) => collectLegData(`connection-${i}`, conn));
                     return;
-                } else if (field.type === 'luggage') {
+                }
+                else if (field.type === 'luggage') {
                     modalState.data.hand_bag_count = document.getElementById('hand_bag_count').value;
                     modalState.data.trolley_count = document.getElementById('trolley_count').value;
                     modalState.data.checked_bags_count = document.getElementById('checked_bags_count').value;
@@ -1074,7 +1115,7 @@
                 const pickup = formatDateFromInput(modalState.data.pickup_date);
                 const ret = formatDateFromInput(modalState.data.return_date);
                 if (pickup && ret) modalState.data.dates = `${pickup} - ${ret}`;
-            } else if (modalState.data.date) {
+            } else if (modalState.data.date && typeof modalState.data.date === 'string' && modalState.data.date.includes('-')) {
                 // All single-date transports now use `date` field
                 modalState.data.date = formatDateFromInput(modalState.data.date);
             }
@@ -1104,9 +1145,9 @@
             
             delete finalData.mainType;
             delete finalData.subType;
+            delete finalData.flight_number_search;
+            delete finalData.flight_date_search;
             
-            // For flight, we now use `date` but old data used `dates`. 
-            // To prevent both from being saved, if `date` exists, remove `dates`.
             if (finalData.type === 'flight' && finalData.date) {
                 delete finalData.dates;
             }
@@ -1293,6 +1334,46 @@
             }
         }
 
+        // --- Flight Search Worker Integration ---
+        async function fetchFlightDetails(num, date) {
+            const r = await fetch(`${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`);
+            if (!r.ok) {
+                let j;
+                try { j = await r.json(); } catch(e) {}
+                throw new Error(j?.error || "שגיאה באחזור פרטי הטיסה");
+            }
+            const flights = await r.json();
+            if (!flights || flights.length === 0) {
+                throw new Error("לא נמצאו טיסות תואמות.");
+            }
+            // Return the first result for simplicity
+            return flights[0];
+        }
+
+        function autoPopulateFlightData(flight) {
+            modalState.data.flight_number = flight.number;
+            modalState.data.airline = flight.airline?.name || '';
+            
+            const departureTime = flight.departure?.scheduledTime?.local;
+            const arrivalTime = flight.arrival?.scheduledTime?.local;
+            
+            modalState.data.date = formatDateFromInput(departureTime.split('T')[0]);
+            modalState.data.departure_time = extractLocalTime(departureTime);
+            modalState.data.arrival_time = extractLocalTime(arrivalTime);
+
+            modalState.data.from = {
+                destination: flight.departure?.airport?.municipalityName || '',
+                airport_name: flight.departure?.airport?.name || '',
+                airport_address: flight.departure?.airport?.iata || '',
+            };
+            modalState.data.to = {
+                destination: flight.arrival?.airport?.municipalityName || '',
+                airport_name: flight.arrival?.airport?.name || '',
+                airport_address: flight.arrival?.airport?.iata || '',
+            };
+        }
+
+
         // --- Dynamic Form Elements ---
         function addConnection() {
             if (!modalState.data.connections) modalState.data.connections = [];
@@ -1432,22 +1513,9 @@
         DOM.modalForm.addEventListener('submit', handleFormSubmit);
         
         DOM.modalNextBtn.addEventListener('click', () => {
-            // BUG FIX: Capture the choice-step state *before* data is collected, as collecting data changes the state.
             const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
-            
             if (collectStepData()) {
-                if (modalState.subType === 'flight' && !editingItem) {
-                    const stages = ['search', 'verify', 'details', 'extras'];
-                    const currentIndex = stages.indexOf(modalState.flightFlowStage);
-                    if (currentIndex < stages.length - 1) {
-                         modalState.flightFlowStage = stages[currentIndex + 1];
-                         modalState.currentStep = 1; // Reset step count for the new "view"
-                    }
-                } else {
-                    // BUG FIX: Reset step to 1 if we just made a choice, otherwise increment.
-                    modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
-                }
-
+                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
                 generateStepContent();
                 updateModalNav();
                 setTimeout(() => {
@@ -1459,23 +1527,12 @@
 
         DOM.modalBackBtn.addEventListener('click', () => {
             collectStepData();
-            if (modalState.subType === 'flight' && !editingItem) {
-                const stages = ['search', 'verify', 'details', 'extras'];
-                const currentIndex = stages.indexOf(modalState.flightFlowStage);
-                if (currentIndex > 0) {
-                     modalState.flightFlowStage = stages[currentIndex - 1];
-                     modalState.currentStep = 1;
-                } else {
-                     modalState.subType = null;
-                     modalState.flightFlowStage = 'search';
-                }
-            } else if (modalState.currentStep > 1) {
-                 modalState.currentStep--;
+            if (modalState.currentStep === 1) {
+                if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
+                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
             } else {
-                 if (modalState.subType) { modalState.subType = null; } 
-                 else if (modalState.mainType) { modalState.mainType = null; }
+                modalState.currentStep--;
             }
-
             generateStepContent();
             updateModalNav();
             setTimeout(() => {
@@ -1483,133 +1540,102 @@
                 Object.values(modalState.maps).forEach(m => m?.invalidateSize());
             }, 10);
         });
-        
-        // --- Centralized Modal Click Handler for Buttons ---
+
         DOM.modalForm.addEventListener('click', async e => {
             const target = e.target.closest('button');
             if (!target) return;
             const { action, legId, targetInput } = target.dataset;
 
-            const handleAsyncAction = async (asyncFunction, button) => {
-                const originalContent = button.innerHTML;
-                button.innerHTML = '<span class="spinner-icon"></span>';
-                button.disabled = true;
-                DOM.modalError.textContent = '';
+            const handleSearch = async (searchFunction) => {
+                const originalText = target.innerHTML;
+                target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                target.disabled = true;
                 try {
-                    await asyncFunction();
-                } catch (err) {
-                    console.error("Action failed:", err);
-                    DOM.modalError.textContent = err.message || 'אירעה שגיאה.';
+                    await searchFunction();
                 } finally {
-                    button.innerHTML = originalContent;
-                    button.disabled = false;
+                    target.innerHTML = originalText;
+                    target.disabled = false;
                 }
             };
             
-            switch (action) {
-                case 'open-address-picker':
-                    openAddressPicker(targetInput);
-                    break;
-                case 'find-address':
-                    await handleAsyncAction(() => findAddressOnMap('hotel', document.getElementById('address').value), target);
-                    break;
-                case 'find-flight-leg':
-                    const address = document.getElementById(`${legId}_airport_address`).value;
-                    await handleAsyncAction(() => findAddressOnMap(legId, address), target);
-                    break;
-                case 'calculate-ride-route':
-                    await handleAsyncAction(async () => {
-                         const fromAddress = document.getElementById('from_address').value;
-                         const toAddress = document.getElementById('to_address').value;
-                         modalState.data.from_address = fromAddress;
-                         modalState.data.to_address = toAddress;
+            if (action === 'open-address-picker') {
+                openAddressPicker(targetInput);
+            } else if (action === 'find-address') {
+                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value));
+            } else if (action === 'find-flight-leg') {
+                const address = document.getElementById(`${legId}_airport_address`).value;
+                await handleSearch(() => findAddressOnMap(legId, address));
+            } else if(action === 'calculate-ride-route') {
+                await handleSearch(async () => {
+                    const fromAddress = document.getElementById('from_address').value;
+                    const toAddress = document.getElementById('to_address').value;
+                    modalState.data.from_address = fromAddress;
+                    modalState.data.to_address = toAddress;
 
-                         DOM.modalError.textContent = 'מחשב מסלול...';
-                         const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
+                    DOM.modalError.textContent = 'מחשב מסלול...';
+                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
 
-                         if (!fromResult.success || !toResult.success) {
-                             throw new Error(fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.');
-                         }
-                         modalState.data.from_coords = fromResult.coords;
-                         modalState.data.to_coords = toResult.coords;
-                         
-                         const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
-                         if (routeResult.success) {
-                             DOM.modalError.textContent = '';
-                             modalState.data.route_geometry = routeResult.geometry;
-                             modalState.data.route_duration = routeResult.duration;
-                             modalState.data.route_distance = routeResult.distance;
-                             document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
-                             document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
-                             drawRouteOnMap(modalState.maps['ride-route'], 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
-                         } else {
-                             throw new Error(routeResult.message);
-                         }
-                    }, target);
-                    break;
-                case 'search-flight-api':
-                     await handleAsyncAction(async () => {
-                         const numInput = document.getElementById('flight_number_search');
-                         const dateInput = document.getElementById('flight_date_search');
-                         const flightNumber = numInput.value.trim().toUpperCase();
-                         const flightDate = dateInput.value;
-                         if (!flightNumber || !flightDate) {
-                             throw new Error("נא למלא מספר טיסה ותאריך.");
-                         }
-                         const res = await fetch(`${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(flightNumber)}/${encodeURIComponent(flightDate)}`);
-                         if (!res.ok) {
-                             const errData = await res.json().catch(() => ({}));
-                             throw new Error(errData.error || 'שגיאה בחיפוש הטיסה.');
-                         }
-                         const flights = await res.json();
-                         if (!flights || flights.length === 0) {
-                             throw new Error("לא נמצאה טיסה עם הפרטים שהוזנו.");
-                         }
-                         const flight = flights[0];
-                         modalState.flightApiResult = flight;
-                         modalState.data.flight_number = flight.number;
-                         modalState.data.airline = flight.airline?.name;
-                         modalState.data.date = flightDate;
-                         modalState.data.departure_time = extractLocalTime(flight.departure?.scheduledTime?.local);
-                         modalState.data.arrival_time = extractLocalTime(flight.arrival?.scheduledTime?.local);
+                    if (!fromResult.success || !toResult.success) {
+                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
+                        return;
+                    }
 
-                         modalState.data.from = {
-                             destination: flight.departure?.airport?.city || flight.departure?.airport?.name,
-                             airport_name: flight.departure?.airport?.name,
-                             airport_address: flight.departure?.airport?.iata
-                         };
-                         modalState.data.to = {
-                             destination: flight.arrival?.airport?.city || flight.arrival?.airport?.name,
-                             airport_name: flight.arrival?.airport?.name,
-                             airport_address: flight.arrival?.airport?.iata
-                         };
-                         
-                         modalState.flightFlowStage = 'verify';
-                         modalState.currentStep = 1;
-                         generateStepContent();
-                         updateModalNav();
-                         setTimeout(() => {
-                            initializeFieldPlugins();
-                            Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-                         }, 10);
+                    modalState.data.from_coords = fromResult.coords;
+                    modalState.data.to_coords = toResult.coords;
+                    
+                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
+                    if (routeResult.success) {
+                        DOM.modalError.textContent = '';
+                        modalState.data.route_geometry = routeResult.geometry;
+                        modalState.data.route_duration = routeResult.duration;
+                        modalState.data.route_distance = routeResult.distance;
+                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
+                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
 
-                     }, target);
-                     break;
-                 case 'skip-to-manual-flight':
-                    modalState.flightFlowStage = 'verify';
-                    modalState.currentStep = 1;
-                    generateStepContent();
-                    updateModalNav();
-                    setTimeout(() => {
-                        initializeFieldPlugins();
-                        Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-                    }, 10);
-                    break;
+                        const map = modalState.maps['ride-route'];
+                        if (map) {
+                           drawRouteOnMap(map, 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
+                        }
+
+                    } else {
+                        DOM.modalError.textContent = routeResult.message;
+                    }
+                });
+            } else if (action === 'search-flight-details') {
+                 await handleSearch(async () => {
+                    const num = document.getElementById('flight_number_search').value;
+                    const date = document.getElementById('flight_date_search').value;
+                    DOM.modalError.textContent = '';
+                    if (!num || !date) {
+                        DOM.modalError.textContent = 'יש למלא מספר טיסה ותאריך.';
+                        return;
+                    }
+                    try {
+                        const flight = await fetchFlightDetails(num, date);
+                        autoPopulateFlightData(flight);
+                        DOM.modalNextBtn.click(); // Advance to next step automatically
+                    } catch (err) {
+                        DOM.modalError.textContent = err.message;
+                    }
+                });
+            } else if (action === 'skip-flight-search') {
+                 modalState.currentStep++;
+                 generateStepContent();
+                 updateModalNav();
+                 setTimeout(() => initializeFieldPlugins(), 10);
+            } else if (target.id === 'calculate-final-route-btn') {
+                showFinalRouteOnMap();
+            } else if (target.id === 'add-seat-btn') {
+                addSeatInput();
             }
-
-            if (target.id === 'add-connection-btn') addConnection();
-            if (target.id === 'calculate-final-route-btn') showFinalRouteOnMap();
-            if (target.id === 'add-seat-btn') addSeatInput();
+        });
+        
+        // BUG FIX: Update nav buttons immediately on radio choice
+        DOM.modalForm.addEventListener('change', e => {
+            if (e.target.type === 'radio' && (e.target.name === 'mainType' || e.target.name === 'subType')) {
+                collectStepData();
+                updateModalNav();
+            }
         });
 
         document.addEventListener('click', e => {
@@ -1755,8 +1781,8 @@
                 </div>
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-2 gap-4">
-                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                      <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                 </div>
                 ${item.coords ? '<div id="details-map" class="details-map-container"></div>' : ''}
              `;
@@ -1987,4 +2013,3 @@
     </script>
 </body>
 </html>
-
