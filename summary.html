@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
     
-    <!-- Google Maps API Script -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker&callback=initMaps&language=iw" async defer></script>
+    <!-- Google Maps API Script - Replaces Leaflet -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker&callback=initMaps&language=iw"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -48,11 +48,12 @@
         .progress-step.active:not(:last-child)::after { background-color: #3b82f6; }
 
         /* Map Styles */
-        .map-container-style { 
+        .map-container { 
             width: 100%; 
             border-radius: 0.5rem; 
             border: 1px solid #e2e8f0; 
-            background-color: #f0f0f0; /* Placeholder color */
+            z-index: 10; 
+            background-color: #e5e7eb; /* Placeholder color */
         }
         .small-map-container { height: 200px; }
         .final-map-container { height: 300px; }
@@ -219,13 +220,20 @@
         </div>
     </div>
 
-
+    <script>
+        // This function is the callback for the Google Maps script
+        function initMaps() {
+            // Now that the Google Maps API is loaded, we can initialize our app logic.
+            // We attach the main logic to a custom event to keep it clean.
+            window.dispatchEvent(new CustomEvent('google-maps-loaded'));
+        }
+    </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, collection, doc, getDoc, addDoc, query, onSnapshot,
-            serverTimestamp, deleteDoc, updateDoc, setDoc
+            serverTimestamp, deleteDoc, updateDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Firebase Configuration & Initialization ---
@@ -242,18 +250,8 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // --- Google Maps Services (will be initialized in callback) ---
-        let geocoder;
-        let autocompleteService;
-        let directionsService;
-        let detailsMap = null; // For the details modal map
-
-        window.initMaps = function() {
-            geocoder = new google.maps.Geocoder();
-            autocompleteService = new google.maps.places.AutocompleteService();
-            directionsService = new google.maps.DirectionsService();
-            console.log("Google Maps Services Initialized.");
-        };
+        // --- Google Maps Services ---
+        let geocoder, autocompleteService, placesService, directionsService;
 
         // --- Global State & Constants ---
         const FLIGHT_API_BASE = "https://calm-resonance-b9ec.doronenakache.workers.dev/api";
@@ -264,12 +262,13 @@
         let editingItem = null; 
         let itemToDelete = null;
         let logisticsUnsubscribe = null; // To detach the listener
+        let detailsMap = null; // For the details modal map
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
-            maps: {}, mapRenderers: {}, flightDataFound: false,
-            lastAutocompleteSuggestions: [], // For local filtering
+            maps: {}, mapLayers: {}, flightDataFound: false,
         };
         let currentAddressPickerTarget = null; // To know which input to fill
+        let lastAutocompleteResults = []; // For smart autocomplete filtering
 
         // --- DOM Elements ---
         const DOM = {
@@ -348,6 +347,13 @@
 
         // --- Page Initialization ---
         function initPage() {
+            // Initialize Google Maps Services
+            geocoder = new google.maps.Geocoder();
+            autocompleteService = new google.maps.places.AutocompleteService();
+            // We need an element to initialize PlacesService, can be any div.
+            placesService = new google.maps.places.PlacesService(document.createElement('div'));
+            directionsService = new google.maps.DirectionsService();
+
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId') || urlParams.get('id');
             if (!tripId) {
@@ -614,10 +620,12 @@
 
         // --- Modal Logic ---
         function resetModalState() {
+            Object.values(modalState.mapLayers).forEach(layers => {
+                layers.forEach(l => l.setMap(null)); // Clear markers/polylines
+            });
             modalState = {
                 mainType: null, subType: null, currentStep: 1, data: {},
-                maps: {}, mapRenderers: {}, flightDataFound: false,
-                lastAutocompleteSuggestions: [],
+                maps: {}, mapLayers: {}, flightDataFound: false,
             };
             editingItem = null;
         }
@@ -643,6 +651,7 @@
                     }
                 }
 
+                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
                 const type = itemToEdit.type;
                 if (type === 'hotel' && itemToEdit.dates) {
                     const [start, end] = itemToEdit.dates.split(' - ');
@@ -673,7 +682,7 @@
                     Object.values(modalState.maps).forEach(map => {
                         if (map) google.maps.event.trigger(map, 'resize');
                     });
-                }, 350); // wait for modal transition
+                }, 100);
             }, 10);
         }
 
@@ -861,10 +870,11 @@
 
             let html = renderProgressBar();
             html += `<div class="modal-step active" data-step="${modalState.currentStep}">
-                         <h4 class="text-xl font-bold text-slate-800 mb-6">${stepDef.title}</h4>
-                         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">`;
+                        <h4 class="text-xl font-bold text-slate-800 mb-6">${stepDef.title}</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">`;
             
             stepDef.fields.forEach(field => {
+                // Dynamically populate destination options if needed
                 if (field.optionsKey === 'tripDestinations') {
                     field.options = (tripData?.destinations || []).map(dest => ({ value: dest.nameHe, label: dest.nameHe }));
                 }
@@ -916,7 +926,7 @@
                                     </label>`).join('')}
                                 </div></div>`;
                 case 'select':
-                    const selectOptions = (field.options || []).map(opt => `<option value="${typeof opt === 'object' ? opt.value : opt}" ${value === (typeof opt === 'object' ? opt.value : opt) ? 'selected' : ''}>${typeof opt === 'object' ? opt.label : opt}</option>`).join('');
+                    const selectOptions = field.options.map(opt => `<option value="${typeof opt === 'object' ? opt.value : opt}" ${value === (typeof opt === 'object' ? opt.value : opt) ? 'selected' : ''}>${typeof opt === 'object' ? opt.label : opt}</option>`).join('');
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <select id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm bg-white">
                                     <option value="">-- בחר --</option>
@@ -947,8 +957,8 @@
                 case 'addressmap':
                     return `<div>
                         ${renderAutocompleteAddressInput(field.id, field.label)}
-                        <button type="button" data-action="find-address" data-target-input-id="${field.id}" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
-                        <div id="map-container" class="mt-4 small-map-container map-container-style"></div>
+                        <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
+                        <div id="map-container" class="mt-4 small-map-container map-container"></div>
                     </div>`;
                 case 'text_autocomplete':
                     return renderAutocompleteAddressInput(field.id, field.label);
@@ -965,7 +975,7 @@
                             <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
                             <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
                         </div>
-                        <div id="map-ride-route" class="mt-4 final-map-container map-container-style"></div>`;
+                        <div id="map-ride-route" class="mt-4 final-map-container map-container"></div>`;
                 case 'flightroute':
                     return `
                         <div class="space-y-4">
@@ -978,7 +988,7 @@
                             <div class="text-center">
                                 <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
                             </div>
-                            <div id="map-final-route" class="mt-4 final-map-container map-container-style"></div>
+                            <div id="map-final-route" class="mt-4 final-map-container map-container"></div>
                         </div>`;
                 case 'luggage':
                     return `<fieldset class="border p-4 rounded-lg">
@@ -1059,33 +1069,46 @@
                          ${renderAutocompleteAddressInput(`${id}_airport_address`, 'כתובת שדה תעופה')}
                     </div>
                     <div class="md:col-span-2 text-center">
-                        <button type="button" data-action="find-flight-leg" data-leg-id="${id}" data-target-input-id="${id}_airport_address" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
+                        <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
                     </div>
-                    <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container map-container-style"></div>
+                    <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container map-container"></div>
                 </div>
             </fieldset>`;
         }
         
-        function placeMarker(mapKey, position, title = '') {
+        function placeMarker(mapKey, coords, popupText = '') {
             const map = modalState.maps[mapKey];
             if (!map) return;
-
-            if (modalState.mapRenderers[mapKey] && modalState.mapRenderers[mapKey].marker) {
-                modalState.mapRenderers[mapKey].marker.setMap(null);
+            
+            // Clear previous markers for this map key
+            if (modalState.mapLayers[mapKey]) {
+                modalState.mapLayers[mapKey].forEach(marker => marker.setMap(null));
             }
+            modalState.mapLayers[mapKey] = [];
 
+            map.setCenter(coords);
+            map.setZoom(13);
+            
             const marker = new google.maps.Marker({
-                position, map, title, animation: google.maps.Animation.DROP,
+                position: coords,
+                map: map,
+                title: popupText
             });
 
-            if (!modalState.mapRenderers[mapKey]) modalState.mapRenderers[mapKey] = {};
-            modalState.mapRenderers[mapKey].marker = marker;
+            if (popupText) {
+                const infowindow = new google.maps.InfoWindow({
+                    content: popupText,
+                });
+                marker.addListener("click", () => {
+                    infowindow.open(map, marker);
+                });
+            }
 
-            map.setCenter(position);
-            map.setZoom(13);
+            modalState.mapLayers[mapKey].push(marker);
         }
 
         function initializeFieldPlugins() {
+            // Fix for paste issue
             document.querySelectorAll(
                 '#item-form input[type="text"], #item-form input[type="url"], #item-form input[type="tel"], #item-form input[type="number"], #item-form textarea'
             ).forEach(input => {
@@ -1105,9 +1128,11 @@
             const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
             
             document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
-                 input.addEventListener('input', (event) => debouncedAutocomplete(event.target));
+                const debouncedWrapper = (event) => debouncedAutocomplete(event.target);
+                input.addEventListener('input', debouncedWrapper);
             });
 
+            // Handle destination change to auto-fill dates
             const destinationSelect = document.getElementById('destination');
             if (destinationSelect) {
                 destinationSelect.addEventListener('change', (e) => {
@@ -1117,16 +1142,23 @@
                         const [startStr, endStr] = destData.dates.split(' - ');
                         const checkinInput = document.getElementById('checkin_date');
                         const checkoutInput = document.getElementById('checkout_date');
-                        if (checkinInput) checkinInput.value = formatDateToInput(startStr);
-                        if (checkoutInput) checkoutInput.value = formatDateToInput(endStr);
+
+                        if (checkinInput) {
+                            checkinInput.value = formatDateToInput(startStr);
+                        }
+                        if (checkoutInput) {
+                            checkoutInput.value = formatDateToInput(endStr);
+                        }
                     }
                 });
             }
 
+            // Handle star rating UI
             const starContainer = document.getElementById('stars-container');
             if (starContainer) {
                 const starIcons = starContainer.querySelectorAll('.star-rating-icon');
                 const hiddenInput = document.getElementById('stars');
+                
                 const updateStars = (rating) => {
                     starIcons.forEach(star => {
                         star.classList.toggle('text-yellow-400', star.dataset.value <= rating);
@@ -1134,13 +1166,23 @@
                     });
                     hiddenInput.value = rating;
                 };
-                starIcons.forEach(star => star.addEventListener('click', () => updateStars(star.dataset.value)));
-                if (hiddenInput.value > 0) updateStars(hiddenInput.value);
+
+                starIcons.forEach(star => {
+                    star.addEventListener('click', () => {
+                        const rating = star.dataset.value;
+                        updateStars(rating);
+                    });
+                });
+
+                if (hiddenInput.value > 0) {
+                    updateStars(hiddenInput.value);
+                }
             }
 
+            // Initialize maps and populate with existing data if editing
             if (document.getElementById('map-container')) {
                 initMap('map-container', 'hotel');
-                if (modalState.data.coords) placeMarker('hotel', modalState.data.coords);
+                if (modalState.data.coords) placeMarker('hotel', modalState.data.coords, modalState.data.address);
             }
             if (document.querySelector('[id^="map-from"]')) {
                 initMap('map-from', 'from');
@@ -1158,12 +1200,12 @@
             });
             if (document.querySelector('[id^="map-final-route"]')) {
                 initMap('map-final-route', 'final-route');
-                showFinalRouteOnMap();
+                showFinalRouteOnMap(); // Draw flight route immediately if data exists
             }
             if (document.getElementById('map-ride-route')) {
                 initMap('map-ride-route', 'ride-route');
-                if (modalState.data.route_path && modalState.data.from_coords && modalState.data.to_coords) {
-                    drawRouteOnMap('ride-route', modalState.data.route_path, modalState.data.from_coords, modalState.data.to_coords);
+                if (modalState.data.route_geometry && Array.isArray(modalState.data.route_geometry)) {
+                    drawRouteOnMap('ride-route', modalState.data.route_geometry.map(p => ({ lat: p[0], lng: p[1] })));
                 }
             }
             
@@ -1176,13 +1218,18 @@
             const stepDefinitions = getStepDefinition();
             const totalSteps = stepDefinitions.length;
             const isLastStep = modalState.currentStep >= totalSteps;
+
             const isFirstStepEver = !modalState.mainType;
             const isSubTypeChoiceStep = modalState.mainType === 'transport' && !modalState.subType;
             const isFlightSearchStep = modalState.subType === 'flight' && !modalState.flightDataFound && !editingItem;
+            
             const isAnyChoiceStep = isFirstStepEver || isSubTypeChoiceStep || isFlightSearchStep;
+
             DOM.modalBackBtn.classList.toggle('hidden', modalState.currentStep === 1 && isAnyChoiceStep);
             DOM.modalFinishBtn.classList.toggle('hidden', !isLastStep || isAnyChoiceStep);
             DOM.modalNextBtn.classList.toggle('hidden', isLastStep);
+            
+            // On choice steps, always show Next button.
             if (isAnyChoiceStep) {
                  DOM.modalNextBtn.classList.remove('hidden');
                  DOM.modalFinishBtn.classList.add('hidden');
@@ -1202,7 +1249,9 @@
                     value = checked ? checked.value : null;
                 } else if (field.type === 'multiselect') {
                     const select = document.getElementById(field.id);
-                    if (select) value = Array.from(select.selectedOptions).map(option => option.value);
+                    if (select) {
+                        value = Array.from(select.selectedOptions).map(option => option.value);
+                    }
                 } else if (field.type === 'starrating') {
                     const hiddenInput = document.getElementById(field.id);
                     value = hiddenInput ? parseInt(hiddenInput.value, 10) || 0 : 0;
@@ -1232,7 +1281,8 @@
                     return;
                 } else if (field.type === 'flight_search_ui') {
                     return; // This step is handled by button clicks, not by 'next'
-                } else {
+                }
+                else {
                     const input = document.getElementById(field.id);
                     if (input) {
                          value = field.type === 'number' ? (input.value ? parseFloat(input.value) : null) : input.value;
@@ -1253,6 +1303,7 @@
                 const ret = formatDateFromInput(modalState.data.return_date);
                 if (pickup && ret) modalState.data.dates = `${pickup} - ${ret}`;
             } else if (modalState.data.date) {
+                // All single-date transports now use `date` field
                 modalState.data.date = formatDateFromInput(modalState.data.date);
             }
 
@@ -1269,6 +1320,10 @@
             const finalData = { ...modalState.data };
             finalData.type = modalState.subType || modalState.mainType;
             
+            if (finalData.type === 'ride' && finalData.route_geometry && Array.isArray(finalData.route_geometry)) {
+                finalData.route_geometry = JSON.stringify(finalData.route_geometry);
+            }
+            
             // Clean up temporary date fields before saving
             delete finalData.checkin_date;
             delete finalData.checkout_date;
@@ -1281,6 +1336,7 @@
             if (finalData.type === 'flight' && finalData.date) {
                 delete finalData.dates;
             }
+
 
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
@@ -1314,250 +1370,183 @@
                 DOM.modalError.textContent = 'שגיאה בשמירת הפריט.';
             }
         }
-
+        
         // --- Map & Geocoding & Routing Logic (Google Maps Version) ---
         function initMap(containerId, mapKey) {
             const mapContainer = document.getElementById(containerId);
-            if (!mapContainer || modalState.maps[mapKey]) return;
+            if (!mapContainer) return;
+            
+            if (modalState.maps[mapKey]) return; // Map already initialized
 
             const map = new google.maps.Map(mapContainer, {
-                center: { lat: 31.7683, lng: 35.2137 }, // Jerusalem
+                center: { lat: 31.7683, lng: 35.2137 },
                 zoom: 2,
                 mapTypeControl: false,
                 streetViewControl: false,
             });
             modalState.maps[mapKey] = map;
+            modalState.mapLayers[mapKey] = [];
         }
 
         async function geocodeAddress(address) {
             if (!address) return { success: false, message: 'לא הוזנה כתובת.' };
-            if (!geocoder) return { success: false, message: 'שירות המפות עדיין נטען.'};
-
-            const cacheRef = doc(db, "trips", tripId, "geocache", btoa(address));
-            try {
-                const docSnap = await getDoc(cacheRef);
-                if (docSnap.exists()) {
-                    console.log("Geocode result from CACHE:", address);
-                    return { success: true, result: docSnap.data() };
-                }
-            } catch (e) { console.warn("Could not read from geocache", e); }
             
-            console.log("Geocoding with API:", address);
-            try {
-                const response = await geocoder.geocode({ address: address });
-                if (response.results && response.results.length > 0) {
-                    const firstResult = response.results[0];
-                    const resultData = {
-                        address: firstResult.formatted_address,
-                        placeId: firstResult.place_id,
-                        coords: {
-                            lat: firstResult.geometry.location.lat(),
-                            lng: firstResult.geometry.location.lng(),
-                        }
-                    };
-                    
-                    try {
-                        await setDoc(cacheRef, resultData);
-                    } catch (e) { console.warn("Could not write to geocache", e); }
-
-                    return { success: true, result: resultData };
-                } else {
-                    return { success: false, message: 'הכתובת לא נמצאה.' };
-                }
-            } catch (error) {
-                console.error('Geocoding error:', error);
-                return { success: false, message: 'שגיאת רשת בחיפוש הכתובת.' };
-            }
+            return new Promise((resolve) => {
+                geocoder.geocode({ address: address }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        const location = results[0].geometry.location;
+                        resolve({ success: true, coords: { lat: location.lat(), lng: location.lng() } });
+                    } else {
+                        console.error('Geocode was not successful for the following reason: ' + status);
+                        resolve({ success: false, message: 'הכתובת לא נמצאה.' });
+                    }
+                });
+            });
         }
 
-        async function findAddressOnMap(mapKey, addressInputId) {
-            const address = document.getElementById(addressInputId).value;
+        async function findAddressOnMap(mapKey, address) {
             DOM.modalError.textContent = 'מחפש...';
-            const { success, result, message } = await geocodeAddress(address);
+            const result = await geocodeAddress(address);
             
-            if (success) {
+            if (result.success) {
                 DOM.modalError.textContent = '';
-                const coords = result.coords;
-                placeMarker(mapKey, coords);
+                placeMarker(mapKey, result.coords, address);
                 
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (!modalState.data[legId]) modalState.data[legId] = {};
-                    modalState.data[legId].coords = coords;
-                    modalState.data[legId].placeId = result.placeId;
-                    document.getElementById(addressInputId).value = result.address;
+                    modalState.data[legId].coords = result.coords;
                 } else if (legId.startsWith('connection-')) {
                     const index = parseInt(legId.split('-')[1], 10);
                     if (modalState.data.connections && modalState.data.connections[index]) {
-                        modalState.data.connections[index].coords = coords;
-                        modalState.data.connections[index].placeId = result.placeId;
-                        document.getElementById(addressInputId).value = result.address;
+                        modalState.data.connections[index].coords = result.coords;
                     }
                 } else { // hotel
-                    modalState.data.coords = coords;
-                    modalState.data.placeId = result.placeId;
-                    document.getElementById(addressInputId).value = result.address;
+                     modalState.data.coords = result.coords;
                 }
             } else {
-                DOM.modalError.textContent = message;
+                DOM.modalError.textContent = result.message;
+                
+                const legId = mapKey;
+                if (legId === 'from' || legId === 'to') {
+                    if (modalState.data[legId]) delete modalState.data[legId].coords;
+                } else if (legId.startsWith('connection-')) {
+                    const index = parseInt(legId.split('-')[1], 10);
+                    if (modalState.data.connections?.[index]) {
+                        delete modalState.data.connections[index].coords;
+                    }
+                } else { // hotel
+                   if (modalState.data.coords) delete modalState.data.coords;
+                }
             }
         }
         
         async function fetchRoute(startCoords, endCoords) {
-            if (!directionsService) return { success: false, message: 'שירות המפות עדיין נטען.'};
             const request = {
                 origin: startCoords,
                 destination: endCoords,
                 travelMode: 'DRIVING'
             };
-            try {
-                const response = await directionsService.route(request);
-                if (response.status === 'OK') {
-                    const route = response.routes[0];
-                    return {
-                        success: true,
-                        path: route.overview_polyline,
-                        duration: route.legs[0].duration.value, // seconds
-                        distance: route.legs[0].distance.value, // meters
-                    };
-                } else {
-                    return { success: false, message: 'לא נמצא מסלול.' };
-                }
-            } catch (error) {
-                console.error("Routing error:", error);
-                return { success: false, message: 'שגיאת רשת בחישוב המסלול.' };
-            }
+            
+            return new Promise(resolve => {
+                directionsService.route(request, (result, status) => {
+                    if (status == 'OK') {
+                        const route = result.routes[0];
+                        resolve({
+                            success: true,
+                            geometry: route.overview_path.map(p => ({ lat: p.lat(), lng: p.lng() })),
+                            duration: route.legs.reduce((total, leg) => total + leg.duration.value, 0),
+                            distance: route.legs.reduce((total, leg) => total + leg.distance.value, 0),
+                        });
+                    } else {
+                        console.error('Directions request failed due to ' + status);
+                        resolve({ success: false, message: 'לא נמצא מסלול.' });
+                    }
+                });
+            });
         }
         
-        function drawRouteOnMap(mapKey, encodedPath, startCoords, endCoords, mapInstance = null) {
-            const map = mapInstance || modalState.maps[mapKey];
+        function drawRouteOnMap(mapKey, geometry) {
+            const map = modalState.maps[mapKey];
             if (!map) return;
-
-            if (modalState.mapRenderers[mapKey]) {
-                if (modalState.mapRenderers[mapKey].directions) modalState.mapRenderers[mapKey].directions.setMap(null);
-                if (modalState.mapRenderers[mapKey].startMarker) modalState.mapRenderers[mapKey].startMarker.setMap(null);
-                if (modalState.mapRenderers[mapKey].endMarker) modalState.mapRenderers[mapKey].endMarker.setMap(null);
-            }
-
-            const directionsRenderer = new google.maps.DirectionsRenderer({
-                map: map,
-                suppressMarkers: true,
-                polylineOptions: { strokeColor: '#3b82f6', strokeWeight: 5 }
-            });
             
+            // Clear previous layers
+            if (modalState.mapLayers[mapKey]) {
+                modalState.mapLayers[mapKey].forEach(layer => layer.setMap(null));
+            }
+            modalState.mapLayers[mapKey] = [];
+            
+            const startMarker = new google.maps.Marker({ position: geometry[0], map: map, title: 'התחלה' });
+            const endMarker = new google.maps.Marker({ position: geometry[geometry.length - 1], map: map, title: 'סיום' });
+
+            const routePath = new google.maps.Polyline({
+                path: geometry,
+                geodesic: true,
+                strokeColor: '#3b82f6',
+                strokeOpacity: 1.0,
+                strokeWeight: 5
+            });
+
+            routePath.setMap(map);
+
+            modalState.mapLayers[mapKey].push(startMarker, endMarker, routePath);
+
             const bounds = new google.maps.LatLngBounds();
-            bounds.extend(startCoords);
-            bounds.extend(endCoords);
-
-            const directionsResult = {
-                routes: [{ overview_polyline: encodedPath, bounds: bounds }]
-            };
-
-            directionsRenderer.setDirections(directionsResult);
-
-            const startMarker = new google.maps.Marker({ position: startCoords, map: map, title: 'התחלה' });
-            const endMarker = new google.maps.Marker({ position: endCoords, map: map, title: 'סיום' });
-
-            modalState.mapRenderers[mapKey] = { 
-                directions: directionsRenderer, startMarker, endMarker
-            };
+            geometry.forEach(point => bounds.extend(point));
             map.fitBounds(bounds);
         }
 
         function showFinalRouteOnMap() {
-            const map = modalState.maps['final-route'];
-            if (!map) return;
+            const mapKey = 'final-route';
+            const finalMap = modalState.maps[mapKey];
+            if (!finalMap) return;
             
             collectStepData(); 
 
-            if (modalState.mapRenderers['final-route'] && modalState.mapRenderers['final-route'].polyline) {
-                modalState.mapRenderers['final-route'].polyline.setMap(null);
+            // Clear layers
+            if (modalState.mapLayers[mapKey]) {
+                modalState.mapLayers[mapKey].forEach(layer => layer.setMap(null));
             }
-            if (modalState.mapRenderers['final-route'] && modalState.mapRenderers['final-route'].markers) {
-                modalState.mapRenderers['final-route'].markers.forEach(m => m.setMap(null));
-            }
-            
-            const bounds = new google.maps.LatLngBounds();
+            modalState.mapLayers[mapKey] = [];
+
             const points = [];
-            const markers = [];
             const allLegs = [modalState.data.from, ...(modalState.data.connections || []), modalState.data.to];
             
             allLegs.forEach(leg => {
                 if (leg && leg.coords) {
                     points.push(leg.coords);
-                    bounds.extend(leg.coords);
-                    markers.push(new google.maps.Marker({ position: leg.coords, map: map, title: leg.destination }));
+                    const marker = new google.maps.Marker({ position: leg.coords, map: finalMap });
+                    modalState.mapLayers[mapKey].push(marker);
                 }
             });
 
-            if (points.length > 1) {
-                const flightPath = new google.maps.Polyline({
-                    path: points, geodesic: true, strokeColor: '#3b82f6',
-                    strokeOpacity: 1.0, strokeWeight: 2,
-                    icons: [{
-                        icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW },
-                        offset: '100%', repeat: '100px'
-                    }]
-                });
-                flightPath.setMap(map);
-                modalState.mapRenderers['final-route'] = { polyline: flightPath, markers: markers };
-                map.fitBounds(bounds);
-            } else if (points.length === 1) {
-                map.setCenter(points[0]);
-                map.setZoom(8);
-            }
-        }
-        
-        async function handleAddressAutocomplete(input) {
-            const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
-            if (!suggestionsContainer) return;
+            if (points.length > 0) {
+                const bounds = new google.maps.LatLngBounds();
+                points.forEach(p => bounds.extend(p));
+                finalMap.fitBounds(bounds);
 
-            const query = input.value;
-            const len = query.length;
-
-            if (len < 4) {
-                suggestionsContainer.innerHTML = '';
-                modalState.lastAutocompleteSuggestions = [];
-                return;
-            }
-
-            if (len > 8 && modalState.lastAutocompleteSuggestions.length > 0) {
-                 const filtered = modalState.lastAutocompleteSuggestions.filter(p => 
-                    p.description.toLowerCase().includes(query.toLowerCase())
-                 );
-                 renderAutocompleteSuggestions(filtered, input, suggestionsContainer);
-                 return;
-            }
-
-            if (len !== 4 && len !== 6 && len !== 8) return;
-            if (!autocompleteService) return;
-
-            try {
-                const response = await autocompleteService.getPlacePredictions({ input: query });
-                if (response && response.predictions) {
-                    modalState.lastAutocompleteSuggestions = response.predictions;
-                    renderAutocompleteSuggestions(response.predictions, input, suggestionsContainer);
+                if (points.length > 1) {
+                    const flightPath = new google.maps.Polyline({
+                        path: points,
+                        geodesic: true,
+                        strokeColor: '#3b82f6',
+                        strokeOpacity: 0,
+                        strokeWeight: 3,
+                        icons: [{
+                            icon: {
+                                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                scale: 3,
+                                strokeColor: '#3b82f6'
+                            },
+                            offset: '100%',
+                            repeat: '50px'
+                        }]
+                    });
+                    flightPath.setMap(finalMap);
+                    modalState.mapLayers[mapKey].push(flightPath);
                 }
-            } catch (error) { console.error('Autocomplete error:', error); }
+            }
         }
-        
-        function renderAutocompleteSuggestions(predictions, input, container) {
-            container.innerHTML = '';
-            predictions.forEach(prediction => {
-                const suggestionDiv = document.createElement('div');
-                suggestionDiv.textContent = prediction.description;
-                suggestionDiv.className = 'autocomplete-suggestion';
-                suggestionDiv.addEventListener('click', () => {
-                    input.value = prediction.description;
-                    container.innerHTML = '';
-                });
-                container.appendChild(suggestionDiv);
-            });
-        }
-
-        // ... (The rest of the functions from the original file, adapted for Google Maps)
-        // This includes addConnection, addSeatInput, handleDelete, open/close details modals, generateDetailsHTML functions, summary tables, etc.
-        // The implementation details are restored below to provide the complete file.
 
         // --- Dynamic Form Elements ---
         function addConnection() {
@@ -1572,7 +1561,11 @@
             container.appendChild(div.firstChild);
             
             initMap(`map-connection-${index}`, `connection-${index}`);
-            initializeFieldPlugins(); // Re-attach listeners for new inputs
+            initializeFieldPlugins();
+            setTimeout(() => {
+                const map = modalState.maps[`connection-${index}`];
+                if(map) google.maps.event.trigger(map, 'resize');
+            }, 10);
         }
 
         function addSeatInput(value = '') {
@@ -1690,9 +1683,292 @@
             }, 300);
         }
 
+        // --- Event Listeners ---
+        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
+        DOM.modalCloseBtn.addEventListener('click', closeModal);
+        DOM.modalForm.addEventListener('submit', handleFormSubmit);
+        
+        DOM.modalNextBtn.addEventListener('click', () => {
+            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
+            if (collectStepData()) {
+                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
+                generateStepContent();
+                updateModalNav();
+                setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => {
+                        if(m) google.maps.event.trigger(m, 'resize');
+                    });
+                }, 10);
+            }
+        });
+
+        DOM.modalBackBtn.addEventListener('click', () => {
+            collectStepData();
+            if (modalState.currentStep === 1) {
+                if (modalState.subType === 'flight' && modalState.flightDataFound) { modalState.flightDataFound = false; }
+                else if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
+                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
+            } else {
+                modalState.currentStep--;
+            }
+            generateStepContent();
+            updateModalNav();
+            setTimeout(() => {
+                initializeFieldPlugins();
+                Object.values(modalState.maps).forEach(m => {
+                    if(m) google.maps.event.trigger(m, 'resize');
+                });
+            }, 10);
+        });
+        
+        async function searchFlightWithWorker(num, date) {
+             const url = `${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`;
+             try {
+               const r = await fetch(url);
+               if(!r.ok){
+                   let j; 
+                   try { j=await r.json() } catch{};
+                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
+               }
+               const flights = await r.json();
+               return { success: true, flights };
+             } catch(err) {
+                 return { success: false, message: err.message };
+             }
+        }
+
+        DOM.modalForm.addEventListener('click', async e => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            const { action, legId, targetInput } = target.dataset;
+
+            const handleSearch = async (searchFunction, button) => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                button.disabled = true;
+                try {
+                    await searchFunction();
+                } finally {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            };
+            
+            if (action === 'open-address-picker') {
+                openAddressPicker(targetInput);
+            } else if (action === 'find-address') {
+                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value), target);
+            } else if (action === 'find-flight-leg') {
+                const address = document.getElementById(`${legId}_airport_address`).value;
+                await handleSearch(() => findAddressOnMap(legId, address), target);
+            } else if(action === 'calculate-ride-route') {
+                await handleSearch(async () => {
+                    const fromAddress = document.getElementById('from_address').value;
+                    const toAddress = document.getElementById('to_address').value;
+                    modalState.data.from_address = fromAddress;
+                    modalState.data.to_address = toAddress;
+
+                    DOM.modalError.textContent = 'מחשב מסלול...';
+                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
+
+                    if (!fromResult.success || !toResult.success) {
+                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
+                        return;
+                    }
+
+                    modalState.data.from_coords = fromResult.coords;
+                    modalState.data.to_coords = toResult.coords;
+                    
+                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
+                    if (routeResult.success) {
+                        DOM.modalError.textContent = '';
+                        modalState.data.route_geometry = routeResult.geometry.map(p => [p.lat, p.lng]);
+                        modalState.data.route_duration = routeResult.duration;
+                        modalState.data.route_distance = routeResult.distance;
+                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
+                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
+
+                        if (modalState.maps['ride-route']) {
+                           drawRouteOnMap('ride-route', routeResult.geometry);
+                        }
+
+                    } else {
+                        DOM.modalError.textContent = routeResult.message;
+                    }
+                }, target);
+            } else if (action === 'search-flight-api') {
+                 await handleSearch(async () => {
+                    DOM.modalError.textContent = '';
+                    const num = document.getElementById('flight_number_search').value.trim().toUpperCase();
+                    const date = document.getElementById('flight_date_search').value;
+                    if (!num || !date) {
+                        DOM.modalError.textContent = 'נא למלא מספר טיסה ותאריך.';
+                        return;
+                    }
+                    const result = await searchFlightWithWorker(num, date);
+                    if (result.success && result.flights.length > 0) {
+                        const flight = result.flights[0]; // Take the first result
+                        // Populate modalState.data
+                        modalState.data.airline = flight.airline?.name;
+                        modalState.data.flight_number = flight.number;
+                        modalState.data.date = formatDateFromInput(formatApiDateToInput(flight.departure?.scheduledTime?.local));
+                        modalState.data.departure_time = formatApiTimeToInput(flight.departure?.scheduledTime?.local);
+                        modalState.data.arrival_time = formatApiTimeToInput(flight.arrival?.scheduledTime?.local);
+                        
+                         modalState.data.from = {
+                             destination: flight.departure?.airport?.name,
+                             airport_name: flight.departure?.airport?.name,
+                             airport_address: flight.departure?.airport?.name,
+                         };
+                          modalState.data.to = {
+                             destination: flight.arrival?.airport?.name,
+                             airport_name: flight.arrival?.airport?.name,
+                             airport_address: flight.arrival?.airport?.name,
+                         };
+
+                        modalState.flightDataFound = true;
+                        modalState.currentStep = 1; // Start the flight form from step 1
+                        generateStepContent();
+                        updateModalNav();
+                          setTimeout(() => {
+                            initializeFieldPlugins();
+                            Object.values(modalState.maps).forEach(m => {
+                                if (m) google.maps.event.trigger(m, 'resize');
+                            });
+                          }, 10);
+
+                    } else {
+                        DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
+                    }
+                }, target);
+            } else if (action === 'skip-flight-search') {
+                modalState.flightDataFound = true;
+                modalState.currentStep = 1; // Start flight form from step 1
+                generateStepContent();
+                updateModalNav();
+                 setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => {
+                        if (m) google.maps.event.trigger(m, 'resize');
+                    });
+                }, 10);
+            } else if (target.id === 'add-connection-btn') {
+                addConnection();
+            } else if (target.id === 'calculate-final-route-btn') {
+                showFinalRouteOnMap();
+            } else if (target.id === 'add-seat-btn') {
+                addSeatInput();
+            }
+        });
+
+        document.addEventListener('click', e => {
+            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[data-autocomplete-target="true"]');
+            if (!isAutocomplete) {
+                document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
+            }
+            const editBtn = e.target.closest('.edit-btn');
+            if (editBtn) {
+                e.stopPropagation();
+                const item = allItems.find(i => i.id === editBtn.dataset.id);
+                if (item) openModal(item);
+                return;
+            }
+            
+            const deleteBtn = e.target.closest('.delete-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
+                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
+                return;
+            }
+
+            const card = e.target.closest('[data-action="view-details"]');
+            if (card) {
+              const item = allItems.find(i => i.id === card.dataset.id);
+              if (item) openDetailsModal(item);
+            }
+        });
+
+        async function handleAddressAutocomplete(input) {
+            const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
+            if (!suggestionsContainer) return;
+
+            const query = input.value;
+            const len = query.length;
+
+            if (len < 4) {
+                suggestionsContainer.innerHTML = '';
+                lastAutocompleteResults = [];
+                return;
+            }
+
+            // API call logic
+            if (len === 4 || len === 6 || len === 8) {
+                 autocompleteService.getPlacePredictions({ input: query }, (predictions, status) => {
+                    if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+                        lastAutocompleteResults = [];
+                        suggestionsContainer.innerHTML = '';
+                        return;
+                    }
+                    lastAutocompleteResults = predictions;
+                    renderSuggestions(predictions, input, suggestionsContainer);
+                });
+            } else if (len > 8) {
+                // Client-side filtering
+                const filteredResults = lastAutocompleteResults.filter(p => 
+                    p.description.toLowerCase().includes(query.toLowerCase())
+                );
+                renderSuggestions(filteredResults, input, suggestionsContainer);
+            }
+        }
+
+        function renderSuggestions(predictions, input, container) {
+            container.innerHTML = '';
+            predictions.forEach(prediction => {
+                const suggestionDiv = document.createElement('div');
+                suggestionDiv.innerHTML = `<strong>${prediction.structured_formatting.main_text}</strong> <small>${prediction.structured_formatting.secondary_text}</small>`;
+                suggestionDiv.className = 'autocomplete-suggestion';
+                suggestionDiv.addEventListener('click', () => {
+                    input.value = prediction.description;
+                    container.innerHTML = '';
+                    lastAutocompleteResults = []; // Clear results after selection
+                });
+                container.appendChild(suggestionDiv);
+            });
+        }
+
+
+        // --- Sidebar Activation ---
+        const toggleSidebar = () => {
+            DOM.sidebar.classList.toggle('translate-x-full');
+            DOM.overlay.classList.toggle('hidden');
+        };
+        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
+        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
+        DOM.overlay.addEventListener('click', toggleSidebar);
+
+        // --- Delete Modal Listeners ---
+        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
+        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
+
+        // --- Address Picker Listeners ---
+        DOM.addressPickerCloseBtn.addEventListener('click', closeAddressPicker);
+        DOM.addressPickerContent.addEventListener('click', (e) => {
+            const targetLi = e.target.closest('li[data-address]');
+            if (targetLi && currentAddressPickerTarget) {
+                const address = targetLi.dataset.address;
+                const input = document.getElementById(currentAddressPickerTarget);
+                if (input) {
+                    input.value = address;
+                }
+                closeAddressPicker();
+            }
+        });
+        
         // --- Details Modal ---
         function openDetailsModal(item) {
-            let contentHtml = `
+            let contentHtml = '';
+            contentHtml += `
                 <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                     <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
                     <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
@@ -1727,7 +2003,7 @@
             DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
             setTimeout(() => {
                 DOM.detailsModal.classList.add('hidden');
-                detailsMap = null; // No need to call .remove() on Google Maps
+                detailsMap = null; // Let garbage collector handle map instance
             }, 300);
         }
 
@@ -1735,11 +2011,11 @@
         function generateHotelDetailsHTML(item) {
              let starsHtml = '';
             if (item.stars && item.stars > 0) {
-                 starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
-                 for (let i = 0; i < 5; i++) {
-                     starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
-                 }
-                 starsHtml += '</div>';
+                starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
+                for (let i = 0; i < 5; i++) {
+                    starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
+                }
+                starsHtml += '</div>';
             }
 
             let mealsHtml = (item.meals && Array.isArray(item.meals) && item.meals.length > 0) ? item.meals.join(', ') : '-';
@@ -1759,14 +2035,19 @@
                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg mt-4"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                 <div class="grid grid-cols-2 gap-4 mt-4">
                     <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address || item.name)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address || item.name ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                 </div>
-                ${item.coords ? '<div id="details-map" class="details-map-container mt-4 map-container-style"></div>' : ''}
+                ${item.coords ? '<div id="details-map" class="details-map-container map-container mt-4"></div>' : ''}
             `;
         }
         
         function generateRideDetailsHTML(item) {
             const title = `הסעה: ${item.from_address?.split(',')[0] || ''} → ${item.to_address?.split(',')[0] || ''}`;
+            let route_geometry = item.route_geometry;
+            if(typeof route_geometry === 'string') {
+                try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+            }
+
             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -1787,7 +2068,7 @@
                  <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                  </div>
-                 ${item.route_path ? '<div id="details-map" class="details-map-container map-container-style"></div>' : ''}
+                 ${route_geometry ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
                `;
         }
 
@@ -1808,7 +2089,7 @@
                       <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
                  </div>
                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container map-container-style"></div>' : ''}
+                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
                `;
         }
 
@@ -1832,9 +2113,9 @@
         }
         
         function generateFerryDetailsHTML(item) {
-              const title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
-              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
-              return `
+             const title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
+             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
+             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
@@ -1852,9 +2133,9 @@
         }
         
         function generateTrainDetailsHTML(item) {
-              const title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
-              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
-              return `
+             const title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
+             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
+             return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
@@ -1875,53 +2156,69 @@
         function initDetailsMap(item) {
             const mapContainer = document.getElementById('details-map');
             if (!mapContainer) return;
-        
+
             detailsMap = new google.maps.Map(mapContainer, {
                 center: { lat: 31.7683, lng: 35.2137 },
                 zoom: 2,
                 mapTypeControl: false,
                 streetViewControl: false,
             });
-        
+
             if (item.type === 'hotel' && item.coords) {
                 new google.maps.Marker({ position: item.coords, map: detailsMap });
                 detailsMap.setCenter(item.coords);
                 detailsMap.setZoom(13);
-            } else if (item.type === 'ride' && item.route_path) {
-                drawRouteOnMap('details', item.route_path, item.from_coords, item.to_coords, detailsMap);
+            } else if (item.type === 'ride' && item.route_geometry) {
+                let route_geometry = item.route_geometry;
+                if(typeof route_geometry === 'string') {
+                    try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+                }
+                if(route_geometry) {
+                    const path = route_geometry.map(p => ({lat: p[0], lng: p[1]}));
+                    new google.maps.Marker({ position: path[0], map: detailsMap, title: 'התחלה' });
+                    new google.maps.Marker({ position: path[path.length - 1], map: detailsMap, title: 'סיום' });
+                    new google.maps.Polyline({ path: path, map: detailsMap, strokeColor: '#3b82f6', strokeWeight: 5 });
+                    const bounds = new google.maps.LatLngBounds();
+                    path.forEach(p => bounds.extend(p));
+                    detailsMap.fitBounds(bounds);
+                }
             } else if (item.type === 'flight') {
-                const bounds = new google.maps.LatLngBounds();
                 const points = [];
                 const allLegs = [item.from, ...(item.connections || []), item.to];
                 allLegs.forEach(leg => {
                     if (leg && leg.coords) {
                         points.push(leg.coords);
-                        bounds.extend(leg.coords);
                         new google.maps.Marker({ position: leg.coords, map: detailsMap, title: leg.destination });
                     }
                 });
-                if (points.length > 1) {
-                    new google.maps.Polyline({ path: points, geodesic: true, strokeColor: '#3b82f6', strokeWeight: 2 }).setMap(detailsMap);
+                if (points.length > 0) {
+                    const bounds = new google.maps.LatLngBounds();
+                    points.forEach(p => bounds.extend(p));
                     detailsMap.fitBounds(bounds);
-                } else if (points.length === 1) {
-                    detailsMap.setCenter(points[0]);
-                    detailsMap.setZoom(8);
+                    if (points.length > 1) {
+                         new google.maps.Polyline({
+                            path: points,
+                            geodesic: true,
+                            map: detailsMap,
+                            strokeColor: '#3b82f6',
+                            strokeOpacity: 0
+                        });
+                    }
                 }
             }
-        
             setTimeout(() => google.maps.event.trigger(detailsMap, 'resize'), 100);
         }
 
         // --- Summary Table & Helpers ---
         function formatDuration(seconds) {
-            if (!seconds) return '-';
+            if (seconds === null || seconds === undefined) return '-';
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             return `${h > 0 ? h + 'ש ' : ''}${m}ד`;
         }
 
         function formatDistance(meters) {
-            if (!meters) return '-';
+            if (meters === null || meters === undefined) return '-';
             return `${(meters / 1000).toFixed(1)} ק"מ`;
         }
 
@@ -1972,229 +2269,8 @@
             `;
         }
 
-        // --- EVENT LISTENERS (MAIN) ---
-        
-        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
-        DOM.modalCloseBtn.addEventListener('click', closeModal);
-        DOM.modalForm.addEventListener('submit', handleFormSubmit);
-        
-        DOM.modalNextBtn.addEventListener('click', () => {
-            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
-            if (collectStepData()) {
-                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
-                generateStepContent();
-                updateModalNav();
-                setTimeout(() => {
-                    initializeFieldPlugins();
-                    Object.values(modalState.maps).forEach(m => { if(m) google.maps.event.trigger(m, 'resize'); });
-                }, 10);
-            }
-        });
-
-        DOM.modalBackBtn.addEventListener('click', () => {
-            collectStepData();
-            if (modalState.currentStep === 1) {
-                if (modalState.subType === 'flight' && modalState.flightDataFound) { modalState.flightDataFound = false; }
-                else if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
-                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
-            } else {
-                modalState.currentStep--;
-            }
-            generateStepContent();
-            updateModalNav();
-            setTimeout(() => {
-                initializeFieldPlugins();
-                Object.values(modalState.maps).forEach(m => { if(m) google.maps.event.trigger(m, 'resize'); });
-            }, 10);
-        });
-        
-        async function searchFlightWithWorker(num, date) {
-             const url = `${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`;
-             try {
-               const r = await fetch(url);
-               if(!r.ok){
-                   let j; 
-                   try { j=await r.json() } catch{};
-                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
-               }
-               const flights = await r.json();
-               return { success: true, flights };
-             } catch(err) {
-                 return { success: false, message: err.message };
-             }
-        }
-
-        DOM.modalForm.addEventListener('click', async e => {
-            const target = e.target.closest('button');
-            if (!target) return;
-            const { action, legId, targetInput, targetInputId } = target.dataset;
-
-            const handleSearch = async (searchFunction, button) => {
-                const originalText = button.innerHTML;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                button.disabled = true;
-                try {
-                    await searchFunction();
-                } finally {
-                    button.innerHTML = originalText;
-                    button.disabled = false;
-                }
-            };
-            
-            if (action === 'open-address-picker') {
-                openAddressPicker(targetInput);
-            } else if (action === 'find-address') {
-                await handleSearch(() => findAddressOnMap('hotel', targetInputId), target);
-            } else if (action === 'find-flight-leg') {
-                await handleSearch(() => findAddressOnMap(legId, targetInputId), target);
-            } else if(action === 'calculate-ride-route') {
-                await handleSearch(async () => {
-                    const fromAddress = document.getElementById('from_address').value;
-                    const toAddress = document.getElementById('to_address').value;
-                    modalState.data.from_address = fromAddress;
-                    modalState.data.to_address = toAddress;
-
-                    DOM.modalError.textContent = 'מחשב מסלול...';
-                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
-
-                    if (!fromResult.success || !toResult.success) {
-                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
-                        return;
-                    }
-
-                    modalState.data.from_coords = fromResult.result.coords;
-                    modalState.data.to_coords = toResult.result.coords;
-                    
-                    const routeResult = await fetchRoute(fromResult.result.coords, toResult.result.coords);
-                    if (routeResult.success) {
-                        DOM.modalError.textContent = '';
-                        modalState.data.route_path = routeResult.path;
-                        modalState.data.route_duration = routeResult.duration;
-                        modalState.data.route_distance = routeResult.distance;
-                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
-                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
-                        drawRouteOnMap('ride-route', routeResult.path, fromResult.result.coords, toResult.result.coords);
-                    } else {
-                        DOM.modalError.textContent = routeResult.message;
-                    }
-                }, target);
-            } else if (action === 'search-flight-api') {
-                 await handleSearch(async () => {
-                    DOM.modalError.textContent = '';
-                    const num = document.getElementById('flight_number_search').value.trim().toUpperCase();
-                    const date = document.getElementById('flight_date_search').value;
-                    if (!num || !date) {
-                        DOM.modalError.textContent = 'נא למלא מספר טיסה ותאריך.';
-                        return;
-                    }
-                    const result = await searchFlightWithWorker(num, date);
-                    if (result.success && result.flights.length > 0) {
-                        const flight = result.flights[0];
-                        modalState.data.airline = flight.airline?.name;
-                        modalState.data.flight_number = flight.number;
-                        modalState.data.date = formatDateFromInput(formatApiDateToInput(flight.departure?.scheduledTime?.local));
-                        modalState.data.departure_time = formatApiTimeToInput(flight.departure?.scheduledTime?.local);
-                        modalState.data.arrival_time = formatApiTimeToInput(flight.arrival?.scheduledTime?.local);
-                        
-                         modalState.data.from = {
-                             destination: flight.departure?.airport?.name,
-                             airport_name: flight.departure?.airport?.name,
-                             airport_address: flight.departure?.airport?.name,
-                         };
-                          modalState.data.to = {
-                             destination: flight.arrival?.airport?.name,
-                             airport_name: flight.arrival?.airport?.name,
-                             airport_address: flight.arrival?.airport?.name,
-                         };
-
-                        modalState.flightDataFound = true;
-                        modalState.currentStep = 1;
-                        generateStepContent();
-                        updateModalNav();
-                          setTimeout(() => {
-                            initializeFieldPlugins();
-                            Object.values(modalState.maps).forEach(m => { if(m) google.maps.event.trigger(m, 'resize'); });
-                          }, 10);
-
-                    } else {
-                        DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
-                    }
-                }, target);
-            } else if (action === 'skip-flight-search') {
-                modalState.flightDataFound = true;
-                modalState.currentStep = 1;
-                generateStepContent();
-                updateModalNav();
-                 setTimeout(() => {
-                    initializeFieldPlugins();
-                    Object.values(modalState.maps).forEach(m => { if(m) google.maps.event.trigger(m, 'resize'); });
-                }, 10);
-            } else if (target.id === 'add-connection-btn') {
-                addConnection();
-            } else if (target.id === 'calculate-final-route-btn') {
-                showFinalRouteOnMap();
-            } else if (target.id === 'add-seat-btn') {
-                addSeatInput();
-            }
-        });
-
-        document.addEventListener('click', e => {
-            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[data-autocomplete-target="true"]');
-            if (!isAutocomplete) {
-                document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
-            }
-            const editBtn = e.target.closest('.edit-btn');
-            if (editBtn) {
-                e.stopPropagation();
-                const item = allItems.find(i => i.id === editBtn.dataset.id);
-                if (item) openModal(item);
-                return;
-            }
-            
-            const deleteBtn = e.target.closest('.delete-btn');
-            if (deleteBtn) {
-                e.stopPropagation();
-                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
-                return;
-            }
-
-            const card = e.target.closest('[data-action="view-details"]');
-            if (card) {
-                const item = allItems.find(i => i.id === card.dataset.id);
-                if (item) openDetailsModal(item);
-            }
-        });
-
-        // --- Sidebar Activation ---
-        const toggleSidebar = () => {
-            DOM.sidebar.classList.toggle('translate-x-full');
-            DOM.overlay.classList.toggle('hidden');
-        };
-        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
-        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
-        DOM.overlay.addEventListener('click', toggleSidebar);
-
-        // --- Delete Modal Listeners ---
-        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
-        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
-
-        // --- Address Picker Listeners ---
-        DOM.addressPickerCloseBtn.addEventListener('click', closeAddressPicker);
-        DOM.addressPickerContent.addEventListener('click', (e) => {
-            const targetLi = e.target.closest('li[data-address]');
-            if (targetLi && currentAddressPickerTarget) {
-                const address = targetLi.dataset.address;
-                const input = document.getElementById(currentAddressPickerTarget);
-                if (input) {
-                    input.value = address;
-                }
-                closeAddressPicker();
-            }
-        });
-        
-        // --- Start the page ---
-        initPage();
+        // --- Start the page after Google Maps API is loaded ---
+        window.addEventListener('google-maps-loaded', initPage);
     </script>
 </body>
 </html>
-
