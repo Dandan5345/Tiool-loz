@@ -1,3 +1,4 @@
+ 
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -9,8 +10,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
     
-    <!-- Google Maps API Script -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker,directions&callback=initGoogleMaps&language=iw" async defer></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
@@ -48,12 +50,7 @@
         .progress-step.active:not(:last-child)::after { background-color: #3b82f6; }
 
         /* Map Styles */
-        .map-container { 
-            width: 100%; 
-            border-radius: 0.5rem; 
-            border: 1px solid #e2e8f0; 
-            background-color: #f1f5f9;
-        }
+        .leaflet-container { width: 100%; border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
         .small-map-container { height: 200px; }
         .final-map-container { height: 300px; }
         .details-map-container { height: 250px; }
@@ -61,13 +58,17 @@
         /* Loading Overlay */
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
 
-        /* Autocomplete Styles for Google Places */
-        .pac-container {
-            z-index: 9999 !important; /* Higher z-index to show above modal */
-            border-radius: 0.375rem;
-            font-family: 'Assistant', sans-serif;
+        /* Autocomplete Styles */
+        .autocomplete-suggestions {
+            position: absolute; background-color: white;
+            border: 1px solid #d1d5db; border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem; max-height: 150px;
+            overflow-y: auto; z-index: 9999;
+            width: calc(100% - 40px);
         }
-        
+        .autocomplete-suggestion { padding: 0.5rem; cursor: pointer; }
+        .autocomplete-suggestion:hover { background-color: #f3f4f6; }
+
         /* Notification Banner */
         #notification-banner {
             transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
@@ -247,16 +248,10 @@
         let editingItem = null; 
         let itemToDelete = null;
         let logisticsUnsubscribe = null; // To detach the listener
-        
-        // --- Google Maps State ---
-        let googleMapsReady = false;
-        let geocoder, autocompleteService, directionsService;
-
+        let detailsMap = null; // For the details modal map
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
-            maps: {}, // Will store google.maps.Map objects
-            mapLayers: {}, // Will store arrays of markers/polylines
-            flightDataFound: false,
+            maps: {}, mapLayers: {}, flightDataFound: false,
         };
         let currentAddressPickerTarget = null; // To know which input to fill
 
@@ -293,15 +288,6 @@
             addressPickerCloseBtn: document.getElementById('address-picker-close-btn'),
             logisticsSummaryBody: document.getElementById('logistics-summary-tbody'),
             grandTotalContainer: document.getElementById('grand-total-container'),
-        };
-        
-        // --- Google Maps Initialization (called by API script) ---
-        window.initGoogleMaps = () => {
-            geocoder = new google.maps.Geocoder();
-            autocompleteService = new google.maps.places.AutocompleteService();
-            directionsService = new google.maps.DirectionsService();
-            googleMapsReady = true;
-            console.log("Google Maps Services Initialized.");
         };
 
         // --- Notification System ---
@@ -612,10 +598,7 @@
 
         // --- Modal Logic ---
         function resetModalState() {
-            // No need to remove maps from DOM, just clear layers
-            Object.values(modalState.mapLayers).forEach(layers => {
-                layers.forEach(layer => layer.setMap(null));
-            });
+            Object.values(modalState.maps).forEach(map => map.remove());
             modalState = {
                 mainType: null, subType: null, currentStep: 1, data: {},
                 maps: {}, mapLayers: {}, flightDataFound: false,
@@ -644,7 +627,7 @@
                     }
                 }
 
-                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
+                // **FIX**: Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
                 const type = itemToEdit.type;
                 if (type === 'hotel' && itemToEdit.dates) {
                     const [start, end] = itemToEdit.dates.split(' - ');
@@ -671,6 +654,9 @@
                 DOM.modal.querySelector('.modal-content').classList.remove('scale-95');
                 
                 initializeFieldPlugins();
+                setTimeout(() => {
+                    Object.values(modalState.maps).forEach(map => map?.invalidateSize());
+                }, 100);
             }, 10);
         }
 
@@ -889,13 +875,13 @@
             <div class="relative">
                 <label class="block"><span class="text-sm font-semibold text-slate-600">${label}</span>
                     <div class="flex items-center mt-1">
-                        <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." data-autocomplete-target="true" autocomplete="off" data-last-query-length="0">
+                        <input type="text" id="${id}" value="${value}" class="block w-full p-2 border rounded-md" placeholder="התחל להקליד כתובת..." data-autocomplete-target="true" autocomplete="off">
                         <button type="button" data-action="open-address-picker" data-target-input="${id}" class="p-2 text-slate-500 hover:text-blue-600 shrink-0" title="פנקס כתובות">
                             <i class="fas fa-book-atlas"></i>
                         </button>
                     </div>
                 </label>
-                <div id="${id}-suggestions-container" class="absolute bg-white border border-slate-300 rounded-b-md w-full z-[999]"></div>
+                <div id="${id}-suggestions" class="autocomplete-suggestions"></div>
             </div>`;
         }
 
@@ -944,10 +930,10 @@
                                 </label>`;
                 case 'addressmap':
                     return `<div>
-                                ${renderAutocompleteAddressInput(field.id, field.label)}
-                                <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
-                                <div id="map-container" class="mt-4 small-map-container map-container"></div>
-                            </div>`;
+                        ${renderAutocompleteAddressInput(field.id, field.label)}
+                        <button type="button" data-action="find-address" class="mt-2 px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 w-full text-center">מצא כתובת על המפה</button>
+                        <div id="map-container" class="mt-4 small-map-container"></div>
+                    </div>`;
                 case 'text_autocomplete':
                     return renderAutocompleteAddressInput(field.id, field.label);
                 case 'routemap':
@@ -963,7 +949,7 @@
                             <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
                             <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
                         </div>
-                        <div id="map-ride-route" class="mt-4 final-map-container map-container"></div>`;
+                        <div id="map-ride-route" class="mt-4 final-map-container"></div>`;
                 case 'flightroute':
                     return `
                         <div class="space-y-4">
@@ -976,7 +962,7 @@
                             <div class="text-center">
                                 <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
                             </div>
-                            <div id="map-final-route" class="mt-4 final-map-container map-container"></div>
+                            <div id="map-final-route" class="mt-4 final-map-container"></div>
                         </div>`;
                 case 'luggage':
                     return `<fieldset class="border p-4 rounded-lg">
@@ -1059,35 +1045,67 @@
                     <div class="md:col-span-2 text-center">
                         <button type="button" data-action="find-flight-leg" data-leg-id="${id}" class="px-4 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">מצא על המפה</button>
                     </div>
-                    <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container map-container"></div>
+                    <div id="map-${id}" class="mt-2 md:col-span-2 small-map-container"></div>
                 </div>
             </fieldset>`;
         }
         
-        function initializeFieldPlugins() {
-            // Paste event listener for clean pasting
-            document.querySelectorAll('#item-form input[type="text"], #item-form input[type="url"], #item-form input[type="tel"], #item-form input[type="number"], #item-form textarea')
-                .forEach(input => {
-                    if (input.hasPasteListener) return;
-                    input.hasPasteListener = true;
-                    input.addEventListener('paste', (e) => {
-                        e.preventDefault();
-                        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-                        const { selectionStart, selectionEnd, value } = e.target;
-                        e.target.value = value.substring(0, selectionStart) + text + value.substring(selectionEnd);
-                        const newCursorPosition = selectionStart + text.length;
-                        e.target.setSelectionRange(newCursorPosition, newCursorPosition);
-                        e.target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                    });
-                });
+        function placeMarker(mapKey, coords, popupText = '') {
+            const map = modalState.maps[mapKey];
+            const layerGroup = modalState.mapLayers[mapKey];
+            if (!map || !layerGroup) return;
 
-            // Attach autocomplete logic to relevant inputs
+            const latLng = [coords.lat, coords.lng || coords.lon];
+            map.setView(latLng, 13);
+            layerGroup.clearLayers();
+            const marker = L.marker(latLng).addTo(layerGroup);
+            if(popupText) marker.bindPopup(popupText);
+        }
+
+        function initializeFieldPlugins() {
+            // FIX: Add a dedicated paste event listener to all text-based inputs in the modal
+            // This prevents the browser from incorrectly pasting extra text from the page.
+            document.querySelectorAll(
+                '#item-form input[type="text"], ' +
+                '#item-form input[type="url"], ' +
+                '#item-form input[type="tel"], ' +
+                '#item-form input[type="number"], ' +
+                '#item-form textarea'
+            ).forEach(input => {
+                // Use a property on the element itself to check if the listener is already attached.
+                if (input.hasPasteListener) {
+                    return;
+                }
+                input.hasPasteListener = true;
+
+                input.addEventListener('paste', (e) => {
+                    // Prevent the default paste action which is causing the issue.
+                    e.preventDefault();
+
+                    // Get only the plain text from the clipboard.
+                    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+                    // Manually insert the clean text. This is a robust way to handle it.
+                    const { selectionStart, selectionEnd, value } = e.target;
+                    e.target.value = value.substring(0, selectionStart) + text + value.substring(selectionEnd);
+                    
+                    // Update the cursor position.
+                    const newCursorPosition = selectionStart + text.length;
+                    e.target.setSelectionRange(newCursorPosition, newCursorPosition);
+
+                    // Dispatch an 'input' event so that other functionalities like autocomplete still work.
+                    e.target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                });
+            });
+
+            const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
+            
             document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
-                const debouncedWrapper = debounce((event) => handleAddressAutocomplete(event.target), 400);
+                const debouncedWrapper = (event) => debouncedAutocomplete(event.target);
                 input.addEventListener('input', debouncedWrapper);
             });
-            
-            // Auto-fill dates on destination change
+
+            // Handle destination change to auto-fill dates
             const destinationSelect = document.getElementById('destination');
             if (destinationSelect) {
                 destinationSelect.addEventListener('change', (e) => {
@@ -1097,17 +1115,23 @@
                         const [startStr, endStr] = destData.dates.split(' - ');
                         const checkinInput = document.getElementById('checkin_date');
                         const checkoutInput = document.getElementById('checkout_date');
-                        if (checkinInput) checkinInput.value = formatDateToInput(startStr);
-                        if (checkoutInput) checkoutInput.value = formatDateToInput(endStr);
+
+                        if (checkinInput) {
+                            checkinInput.value = formatDateToInput(startStr);
+                        }
+                        if (checkoutInput) {
+                            checkoutInput.value = formatDateToInput(endStr);
+                        }
                     }
                 });
             }
 
-            // Star rating UI
+            // Handle star rating UI
             const starContainer = document.getElementById('stars-container');
             if (starContainer) {
                 const starIcons = starContainer.querySelectorAll('.star-rating-icon');
                 const hiddenInput = document.getElementById('stars');
+                
                 const updateStars = (rating) => {
                     starIcons.forEach(star => {
                         star.classList.toggle('text-yellow-400', star.dataset.value <= rating);
@@ -1115,257 +1139,362 @@
                     });
                     hiddenInput.value = rating;
                 };
-                starIcons.forEach(star => star.addEventListener('click', () => updateStars(star.dataset.value)));
-                if (hiddenInput.value > 0) updateStars(hiddenInput.value);
-            }
 
-            // Initialize maps for the current step
-            document.querySelectorAll('.map-container').forEach(container => {
-                const mapKey = container.id.replace('map-', '');
-                initMap(container.id, mapKey);
-            });
-
-            // Pre-populate maps if editing
-            if (editingItem) {
-                if (modalState.data.coords && modalState.maps.hotel) {
-                    placeMarker('hotel', modalState.data.coords);
-                }
-                if (modalState.data.from?.coords && modalState.maps.from) {
-                    placeMarker('from', modalState.data.from.coords, modalState.data.from.destination);
-                }
-                if (modalState.data.to?.coords && modalState.maps.to) {
-                    placeMarker('to', modalState.data.to.coords, modalState.data.to.destination);
-                }
-                (modalState.data.connections || []).forEach((conn, i) => {
-                    const mapKey = `connection-${i}`;
-                    if (conn.coords && modalState.maps[mapKey]) placeMarker(mapKey, conn.coords, conn.destination);
+                starIcons.forEach(star => {
+                    star.addEventListener('click', () => {
+                        const rating = star.dataset.value;
+                        updateStars(rating);
+                    });
                 });
-                if (modalState.maps['final-route']) showFinalRouteOnMap();
-                if (modalState.maps['ride-route'] && modalState.data.route_geometry) {
-                     drawRouteOnMap('ride-route', modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
+
+                if (hiddenInput.value > 0) {
+                    updateStars(hiddenInput.value);
                 }
             }
 
+            // Initialize maps and populate with existing data if editing
+            if (document.getElementById('map-container')) {
+                initMap('map-container', 'hotel');
+                if (modalState.data.coords) placeMarker('hotel', modalState.data.coords);
+            }
+            if (document.querySelector('[id^="map-from"]')) {
+                initMap('map-from', 'from');
+                if (modalState.data.from?.coords) placeMarker('from', modalState.data.from.coords, modalState.data.from.destination);
+            }
+            if (document.querySelector('[id^="map-to"]')) {
+                initMap('map-to', 'to');
+                if (modalState.data.to?.coords) placeMarker('to', modalState.data.to.coords, modalState.data.to.destination);
+            }
+            (modalState.data.connections || []).forEach((conn, i) => {
+                const mapId = `map-connection-${i}`;
+                const mapKey = `connection-${i}`;
+                initMap(mapId, mapKey);
+                if (conn.coords) placeMarker(mapKey, conn.coords, conn.destination);
+            });
+            if (document.querySelector('[id^="map-final-route"]')) {
+                initMap('map-final-route', 'final-route');
+                showFinalRouteOnMap(); // Draw flight route immediately if data exists
+            }
+            if (document.getElementById('map-ride-route')) {
+                initMap('map-ride-route', 'ride-route');
+                if (modalState.data.route_geometry && Array.isArray(modalState.data.route_geometry)) {
+                    drawRouteOnMap(modalState.maps['ride-route'], 'ride-route', modalState.data.route_geometry, modalState.data.from_coords, modalState.data.to_coords);
+                }
+            }
+            
             if (document.getElementById('add-seat-btn')) {
                 (modalState.data.seats || []).forEach(seat => addSeatInput(seat));
             }
         }
         
-        // --- Map & Geocoding & Routing Logic (Google Maps) ---
-        function initMap(containerId, mapKey) {
-            if (!googleMapsReady) return;
-            const mapContainer = document.getElementById(containerId);
-            if (!mapContainer || modalState.maps[mapKey]) return;
+        function updateModalNav() {
+            const stepDefinitions = getStepDefinition();
+            const totalSteps = stepDefinitions.length;
+            const isLastStep = modalState.currentStep >= totalSteps;
 
-            const map = new google.maps.Map(mapContainer, {
-                center: { lat: 31.7683, lng: 35.2137 },
-                zoom: 2,
-                disableDefaultUI: true,
-                zoomControl: true,
-            });
-            modalState.maps[mapKey] = map;
-            modalState.mapLayers[mapKey] = [];
-        }
+            const isFirstStepEver = !modalState.mainType;
+            const isSubTypeChoiceStep = modalState.mainType === 'transport' && !modalState.subType;
+            const isFlightSearchStep = modalState.subType === 'flight' && !modalState.flightDataFound && !editingItem;
+            
+            const isAnyChoiceStep = isFirstStepEver || isSubTypeChoiceStep || isFlightSearchStep;
 
-        function clearMapLayers(mapKey) {
-            if (modalState.mapLayers[mapKey]) {
-                modalState.mapLayers[mapKey].forEach(layer => layer.setMap(null));
-                modalState.mapLayers[mapKey] = [];
+            DOM.modalBackBtn.classList.toggle('hidden', modalState.currentStep === 1 && isAnyChoiceStep);
+            DOM.modalFinishBtn.classList.toggle('hidden', !isLastStep || isAnyChoiceStep);
+            DOM.modalNextBtn.classList.toggle('hidden', isLastStep);
+            
+            // On choice steps, always show Next button.
+            if (isAnyChoiceStep) {
+                 DOM.modalNextBtn.classList.remove('hidden');
+                 DOM.modalFinishBtn.classList.add('hidden');
             }
         }
 
-        async function geocodeAddress(address) {
-            if (!googleMapsReady) return { success: false, message: 'שירותי מפות לא זמינים.' };
-            if (!address) return { success: false, message: 'לא הוזנה כתובת.' };
-            
-            return new Promise(resolve => {
-                geocoder.geocode({ address: address }, (results, status) => {
-                    if (status === 'OK' && results[0]) {
-                        resolve({ success: true, coords: results[0].geometry.location.toJSON(), name: results[0].formatted_address });
-                    } else {
-                        resolve({ success: false, message: 'הכתובת לא נמצאה.' });
+        function collectStepData() {
+            const stepDefinitions = getStepDefinition();
+            if (!stepDefinitions.length) return false;
+            const stepDef = stepDefinitions[modalState.currentStep - 1];
+            DOM.modalError.textContent = '';
+
+            stepDef.fields.forEach(field => {
+                let value;
+                if (field.type === 'radio') {
+                    const checked = document.querySelector(`input[name="${field.id}"]:checked`);
+                    value = checked ? checked.value : null;
+                } else if (field.type === 'multiselect') {
+                    const select = document.getElementById(field.id);
+                    if (select) {
+                        value = Array.from(select.selectedOptions).map(option => option.value);
                     }
-                });
+                } else if (field.type === 'starrating') {
+                    const hiddenInput = document.getElementById(field.id);
+                    value = hiddenInput ? parseInt(hiddenInput.value, 10) || 0 : 0;
+                } else if (field.type === 'routemap') {
+                    modalState.data.from_address = document.getElementById('from_address').value;
+                    modalState.data.to_address = document.getElementById('to_address').value;
+                    return; 
+                } else if (field.type === 'flightroute') {
+                    const collectLegData = (legId, existingData = {}) => ({
+                        destination: document.getElementById(`${legId}_destination`)?.value,
+                        airport_name: document.getElementById(`${legId}_airport_name`)?.value,
+                        airport_address: document.getElementById(`${legId}_airport_address`)?.value,
+                        coords: existingData.coords,
+                    });
+                    
+                    modalState.data.from = collectLegData('from', modalState.data.from);
+                    modalState.data.to = collectLegData('to', modalState.data.to);
+                    modalState.data.connections = (modalState.data.connections || []).map((conn, i) => collectLegData(`connection-${i}`, conn));
+                    return;
+                } else if (field.type === 'luggage') {
+                    modalState.data.hand_bag_count = document.getElementById('hand_bag_count').value;
+                    modalState.data.trolley_count = document.getElementById('trolley_count').value;
+                    modalState.data.checked_bags_count = document.getElementById('checked_bags_count').value;
+                    return;
+                } else if (field.type === 'seats') {
+                    modalState.data.seats = Array.from(document.querySelectorAll('.seat-input-wrapper input')).map(i => i.value).filter(Boolean);
+                    return;
+                } else if (field.type === 'flight_search_ui') {
+                    return; // This step is handled by button clicks, not by 'next'
+                }
+                else {
+                    const input = document.getElementById(field.id);
+                    if (input) {
+                         value = field.type === 'number' ? (input.value ? parseFloat(input.value) : null) : input.value;
+                    }
+                }
+                
+                if (field.id) modalState.data[field.id] = value;
             });
+            
+            // Post-collection processing for dates
+            const finalType = modalState.subType || modalState.mainType;
+            if (finalType === 'hotel') {
+                const checkin = formatDateFromInput(modalState.data.checkin_date);
+                const checkout = formatDateFromInput(modalState.data.checkout_date);
+                if (checkin && checkout) modalState.data.dates = `${checkin} - ${checkout}`;
+            } else if (finalType === 'car_rental') {
+                const pickup = formatDateFromInput(modalState.data.pickup_date);
+                const ret = formatDateFromInput(modalState.data.return_date);
+                if (pickup && ret) modalState.data.dates = `${pickup} - ${ret}`;
+            } else if (modalState.data.date) {
+                // All single-date transports now use `date` field
+                modalState.data.date = formatDateFromInput(modalState.data.date);
+            }
+
+            if (!modalState.mainType) modalState.mainType = modalState.data.mainType;
+            if (modalState.mainType === 'transport' && !modalState.subType) modalState.subType = modalState.data.subType;
+            
+            return true;
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            if (!collectStepData()) return;
+
+            const finalData = { ...modalState.data };
+            finalData.type = modalState.subType || modalState.mainType;
+            
+            if (finalData.type === 'ride' && finalData.route_geometry && Array.isArray(finalData.route_geometry)) {
+                finalData.route_geometry = JSON.stringify(finalData.route_geometry);
+            }
+            
+            // Clean up temporary date fields before saving
+            delete finalData.checkin_date;
+            delete finalData.checkout_date;
+            delete finalData.pickup_date;
+            delete finalData.return_date;
+            
+            delete finalData.mainType;
+            delete finalData.subType;
+            
+            // For flight, we now use `date` but old data used `dates`. 
+            // To prevent both from being saved, if `date` exists, remove `dates`.
+            if (finalData.type === 'flight' && finalData.date) {
+                delete finalData.dates;
+            }
+
+
+            const cleanDataForFirebase = (obj) => {
+                if (obj === null || obj === undefined) return null;
+                if (Array.isArray(obj)) return obj.map(item => cleanDataForFirebase(item));
+                if (typeof obj !== 'object' || obj instanceof Date) return obj;
+
+                const newObj = {};
+                for (const key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                        const value = obj[key];
+                        if (value !== undefined) {
+                            newObj[key] = cleanDataForFirebase(value);
+                        }
+                    }
+                }
+                return newObj;
+            };
+            const cleanedData = cleanDataForFirebase(finalData);
+
+            try {
+                const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
+                if (editingItem && editingItem.id) {
+                    await updateDoc(doc(logisticsCollectionRef, editingItem.id), cleanedData);
+                } else {
+                    cleanedData.createdAt = serverTimestamp();
+                    await addDoc(logisticsCollectionRef, cleanedData);
+                }
+                closeModal();
+            } catch (err) {
+                console.error("Error saving document:", err);
+                DOM.modalError.textContent = 'שגיאה בשמירת הפריט.';
+            }
         }
         
-        function placeMarker(mapKey, coords, title = '') {
-            const map = modalState.maps[mapKey];
-            if (!map) return;
-            
-            clearMapLayers(mapKey);
+        // --- Map & Geocoding & Routing Logic ---
+        function initMap(containerId, mapKey) {
+            if (modalState.maps[mapKey]) modalState.maps[mapKey].remove();
+            const mapContainer = document.getElementById(containerId);
+            if (!mapContainer) return;
 
-            const marker = new google.maps.Marker({
-                position: coords,
-                map: map,
-                title: title,
-            });
-            modalState.mapLayers[mapKey].push(marker);
-            map.setCenter(coords);
-            map.setZoom(13);
+            const map = L.map(containerId).setView([31.7683, 35.2137], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            modalState.maps[mapKey] = map;
+            modalState.mapLayers[mapKey] = L.layerGroup().addTo(map);
+        }
+
+        async function geocodeAddress(address) {
+            if (!address) return { success: false, message: 'לא הוזנה כתובת.' };
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+            try {
+                const response = await fetch(url, { 
+                    signal: controller.signal,
+                    headers: { 'Accept-Language': 'en' }
+                });
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    return { success: true, coords: { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } };
+                } else {
+                    return { success: false, message: 'הכתובת לא נמצאה.' };
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    return { success: false, message: 'החיפוש ארך זמן רב מדי.' };
+                } else {
+                    console.error('Geocoding error:', error);
+                    return { success: false, message: 'שגיאת רשת בחיפוש.' };
+                }
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        async function findAddressOnMap(mapKey, address) {
+            DOM.modalError.textContent = 'מחפש...';
+            const result = await geocodeAddress(address);
+            
+            if (result.success) {
+                DOM.modalError.textContent = '';
+                const coords = { lat: result.coords.lat, lng: result.coords.lon };
+                placeMarker(mapKey, coords);
+                
+                const legId = mapKey;
+                if (legId === 'from' || legId === 'to') {
+                    if (!modalState.data[legId]) modalState.data[legId] = {};
+                    modalState.data[legId].coords = coords;
+                } else if (legId.startsWith('connection-')) {
+                    const index = parseInt(legId.split('-')[1], 10);
+                    if (modalState.data.connections && modalState.data.connections[index]) {
+                        modalState.data.connections[index].coords = coords;
+                    }
+                } else { // hotel
+                     modalState.data.coords = coords;
+                }
+            } else {
+                DOM.modalError.textContent = result.message;
+                
+                const legId = mapKey;
+                if (legId === 'from' || legId === 'to') {
+                    if (modalState.data[legId]) delete modalState.data[legId].coords;
+                } else if (legId.startsWith('connection-')) {
+                    const index = parseInt(legId.split('-')[1], 10);
+                    if (modalState.data.connections?.[index]) {
+                        delete modalState.data.connections[index].coords;
+                    }
+                } else { // hotel
+                   if (modalState.data.coords) delete modalState.data.coords;
+                }
+            }
         }
         
         async function fetchRoute(startCoords, endCoords) {
-             if (!googleMapsReady) return { success: false, message: 'שירותי ניתוב לא זמינים.' };
-
-             return new Promise(resolve => {
-                directionsService.route({
-                    origin: startCoords,
-                    destination: endCoords,
-                    travelMode: google.maps.TravelMode.DRIVING,
-                }, (response, status) => {
-                    if (status === 'OK') {
-                        const route = response.routes[0].legs[0];
-                        resolve({
-                            success: true,
-                            directionsResult: response, // Keep the full result for the renderer
-                            duration: route.duration.value, // seconds
-                            distance: route.distance.value, // meters
-                        });
-                    } else {
-                        resolve({ success: false, message: 'לא נמצא מסלול.' });
-                    }
-                });
-             });
+            const url = `https://router.project-osrm.org/route/v1/driving/${startCoords.lon},${startCoords.lat};${endCoords.lon},${endCoords.lat}?overview=full&geometries=geojson`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.code === 'Ok' && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    return {
+                        success: true,
+                        geometry: route.geometry.coordinates.map(c => [c[1], c[0]]),
+                        duration: route.duration, // in seconds
+                        distance: route.distance, // in meters
+                    };
+                } else {
+                    return { success: false, message: 'לא נמצא מסלול.' };
+                }
+            } catch (error) {
+                console.error("Routing error:", error);
+                return { success: false, message: 'שגיאת רשת בחישוב המסלול.' };
+            }
         }
         
-        function drawRouteOnMap(mapKey, directionsResult, startCoords, endCoords) {
-            const map = modalState.maps[mapKey];
-            if (!map) return;
-            
-            clearMapLayers(mapKey);
+        function drawRouteOnMap(map, mapKey, geometry, startCoords, endCoords) {
+            const layerGroup = modalState.mapLayers[mapKey];
+            if (!map || !layerGroup) return;
 
-            const directionsRenderer = new google.maps.DirectionsRenderer({
-                suppressMarkers: true // We'll add our own styled markers
-            });
-            directionsRenderer.setMap(map);
-            directionsRenderer.setDirections(directionsResult);
+            layerGroup.clearLayers();
+            const latlngs = geometry.map(coord => L.latLng(coord[0], coord[1]));
             
-            const startMarker = new google.maps.Marker({ position: startCoords, map: map, label: 'A' });
-            const endMarker = new google.maps.Marker({ position: endCoords, map: map, label: 'B' });
+            if (startCoords) L.marker([startCoords.lat, startCoords.lon]).addTo(layerGroup).bindPopup('התחלה');
+            if (endCoords) L.marker([endCoords.lat, endCoords.lon]).addTo(layerGroup).bindPopup('סיום');
 
-            modalState.mapLayers[mapKey].push(directionsRenderer, startMarker, endMarker);
+            const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
+            map.fitBounds(polyline.getBounds(), {padding: [20, 20]});
         }
 
         function showFinalRouteOnMap() {
-            const map = modalState.maps['final-route'];
-            if (!map) return;
+            const finalMap = modalState.maps['final-route'];
+            const finalLayers = modalState.mapLayers['final-route'];
+            if (!finalMap || !finalLayers) return;
             
-            clearMapLayers(map, 'final-route');
             collectStepData(); 
+
+            finalLayers.clearLayers();
 
             const points = [];
             const allLegs = [modalState.data.from, ...(modalState.data.connections || []), modalState.data.to];
-            const bounds = new google.maps.LatLngBounds();
-
+            
             allLegs.forEach(leg => {
                 if (leg && leg.coords) {
-                    const latLng = new google.maps.LatLng(leg.coords.lat, leg.coords.lng);
-                    points.push(latLng);
-                    bounds.extend(latLng);
-                    const marker = new google.maps.Marker({ position: latLng, map: map, title: leg.destination });
-                    modalState.mapLayers['final-route'].push(marker);
+                    const coords = [leg.coords.lat, leg.coords.lng || leg.coords.lon];
+                    points.push(coords);
+                    L.marker(coords).addTo(finalLayers);
                 }
             });
 
             if (points.length > 0) {
-                map.fitBounds(bounds);
+                finalMap.fitBounds(points, { padding: [50, 50] });
                 if (points.length > 1) {
-                    const flightPath = new google.maps.Polyline({
-                        path: points,
-                        geodesic: true,
-                        strokeColor: '#3b82f6',
-                        strokeOpacity: 0,
-                        strokeWeight: 2,
-                        icons: [{
-                            icon: {
-                                path: 'M 0,-1 0,1',
-                                strokeOpacity: 1,
-                                scale: 4
-                            },
-                            offset: '0',
-                            repeat: '20px'
-                        }, {
-                            icon: {
-                                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                                scale: 3,
-                                strokeColor: '#3b82f6',
-                                strokeOpacity: 1,
-                            },
-                            offset: '50%',
-                        }],
-                    });
-                    flightPath.setMap(map);
-                    modalState.mapLayers['final-route'].push(flightPath);
+                    const polyline = L.polyline(points, {color: '#3b82f6', weight: 3, dashArray: '10, 10'}).addTo(finalLayers);
+                    L.polylineDecorator(polyline, {
+                        patterns: [
+                            { offset: 25, repeat: 50, symbol: L.Symbol.arrowHead({ pixelSize: 12, pathOptions: { fillOpacity: 1, weight: 0, color: '#3b82f6' } }) }
+                        ]
+                    }).addTo(finalLayers);
                 }
             }
         }
-        
-        // --- CUSTOM AUTOCOMPLETE ---
-        async function handleAddressAutocomplete(input) {
-            const suggestionsContainer = document.getElementById(`${input.id}-suggestions-container`);
-            const query = input.value;
-            const lastLength = parseInt(input.dataset.lastQueryLength, 10);
-            
-            if (query.length < 4) {
-                suggestionsContainer.innerHTML = '';
-                input.dataset.suggestionsCache = '';
-                return;
-            }
 
-            // Trigger API call conditions
-            const shouldCallApi = (query.length >= 4 && lastLength < 4) ||
-                                  (query.length >= 6 && lastLength < 6) ||
-                                  (query.length >= 8 && lastLength < 8);
-            
-            if (shouldCallApi) {
-                const response = await new Promise(resolve => {
-                    autocompleteService.getPlacePredictions({ input: query }, (predictions, status) => {
-                        if (status === google.maps.places.PlacesServiceStatus.OK) {
-                            resolve(predictions || []);
-                        } else {
-                            resolve([]);
-                        }
-                    });
-                });
-                
-                input.dataset.suggestionsCache = JSON.stringify(response);
-                input.dataset.lastQueryLength = query.length;
-                renderSuggestions(input, response);
-
-            } else if (query.length > 8) {
-                // Client-side filtering
-                const cachedSuggestions = JSON.parse(input.dataset.suggestionsCache || '[]');
-                const filtered = cachedSuggestions.filter(p => 
-                    p.description.toLowerCase().includes(query.toLowerCase())
-                );
-                renderSuggestions(input, filtered);
-            }
-        }
-
-        function renderSuggestions(input, predictions) {
-            const suggestionsContainer = document.getElementById(`${input.id}-suggestions-container`);
-            suggestionsContainer.innerHTML = '';
-            predictions.forEach(p => {
-                const div = document.createElement('div');
-                div.className = 'p-2 cursor-pointer hover:bg-slate-100';
-                div.textContent = p.description;
-                div.onclick = () => {
-                    input.value = p.description;
-                    suggestionsContainer.innerHTML = '';
-                };
-                suggestionsContainer.appendChild(div);
-            });
-        }
-        
-        // --- Event Listeners & Initializers ---
-        document.addEventListener('DOMContentLoaded', initPage);
-        
-        // ... (The rest of your event listeners and functions remain largely the same) ...
-        // I will paste the full set of listeners and helper functions here to ensure completeness
-        
-        // --- Other Modal and Helper Functions ---
-        
+        // --- Dynamic Form Elements ---
         function addConnection() {
             if (!modalState.data.connections) modalState.data.connections = [];
             const index = modalState.data.connections.length;
@@ -1377,7 +1506,10 @@
             div.innerHTML = legHtml;
             container.appendChild(div.firstChild);
             
+            initMap(`map-connection-${index}`, `connection-${index}`);
+            // Re-attach listeners for the new inputs
             initializeFieldPlugins();
+            setTimeout(() => modalState.maps[`connection-${index}`]?.invalidateSize(), 10);
         }
 
         function addSeatInput(value = '') {
@@ -1392,22 +1524,620 @@
             wrapper.querySelector('.remove-seat-btn').addEventListener('click', () => wrapper.remove());
             container.appendChild(wrapper);
         }
+        
+        // --- Delete/Details Modals ---
+        function handleDelete(id, name) {
+            itemToDelete = { id, name };
+            DOM.deleteModalTitle.textContent = `האם למחוק את "${name}"?`;
+            
+            DOM.deleteModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.deleteModal.classList.remove('opacity-0');
+                DOM.deleteModal.querySelector('.modal-content').classList.remove('scale-95');
+            }, 10);
+        }
+
+        async function confirmDeletion() {
+            if (!itemToDelete) return;
+            try {
+                await deleteDoc(doc(db, "trips", tripId, "logistics", itemToDelete.id));
+            } catch (error) {
+                console.error("Failed to delete item:", error);
+            } finally {
+                closeDeleteModal();
+            }
+        }
+
+        function closeDeleteModal() {
+            DOM.deleteModal.classList.add('opacity-0');
+            DOM.deleteModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.deleteModal.classList.add('hidden');
+                itemToDelete = null;
+            }, 300);
+        }
+        
+        // --- Address Picker Modal ---
+        function getKnownAddresses() {
+            const addresses = new Map();
+            const addAddress = (name, address) => {
+                if (address && !addresses.has(address)) {
+                    addresses.set(address, name);
+                }
+            };
+
+            allItems.forEach(item => {
+                switch (item.type) {
+                    case 'hotel':
+                        if (item.address) addAddress(`🏨 ${item.name}`, item.address);
+                        break;
+                    case 'flight':
+                        if (item.from?.airport_address) addAddress(`✈️ ${item.from.airport_name || item.from.destination}`, item.from.airport_address);
+                        if (item.to?.airport_address) addAddress(`✈️ ${item.to.airport_name || item.to.destination}`, item.to.airport_address);
+                        (item.connections || []).forEach(c => {
+                           if (c.airport_address) addAddress(`✈️ ${c.airport_name || c.destination}`, c.airport_address);
+                        });
+                        break;
+                    case 'ferry':
+                         if (item.from_destination) addAddress(`🚢 מעבורת מ-${item.from_destination}`, item.from_destination);
+                         if (item.to_destination) addAddress(`🚢 מעבורת אל-${item.to_destination}`, item.to_destination);
+                         break;
+                    case 'train':
+                         if (item.from_station) addAddress(`🚆 רכבת מ-${item.from_station}`, item.from_station);
+                         if (item.to_station) addAddress(`🚆 רכבת אל-${item.to_station}`, item.to_station);
+                         break;
+                }
+            });
+            return Array.from(addresses, ([address, name]) => ({ name, address }));
+        }
+
+        function openAddressPicker(targetInputId) {
+            currentAddressPickerTarget = targetInputId;
+            const knownAddresses = getKnownAddresses();
+            DOM.addressPickerContent.innerHTML = '';
+            
+            if (knownAddresses.length === 0) {
+                DOM.addressPickerContent.innerHTML = '<p class="text-slate-500 text-center">לא נמצאו כתובות שמורות בטיול.</p>';
+            } else {
+                const list = document.createElement('ul');
+                list.className = 'space-y-2';
+                knownAddresses.forEach(({ name, address }) => {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 hover:bg-slate-100 rounded-md cursor-pointer border';
+                    li.dataset.address = address;
+                    li.innerHTML = `<p class="font-semibold text-slate-700">${name}</p><p class="text-sm text-slate-500">${address}</p>`;
+                    list.appendChild(li);
+                });
+                DOM.addressPickerContent.appendChild(list);
+            }
+
+            DOM.addressPickerModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.addressPickerModal.classList.remove('opacity-0');
+                DOM.addressPickerModal.querySelector('.modal-content').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeAddressPicker() {
+            DOM.addressPickerModal.classList.add('opacity-0');
+            DOM.addressPickerModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.addressPickerModal.classList.add('hidden');
+                currentAddressPickerTarget = null;
+            }, 300);
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
+        DOM.modalCloseBtn.addEventListener('click', closeModal);
+        DOM.modalForm.addEventListener('submit', handleFormSubmit);
+        
+        DOM.modalNextBtn.addEventListener('click', () => {
+            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
+            if (collectStepData()) {
+                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
+                generateStepContent();
+                updateModalNav();
+                setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+                }, 10);
+            }
+        });
+
+        DOM.modalBackBtn.addEventListener('click', () => {
+            collectStepData();
+            if (modalState.currentStep === 1) {
+                if (modalState.subType === 'flight' && modalState.flightDataFound) { modalState.flightDataFound = false; }
+                else if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
+                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
+            } else {
+                modalState.currentStep--;
+            }
+            generateStepContent();
+            updateModalNav();
+            setTimeout(() => {
+                initializeFieldPlugins();
+                Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+            }, 10);
+        });
+        
+        async function searchFlightWithWorker(num, date) {
+             const url = `${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`;
+             try {
+               const r = await fetch(url);
+               if(!r.ok){
+                   let j; 
+                   try { j=await r.json() } catch{};
+                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
+               }
+               const flights = await r.json();
+               return { success: true, flights };
+             } catch(err) {
+                 return { success: false, message: err.message };
+             }
+        }
+
+        DOM.modalForm.addEventListener('click', async e => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            const { action, legId, targetInput } = target.dataset;
+
+            const handleSearch = async (searchFunction, button) => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                button.disabled = true;
+                try {
+                    await searchFunction();
+                } finally {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            };
+            
+            if (action === 'open-address-picker') {
+                openAddressPicker(targetInput);
+            } else if (action === 'find-address') {
+                await handleSearch(() => findAddressOnMap('hotel', document.getElementById('address').value), target);
+            } else if (action === 'find-flight-leg') {
+                const address = document.getElementById(`${legId}_airport_address`).value;
+                await handleSearch(() => findAddressOnMap(legId, address), target);
+            } else if(action === 'calculate-ride-route') {
+                await handleSearch(async () => {
+                    const fromAddress = document.getElementById('from_address').value;
+                    const toAddress = document.getElementById('to_address').value;
+                    modalState.data.from_address = fromAddress;
+                    modalState.data.to_address = toAddress;
+
+                    DOM.modalError.textContent = 'מחשב מסלול...';
+                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
+
+                    if (!fromResult.success || !toResult.success) {
+                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
+                        return;
+                    }
+
+                    modalState.data.from_coords = fromResult.coords;
+                    modalState.data.to_coords = toResult.coords;
+                    
+                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
+                    if (routeResult.success) {
+                        DOM.modalError.textContent = '';
+                        modalState.data.route_geometry = routeResult.geometry;
+                        modalState.data.route_duration = routeResult.duration;
+                        modalState.data.route_distance = routeResult.distance;
+                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
+                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
+
+                        const map = modalState.maps['ride-route'];
+                        if (map) {
+                           drawRouteOnMap(map, 'ride-route', routeResult.geometry, fromResult.coords, toResult.coords);
+                        }
+
+                    } else {
+                        DOM.modalError.textContent = routeResult.message;
+                    }
+                }, target);
+            } else if (action === 'search-flight-api') {
+                 await handleSearch(async () => {
+                    DOM.modalError.textContent = '';
+                    const num = document.getElementById('flight_number_search').value.trim().toUpperCase();
+                    const date = document.getElementById('flight_date_search').value;
+                    if (!num || !date) {
+                        DOM.modalError.textContent = 'נא למלא מספר טיסה ותאריך.';
+                        return;
+                    }
+                    const result = await searchFlightWithWorker(num, date);
+                    if (result.success && result.flights.length > 0) {
+                        const flight = result.flights[0]; // Take the first result
+                        // Populate modalState.data
+                        modalState.data.airline = flight.airline?.name;
+                        modalState.data.flight_number = flight.number;
+                        modalState.data.date = formatDateFromInput(formatApiDateToInput(flight.departure?.scheduledTime?.local));
+                        modalState.data.departure_time = formatApiTimeToInput(flight.departure?.scheduledTime?.local);
+                        modalState.data.arrival_time = formatApiTimeToInput(flight.arrival?.scheduledTime?.local);
+                        
+                         modalState.data.from = {
+                             destination: flight.departure?.airport?.name,
+                             airport_name: flight.departure?.airport?.name,
+                             airport_address: flight.departure?.airport?.name,
+                         };
+                          modalState.data.to = {
+                             destination: flight.arrival?.airport?.name,
+                             airport_name: flight.arrival?.airport?.name,
+                             airport_address: flight.arrival?.airport?.name,
+                         };
+
+                        modalState.flightDataFound = true;
+                        modalState.currentStep = 1; // Start the flight form from step 1
+                        generateStepContent();
+                        updateModalNav();
+                          setTimeout(() => {
+                            initializeFieldPlugins();
+                            Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+                          }, 10);
+
+                    } else {
+                        DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
+                    }
+                }, target);
+            } else if (action === 'skip-flight-search') {
+                modalState.flightDataFound = true;
+                modalState.currentStep = 1; // Start flight form from step 1
+                generateStepContent();
+                updateModalNav();
+                 setTimeout(() => {
+                    initializeFieldPlugins();
+                    Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+                }, 10);
+            } else if (target.id === 'add-connection-btn') {
+                addConnection();
+            } else if (target.id === 'calculate-final-route-btn') {
+                showFinalRouteOnMap();
+            } else if (target.id === 'add-seat-btn') {
+                addSeatInput();
+            }
+        });
+
+        document.addEventListener('click', e => {
+            const isAutocomplete = e.target.closest('.autocomplete-suggestion') || e.target.closest('input[data-autocomplete-target="true"]');
+            if (!isAutocomplete) {
+                document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.innerHTML = '');
+            }
+            const editBtn = e.target.closest('.edit-btn');
+            if (editBtn) {
+                e.stopPropagation();
+                const item = allItems.find(i => i.id === editBtn.dataset.id);
+                if (item) openModal(item);
+                return;
+            }
+            
+            const deleteBtn = e.target.closest('.delete-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
+                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
+                return;
+            }
+
+            const card = e.target.closest('[data-action="view-details"]');
+            if (card) {
+              const item = allItems.find(i => i.id === card.dataset.id);
+              if (item) openDetailsModal(item);
+            }
+        });
+
+        async function handleAddressAutocomplete(input) {
+            const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
+            if (!suggestionsContainer) return;
+
+            const query = input.value;
+
+            if (query.length < 3) {
+                suggestionsContainer.innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+                const data = await response.json();
+                
+                suggestionsContainer.innerHTML = '';
+                data.forEach(place => {
+                    const suggestionDiv = document.createElement('div');
+                    suggestionDiv.textContent = place.display_name;
+                    suggestionDiv.className = 'autocomplete-suggestion';
+                    suggestionDiv.addEventListener('click', () => {
+                        input.value = place.display_name;
+                        suggestionsContainer.innerHTML = '';
+                    });
+                    suggestionsContainer.appendChild(suggestionDiv);
+                });
+            } catch (error) {
+                console.error('Autocomplete error:', error);
+            }
+        }
+
+        // --- Sidebar Activation ---
+        const toggleSidebar = () => {
+            DOM.sidebar.classList.toggle('translate-x-full');
+            DOM.overlay.classList.toggle('hidden');
+        };
+        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
+        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
+        DOM.overlay.addEventListener('click', toggleSidebar);
+
+        // --- Delete Modal Listeners ---
+        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
+        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
+
+        // --- Address Picker Listeners ---
+        DOM.addressPickerCloseBtn.addEventListener('click', closeAddressPicker);
+        DOM.addressPickerContent.addEventListener('click', (e) => {
+            const targetLi = e.target.closest('li[data-address]');
+            if (targetLi && currentAddressPickerTarget) {
+                const address = targetLi.dataset.address;
+                const input = document.getElementById(currentAddressPickerTarget);
+                if (input) {
+                    input.value = address;
+                }
+                closeAddressPicker();
+            }
+        });
+        
+        // --- Details Modal ---
+        function openDetailsModal(item) {
+            let contentHtml = '';
+            contentHtml += `
+                <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
+                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+                <div class="flex-grow overflow-y-auto p-6 space-y-6">`;
+
+            switch(item.type) {
+                case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
+                case 'ride': contentHtml += generateRideDetailsHTML(item); break;
+                case 'flight': contentHtml += generateFlightDetailsHTML(item); break;
+                case 'car_rental': contentHtml += generateCarRentalDetailsHTML(item); break;
+                case 'ferry': contentHtml += generateFerryDetailsHTML(item); break;
+                case 'train': contentHtml += generateTrainDetailsHTML(item); break;
+                default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
+            }
+            
+            contentHtml += `</div>`;
+            DOM.detailsModal.querySelector('.modal-content').innerHTML = contentHtml;
+
+            DOM.detailsModal.classList.remove('hidden');
+            setTimeout(() => {
+                DOM.detailsModal.classList.remove('opacity-0');
+                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
+                initDetailsMap(item);
+            }, 10);
+
+            document.getElementById('details-modal-close-btn').addEventListener('click', closeDetailsModal);
+        }
+
+        function closeDetailsModal() {
+            DOM.detailsModal.classList.add('opacity-0');
+            DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => {
+                DOM.detailsModal.classList.add('hidden');
+                if (detailsMap) {
+                    detailsMap.remove();
+                    detailsMap = null;
+                }
+            }, 300);
+        }
+
+        // --- Details HTML Generators ---
+        function generateHotelDetailsHTML(item) {
+             let starsHtml = '';
+            if (item.stars && item.stars > 0) {
+                starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
+                for (let i = 0; i < 5; i++) {
+                    starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
+                }
+                starsHtml += '</div>';
+            }
+
+            let mealsHtml = (item.meals && Array.isArray(item.meals) && item.meals.length > 0) ? item.meals.join(', ') : '-';
+            
+            return `
+                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">יעד:</strong> ${item.destination || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
+                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">כתובת:</strong> ${item.address || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">ארוחות:</strong> ${mealsHtml}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg">${starsHtml || '<strong class="text-slate-500 block">דירוג כוכבים:</strong> -'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">דירוג בוקינג:</strong> ${item.booking_rating || '-'}</div>
+                </div>
+                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg mt-4"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
+                </div>
+                ${item.coords ? '<div id="details-map" class="details-map-container mt-4"></div>' : ''}
+            `;
+        }
+        
+        function generateRideDetailsHTML(item) {
+            const title = `הסעה: ${item.from_address?.split(',')[0] || ''} → ${item.to_address?.split(',')[0] || ''}`;
+            let route_geometry = item.route_geometry;
+            if(typeof route_geometry === 'string') {
+                try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+            }
+
+            return `
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
+                 ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
+               `;
+        }
+
+        function generateFlightDetailsHTML(item) {
+            const title = `טיסה: ${item.from?.destination || ''} → ${item.to?.destination || ''}`;
+            const travelers = item.travelers || (item.seats?.length || 1);
+            const totalPrice = (item.price_per_person || 0) * travelers;
+            return `
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
+                     <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container"></div>' : ''}
+               `;
+        }
+
+        function generateCarRentalDetailsHTML(item) {
+            return `
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0). toLocaleString()}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
+               `;
+        }
+        
+        function generateFerryDetailsHTML(item) {
+              const title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
+              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
+              return `
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
+               `;
+        }
+        
+        function generateTrainDetailsHTML(item) {
+              const title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
+              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
+              return `
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
+                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                 </div>
+               `;
+        }
+
+        function initDetailsMap(item) {
+            if(detailsMap) {
+                detailsMap.remove();
+                detailsMap = null;
+            }
+            const mapContainer = document.getElementById('details-map');
+            if (!mapContainer) return;
+
+            detailsMap = L.map('details-map').setView([31.7683, 35.2137], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailsMap);
+            const layerGroup = L.layerGroup().addTo(detailsMap);
+
+            if (item.type === 'hotel' && item.coords) {
+                const coords = [item.coords.lat, item.coords.lng || item.coords.lon];
+                L.marker(coords).addTo(layerGroup);
+                detailsMap.setView(coords, 13);
+            } else if (item.type === 'ride' && item.route_geometry) {
+                 let route_geometry = item.route_geometry;
+                 if(typeof route_geometry === 'string') {
+                      try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
+                 }
+                 if(route_geometry) {
+                       const latlngs = route_geometry.map(coord => L.latLng(coord[0], coord[1]));
+                       if (item.from_coords) L.marker([item.from_coords.lat, item.from_coords.lon]).addTo(layerGroup).bindPopup('התחלה');
+                       if (item.to_coords) L.marker([item.to_coords.lat, item.to_coords.lon]).addTo(layerGroup).bindPopup('סיום');
+                       const polyline = L.polyline(latlngs, {color: '#3b82f6', weight: 5}).addTo(layerGroup);
+                       detailsMap.fitBounds(polyline.getBounds(), {padding: [20, 20]});
+                 }
+            } else if (item.type === 'flight') {
+                const points = [];
+                const allLegs = [item.from, ...(item.connections || []), item.to];
+                allLegs.forEach(leg => {
+                    if (leg && leg.coords) {
+                        const coords = [leg.coords.lat, leg.coords.lng || leg.coords.lon];
+                        points.push(coords);
+                        L.marker(coords).addTo(layerGroup).bindPopup(leg.destination || '');
+                    }
+                });
+                if (points.length > 1) {
+                    L.polyline(points, {color: '#3b82f6', weight: 3, dashArray: '10, 10'}).addTo(layerGroup);
+                    detailsMap.fitBounds(points, { padding: [50, 50] });
+                } else if (points.length === 1) {
+                    detailsMap.setView(points[0], 8);
+                }
+            }
+            setTimeout(() => detailsMap.invalidateSize(), 100);
+        }
 
         // --- Summary Table & Helpers ---
         function formatDuration(seconds) {
-            if (!seconds && seconds !== 0) return '-';
+            if (!seconds) return '-';
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             return `${h > 0 ? h + 'ש ' : ''}${m}ד`;
         }
 
         function formatDistance(meters) {
-            if (!meters && meters !== 0) return '-';
+            if (!meters) return '-';
             return `${(meters / 1000).toFixed(1)} ק"מ`;
         }
 
         function renderSummaryTables() {
-             const categories = {
+            const categories = {
                 hotel: { label: '🏨 מלונות', total: 0 },
                 flight: { label: '✈️ טיסות', total: 0 },
                 car_rental: { label: '🚗 רכבים', total: 0 },
@@ -1453,475 +2183,8 @@
             `;
         }
 
-        // --- All Event Listeners ---
-        document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
-        DOM.modalCloseBtn.addEventListener('click', closeModal);
-        DOM.modalForm.addEventListener('submit', handleFormSubmit);
-        
-        DOM.modalNextBtn.addEventListener('click', () => {
-            const wasChoiceStep = !modalState.mainType || (modalState.mainType === 'transport' && !modalState.subType);
-            if (collectStepData()) {
-                modalState.currentStep = wasChoiceStep ? 1 : modalState.currentStep + 1;
-                generateStepContent();
-                updateModalNav();
-                setTimeout(() => {
-                    initializeFieldPlugins();
-                }, 10);
-            }
-        });
-
-        DOM.modalBackBtn.addEventListener('click', () => {
-            collectStepData();
-            if (modalState.currentStep === 1) {
-                if (modalState.subType === 'flight' && modalState.flightDataFound) { modalState.flightDataFound = false; }
-                else if (modalState.subType) { modalState.subType = null; modalState.data.subType = null; } 
-                else if (modalState.mainType) { modalState.mainType = null; modalState.data.mainType = null; }
-            } else {
-                modalState.currentStep--;
-            }
-            generateStepContent();
-            updateModalNav();
-            setTimeout(() => {
-                initializeFieldPlugins();
-            }, 10);
-        });
-        
-        async function searchFlightWithWorker(num, date) {
-             const url = `${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`;
-             try {
-               const r = await fetch(url);
-               if(!r.ok){
-                   let j; 
-                   try { j=await r.json() } catch{};
-                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
-               }
-               const flights = await r.json();
-               return { success: true, flights };
-             } catch(err) {
-                 return { success: false, message: err.message };
-             }
-        }
-
-        DOM.modalForm.addEventListener('click', async e => {
-            const target = e.target.closest('button');
-            if (!target) return;
-            const { action, legId, targetInput } = target.dataset;
-
-            const handleSearch = async (searchFunction, button) => {
-                const originalText = button.innerHTML;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                button.disabled = true;
-                try {
-                    await searchFunction();
-                } finally {
-                    button.innerHTML = originalText;
-                    button.disabled = false;
-                }
-            };
-            
-            if (action === 'open-address-picker') {
-                openAddressPicker(targetInput);
-            } else if (action === 'find-address') {
-                await handleSearch(async () => {
-                    const result = await geocodeAddress(document.getElementById('address').value);
-                    if (result.success) {
-                        modalState.data.coords = result.coords;
-                        placeMarker('hotel', result.coords, result.name);
-                    } else {
-                        DOM.modalError.textContent = result.message;
-                    }
-                }, target);
-            } else if (action === 'find-flight-leg') {
-                const address = document.getElementById(`${legId}_airport_address`).value;
-                await handleSearch(async () => {
-                    const result = await geocodeAddress(address);
-                    if (result.success) {
-                        const coords = result.coords;
-                        placeMarker(legId, coords, result.name);
-                         if (legId === 'from' || legId === 'to') {
-                            if (!modalState.data[legId]) modalState.data[legId] = {};
-                            modalState.data[legId].coords = coords;
-                        } else if (legId.startsWith('connection-')) {
-                            const index = parseInt(legId.split('-')[1], 10);
-                            if (modalState.data.connections && modalState.data.connections[index]) {
-                                modalState.data.connections[index].coords = coords;
-                            }
-                        }
-                    } else {
-                        DOM.modalError.textContent = result.message;
-                    }
-                }, target);
-            } else if(action === 'calculate-ride-route') {
-                await handleSearch(async () => {
-                    const fromAddress = document.getElementById('from_address').value;
-                    const toAddress = document.getElementById('to_address').value;
-                    modalState.data.from_address = fromAddress;
-                    modalState.data.to_address = toAddress;
-
-                    DOM.modalError.textContent = 'מחשב מסלול...';
-                    const [fromResult, toResult] = await Promise.all([geocodeAddress(fromAddress), geocodeAddress(toAddress)]);
-
-                    if (!fromResult.success || !toResult.success) {
-                        DOM.modalError.textContent = fromResult.message || toResult.message || 'לא ניתן למצוא את הכתובות.';
-                        return;
-                    }
-
-                    modalState.data.from_coords = fromResult.coords;
-                    modalState.data.to_coords = toResult.coords;
-                    
-                    const routeResult = await fetchRoute(fromResult.coords, toResult.coords);
-                    if (routeResult.success) {
-                        DOM.modalError.textContent = '';
-                        modalState.data.directionsResult = routeResult.directionsResult; // Store for renderer
-                        modalState.data.route_duration = routeResult.duration;
-                        modalState.data.route_distance = routeResult.distance;
-                        document.getElementById('route-duration').textContent = formatDuration(routeResult.duration);
-                        document.getElementById('route-distance').textContent = formatDistance(routeResult.distance);
-
-                        if (modalState.maps['ride-route']) {
-                           drawRouteOnMap('ride-route', routeResult.directionsResult, fromResult.coords, toResult.coords);
-                        }
-                    } else {
-                        DOM.modalError.textContent = routeResult.message;
-                    }
-                }, target);
-            } else if (action === 'search-flight-api') {
-               await handleSearch(async () => {
-                    DOM.modalError.textContent = '';
-                    const num = document.getElementById('flight_number_search').value.trim().toUpperCase();
-                    const date = document.getElementById('flight_date_search').value;
-                    if (!num || !date) {
-                        DOM.modalError.textContent = 'נא למלא מספר טיסה ותאריך.';
-                        return;
-                    }
-                    const result = await searchFlightWithWorker(num, date);
-                    if (result.success && result.flights.length > 0) {
-                        const flight = result.flights[0]; // Take the first result
-                        modalState.data.airline = flight.airline?.name;
-                        modalState.data.flight_number = flight.number;
-                        modalState.data.date = formatDateFromInput(formatApiDateToInput(flight.departure?.scheduledTime?.local));
-                        modalState.data.departure_time = formatApiTimeToInput(flight.departure?.scheduledTime?.local);
-                        modalState.data.arrival_time = formatApiTimeToInput(flight.arrival?.scheduledTime?.local);
-                        
-                         modalState.data.from = {
-                             destination: flight.departure?.airport?.name,
-                             airport_name: flight.departure?.airport?.name,
-                             airport_address: flight.departure?.airport?.name,
-                         };
-                          modalState.data.to = {
-                             destination: flight.arrival?.airport?.name,
-                             airport_name: flight.arrival?.airport?.name,
-                             airport_address: flight.arrival?.airport?.name,
-                         };
-
-                        modalState.flightDataFound = true;
-                        modalState.currentStep = 1; // Start the flight form from step 1
-                        generateStepContent();
-                        updateModalNav();
-                         setTimeout(() => {
-                            initializeFieldPlugins();
-                         }, 10);
-
-                    } else {
-                        DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
-                    }
-                }, target);
-            } else if (action === 'skip-flight-search') {
-                modalState.flightDataFound = true;
-                modalState.currentStep = 1; // Start flight form from step 1
-                generateStepContent();
-                updateModalNav();
-                 setTimeout(() => {
-                    initializeFieldPlugins();
-                }, 10);
-            } else if (target.id === 'add-connection-btn') {
-                addConnection();
-            } else if (target.id === 'calculate-final-route-btn') {
-                showFinalRouteOnMap();
-            } else if (target.id === 'add-seat-btn') {
-                addSeatInput();
-            }
-        });
-        
-        document.addEventListener('click', e => {
-            if (!e.target.closest('[data-autocomplete-target="true"]') && !e.target.closest('.autocomplete-suggestion')) {
-                document.querySelectorAll('.autocomplete-suggestions-container').forEach(s => s.innerHTML = '');
-            }
-            const editBtn = e.target.closest('.edit-btn');
-            if (editBtn) {
-                e.stopPropagation();
-                const item = allItems.find(i => i.id === editBtn.dataset.id);
-                if (item) openModal(item);
-                return;
-            }
-            
-            const deleteBtn = e.target.closest('.delete-btn');
-            if (deleteBtn) {
-                e.stopPropagation();
-                handleDelete(deleteBtn.dataset.id, deleteBtn.dataset.name);
-                return;
-            }
-
-            const card = e.target.closest('[data-action="view-details"]');
-            if (card) {
-                const item = allItems.find(i => i.id === card.dataset.id);
-                if (item) openDetailsModal(item);
-            }
-        });
-
-        const toggleSidebar = () => {
-            DOM.sidebar.classList.toggle('translate-x-full');
-            DOM.overlay.classList.toggle('hidden');
-        };
-        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
-        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
-        DOM.overlay.addEventListener('click', toggleSidebar);
-
-        DOM.deleteConfirmBtn.addEventListener('click', confirmDeletion);
-        DOM.deleteCancelBtn.addEventListener('click', closeDeleteModal);
-
-        DOM.addressPickerCloseBtn.addEventListener('click', closeAddressPicker);
-        DOM.addressPickerContent.addEventListener('click', (e) => {
-            const targetLi = e.target.closest('li[data-address]');
-            if (targetLi && currentAddressPickerTarget) {
-                const address = targetLi.dataset.address;
-                const input = document.getElementById(currentAddressPickerTarget);
-                if (input) {
-                    input.value = address;
-                    input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                }
-                closeAddressPicker();
-            }
-        });
-
-        // --- All the remaining functions (details modals, summaries etc.) ---
-        
-        // --- Details Modal ---
-        function openDetailsModal(item) {
-            let contentHtml = '';
-            contentHtml += `
-                <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
-                    <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
-                    <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
-                </div>
-                <div class="flex-grow overflow-y-auto p-6 space-y-6">`;
-
-            switch(item.type) {
-                case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
-                case 'ride': contentHtml += generateRideDetailsHTML(item); break;
-                case 'flight': contentHtml += generateFlightDetailsHTML(item); break;
-                case 'car_rental': contentHtml += generateCarRentalDetailsHTML(item); break;
-                case 'ferry': contentHtml += generateFerryDetailsHTML(item); break;
-                case 'train': contentHtml += generateTrainDetailsHTML(item); break;
-                default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
-            }
-            
-            contentHtml += `</div>`;
-            DOM.detailsModal.querySelector('.modal-content').innerHTML = contentHtml;
-
-            DOM.detailsModal.classList.remove('hidden');
-            setTimeout(() => {
-                DOM.detailsModal.classList.remove('opacity-0');
-                DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
-                initDetailsMap(item);
-            }, 10);
-
-            document.getElementById('details-modal-close-btn').addEventListener('click', closeDetailsModal);
-        }
-
-        function closeDetailsModal() {
-            DOM.detailsModal.classList.add('opacity-0');
-            DOM.detailsModal.querySelector('.modal-content').classList.add('scale-95');
-            setTimeout(() => {
-                DOM.detailsModal.classList.add('hidden');
-            }, 300);
-        }
-
-        // --- Details HTML Generators ---
-        function generateHotelDetailsHTML(item) {
-             let starsHtml = '';
-            if (item.stars && item.stars > 0) {
-                starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
-                for (let i = 0; i < 5; i++) {
-                    starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
-                }
-                starsHtml += '</div>';
-            }
-
-            let mealsHtml = (item.meals && Array.isArray(item.meals) && item.meals.length > 0) ? item.meals.join(', ') : '-';
-            
-            return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-hotel text-blue-500"></i> ${item.name}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">יעד:</strong> ${item.destination || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${(item.price || 0).toLocaleString()}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">כתובת:</strong> ${item.address || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">ארוחות:</strong> ${mealsHtml}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg">${starsHtml || '<strong class="text-slate-500 block">דירוג כוכבים:</strong> -'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">דירוג בוקינג:</strong> ${item.booking_rating || '-'}</div>
-                </div>
-                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg mt-4"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                <div class="grid grid-cols-2 gap-4 mt-4">
-                    <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
-                </div>
-                ${item.coords ? '<div id="details-map" class="details-map-container map-container mt-4"></div>' : ''}
-            `;
-        }
-        
-        function generateRideDetailsHTML(item) {
-            const title = `הסעה: ${item.from_address?.split(',')[0] || ''} → ${item.to_address?.split(',')[0] || ''}`;
-            let route_geometry = item.route_geometry;
-            if(typeof route_geometry === 'string') {
-                try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
-            }
-
-            return `
-                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
-                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
-                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                 </div>
-                 ${route_geometry ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
-              `;
-        }
-
-        function generateFlightDetailsHTML(item) {
-            const title = `טיסה: ${item.from?.destination || ''} → ${item.to?.destination || ''}`;
-            const travelers = item.travelers || (item.seats?.length || 1);
-            const totalPrice = (item.price_per_person || 0) * travelers;
-            return `
-                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
-                     <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
-                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
-                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
-              `;
-        }
-
-        function generateCarRentalDetailsHTML(item) {
-            return `
-                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0). toLocaleString()}</div>
-                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                 </div>
-              `;
-        }
-        
-        function generateFerryDetailsHTML(item) {
-             const title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
-             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
-             return `
-                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
-                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                 </div>
-              `;
-        }
-        
-        function generateTrainDetailsHTML(item) {
-             const title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
-             const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
-             return `
-                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת יציאה:</strong> ${item.departure_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת הגעה:</strong> ${item.arrival_time || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מושבים:</strong> ${item.seat_info || '-'}</div>
-                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
-                 </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
-                     <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                 </div>
-              `;
-        }
-
-        function initDetailsMap(item) {
-            const mapContainer = document.getElementById('details-map');
-            if (!mapContainer || !googleMapsReady) return;
-
-            const map = new google.maps.Map(mapContainer, { center: { lat: 0, lng: 0 }, zoom: 2, disableDefaultUI: true, zoomControl: true });
-            
-            if (item.type === 'hotel' && item.coords) {
-                new google.maps.Marker({ position: item.coords, map: map });
-                map.setCenter(item.coords);
-                map.setZoom(13);
-            } else if (item.type === 'ride' && item.from_coords && item.to_coords) {
-                 fetchRoute(item.from_coords, item.to_coords).then(result => {
-                    if(result.success) {
-                        const renderer = new google.maps.DirectionsRenderer();
-                        renderer.setMap(map);
-                        renderer.setDirections(result.directionsResult);
-                    }
-                 });
-            } else if (item.type === 'flight') {
-                const bounds = new google.maps.LatLngBounds();
-                const points = [];
-                const allLegs = [item.from, ...(item.connections || []), item.to];
-                allLegs.forEach(leg => {
-                    if (leg && leg.coords) {
-                       const latLng = new google.maps.LatLng(leg.coords.lat, leg.coords.lng);
-                       points.push(latLng);
-                       bounds.extend(latLng);
-                       new google.maps.Marker({ position: latLng, map: map, title: leg.destination });
-                    }
-                });
-                if (points.length > 0) {
-                    map.fitBounds(bounds);
-                    if (points.length > 1) {
-                         new google.maps.Polyline({ path: points, geodesic: true, strokeColor: '#3b82f6', strokeOpacity: 1.0, strokeWeight: 2 }).setMap(map);
-                    }
-                }
-            }
-        }
-        
+        // --- Start the page ---
+        initPage();
     </script>
 </body>
 </html>
