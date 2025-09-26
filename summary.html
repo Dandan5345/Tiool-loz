@@ -13,24 +13,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
+    <!-- Removed Litepicker script -->
 
     <style>
         body { font-family: 'Assistant', sans-serif; }
         
-        /* --- General Improvements --- */
-        .gradient-bg {
-            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-            background-size: 400% 400%;
-            animation: gradient 15s ease infinite;
-        }
-
-        @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
         /* Sidebar Styles */
         #sidebar { transition: transform 0.3s ease-in-out; }
         .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
@@ -49,8 +36,7 @@
         .small-map-container { height: 200px; }
         .final-map-container { height: 300px; }
         .details-map-container { height: 250px; }
-        .litepicker { z-index: 100 !important; }
-
+        
         /* Loading Overlay */
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
 
@@ -79,6 +65,25 @@
             transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
             transform: translateY(-100%);
         }
+
+        /* Native Date Input Styles */
+        input[type="date"] {
+            position: relative;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            background: transparent;
+            color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
     </style>
 </head>
 <body class="bg-slate-100">
@@ -93,9 +98,9 @@
         <p id="notification-message"></p>
     </div>
 
-    <!-- Improved Background -->
-    <div class="fixed inset-0 z-0 gradient-bg"></div>
-    <div class="fixed inset-0 z-0 bg-black/30"></div>
+    <!-- Restored Static Background -->
+    <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+    <div class="fixed inset-0 z-0 bg-black/50"></div>
 
     <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
         <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
@@ -246,7 +251,7 @@
         let detailsMap = null; // For the details modal map
         let modalState = {
             mainType: null, subType: null, currentStep: 1, data: {},
-            maps: {}, mapLayers: {}, datePicker: null,
+            maps: {}, mapLayers: {},
         };
         let currentAddressPickerTarget = null; // To know which input to fill
 
@@ -297,6 +302,21 @@
                 DOM.notificationBanner.classList.remove('opacity-100', 'translate-y-0');
                 DOM.notificationBanner.classList.add('opacity-0', '-translate-y-12');
             }, 5000);
+        }
+
+        // --- Date Formatting Utilities ---
+        function formatDateToInput(d) { // Converts DD/MM/YYYY to YYYY-MM-DD
+            if (!d || d.indexOf('/') === -1) return '';
+            const parts = d.split('/');
+            if (parts.length !== 3) return '';
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+
+        function formatDateFromInput(d) { // Converts YYYY-MM-DD to DD/MM/YYYY
+            if (!d) return '';
+            const parts = d.split('-');
+            if (parts.length !== 3) return '';
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
 
         // --- Page Initialization ---
@@ -447,7 +467,6 @@
 
         function createHotelCard(item) {
             const card = document.createElement('div');
-            // Design Change: The whole card is now clickable
             card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
@@ -466,29 +485,27 @@
                         <li class="flex items-center gap-2"><i class="fa-solid fa-tag fa-fw text-blue-500"></i> <strong>מחיר:</strong> $${item.price ? item.price.toLocaleString() : 'לא צוין'}</li>
                     </ul>
                 </div>
-                <!-- Design Change: Removed the "click for details" text, as the card is clickable -->
             `;
             return card;
         }
 
         function createTransportCard(item) {
             const card = document.createElement('div');
-             // Design Change: The whole card is now clickable
             card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
             
-            // Feature: Calculate total price based on travelers
             const travelers = item.travelers || 1;
-            const price_per_person = item.price_per_person || item.price || 0;
-            const totalPrice = price_per_person * travelers;
+            const price_per_person = item.price_per_person || 0;
+            const totalPrice = (item.type === 'car_rental' ? item.price : price_per_person * travelers) || 0;
+
 
             let title, icon, details;
             switch (item.type) {
                 case 'flight':
                     title = `טיסה`;
                     icon = 'fa-plane-departure';
-                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} ← ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.dates || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} ← ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'car_rental':
                     title = `רכב שכור`;
@@ -540,13 +557,11 @@
         }
 
         // --- Modal Logic ---
-        
         function resetModalState() {
             Object.values(modalState.maps).forEach(map => map.remove());
-            if (modalState.datePicker) modalState.datePicker.destroy();
             modalState = {
                 mainType: null, subType: null, currentStep: 1, data: {},
-                maps: {}, mapLayers: {}, datePicker: null,
+                maps: {}, mapLayers: {},
             };
             editingItem = null;
         }
@@ -558,17 +573,32 @@
                 editingItem = { id: itemToEdit.id };
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
-                modalState.data = JSON.parse(JSON.stringify(itemToEdit)); // Deep copy
+                modalState.data = JSON.parse(JSON.stringify(itemToEdit));
                 
-                // Bug Fix: Parse stringified geometry on load
                 if (modalState.data.type === 'ride' && modalState.data.route_geometry && typeof modalState.data.route_geometry === 'string') {
                     try {
                         modalState.data.route_geometry = JSON.parse(modalState.data.route_geometry);
                     } catch (e) {
                         console.error("Failed to parse route geometry:", e);
-                        delete modalState.data.route_geometry; // Clear invalid data
+                        delete modalState.data.route_geometry;
                     }
                 }
+
+                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
+                if (modalState.data.dates && modalState.data.dates.includes(' - ')) {
+                    const [start, end] = modalState.data.dates.split(' - ');
+                    if (modalState.mainType === 'hotel') {
+                        modalState.data.checkin_date = start;
+                        modalState.data.checkout_date = end;
+                    } else if (modalState.subType === 'car_rental') {
+                        modalState.data.pickup_date = start;
+                        modalState.data.return_date = end;
+                    }
+                } else if (modalState.subType === 'flight') {
+                    // Flight uses 'date' internally now, but old data might have 'dates'
+                    modalState.data.date = modalState.data.dates || modalState.data.date;
+                }
+
             } else {
                 DOM.modalTitle.textContent = 'הוספת פריט חדש';
             }
@@ -602,7 +632,11 @@
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
                 hotel: [
                     { title: "פרטי המלון", fields: [{id: 'name', label: 'שם המלון'}, {id: 'booked_via', label: 'הוזמן דרך?'}] },
-                    { title: "תאריכים ומחיר", fields: [{id: 'dates', label: 'תאריך צ\'ק-אין וצ\'ק-אאוט', type: 'daterange'}, {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'}] },
+                    { title: "תאריכים ומחיר", fields: [
+                        {id: 'checkin_date', label: 'תאריך צ\'ק-אין', type: 'date'}, 
+                        {id: 'checkout_date', label: 'תאריך צ\'ק-אאוט', type: 'date'},
+                        {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'}
+                    ]},
                     { title: "מיקום המלון", fields: [
                         {id: 'destination', label: 'יעד (עיר, אזור)', type: 'text'},
                         {id: 'address', label: 'כתובת מדויקת', type: 'addressmap'}
@@ -619,7 +653,6 @@
                     {value: 'ferry', label: '🚢 מעבורת'},
                     {value: 'train', label: '🚆 רכבת'}
                 ] }] },
-                // Feature: Added travelers field and changed price to price_per_person for transport types
                 ride: [
                     { title: "מסלול הנסיעה", fields: [{ id: 'routemap', type: 'routemap'}] },
                     { title: "פרטי הזמנה", fields: [
@@ -648,7 +681,8 @@
                         {id: 'pickup_location', label: 'מאיפה לוקחים בדיוק?', type: 'text_autocomplete'},
                     ]},
                     { title: "תאריכים וסוג", fields: [
-                        {id: 'dates', label: 'תאריכי איסוף והחזרה', type: 'daterange'},
+                        {id: 'pickup_date', label: 'תאריך איסוף', type: 'date'},
+                        {id: 'return_date', label: 'תאריך החזרה', type: 'date'},
                         {id: 'pickup_time', label: 'שעת איסוף', type: 'time'},
                         {id: 'return_time', label: 'שעת החזרה', type: 'time'},
                         {id: 'car_type', label: 'סוג רכב', type: 'text', placeholder: 'לדוגמה: SUV, מיני'},
@@ -665,7 +699,7 @@
                     { title: "פרטי הטיסה", fields: [
                         { id: 'airline', label: 'חברת תעופה' },
                         { id: 'flight_number', label: 'מספר טיסה'},
-                        { id: 'dates', label: 'תאריך טיסה', type: 'date' },
+                        { id: 'date', label: 'תאריך טיסה', type: 'date' },
                         { id: 'departure_time', label: 'שעת המראה (שעון מקומי יציאה)', type: 'time' },
                         { id: 'arrival_time', label: 'שעת נחיתה (שעון מקומי יעד)', type: 'time' },
                         { id: 'travelers', label: 'מספר נוסעים', type: 'number', default: 2},
@@ -758,8 +792,7 @@
                 timeout = setTimeout(() => func.apply(context, args), delay);
             };
         };
-        const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
-
+        
         function renderAutocompleteAddressInput(id, label) {
             const value = modalState.data[id] || '';
             return `
@@ -791,8 +824,8 @@
                             </div></div>`;
                 case 'textarea':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                        <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
-                                        </label>`;
+                                <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
+                                </label>`;
                 case 'addressmap':
                     return `<div>
                         ${renderAutocompleteAddressInput(field.id, field.label)}
@@ -844,15 +877,15 @@
                         <div id="seats-container" class="flex flex-wrap gap-2"></div>
                         <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף מקום ישיבה</button>
                     </fieldset>`;
-                case 'daterange':
                 case 'date':
+                    const inputDateValue = formatDateToInput(value);
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                        <input type="text" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="לחץ לבחירת תאריכים">
-                                        </label>`;
+                        <input type="date" id="${field.id}" value="${inputDateValue}" class="mt-1 block w-full p-2 border rounded-md shadow-sm">
+                    </label>`;
                 default: // text, url, number, time, tel
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
-                                        <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="${field.placeholder || ''}">
-                                        </label>`;
+                        <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" placeholder="${field.placeholder || ''}">
+                        </label>`;
             }
         }
         
@@ -882,21 +915,20 @@
         }
 
         function initializeFieldPlugins() {
-            const dateInput = DOM.modalForm.querySelector('#dates, #date');
-            if (dateInput) {
-                const isSingle = dateInput.id === 'date' || modalState.subType === 'flight';
-                modalState.datePicker = new Litepicker({ 
-                    element: dateInput, 
-                    singleMode: isSingle, 
-                    format: 'DD/MM/YYYY' 
-                });
-            }
+            // Litepicker initialization removed
             
-            // Bug Fix: Address paste issue
+            const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
+            
             document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
-                input.removeEventListener('input', debouncedAutocompleteWrapper);
-                input.addEventListener('input', debouncedAutocompleteWrapper);
-                input.removeEventListener('paste', pasteHandler);
+                const debouncedWrapper = (event) => debouncedAutocomplete(event.target);
+                const pasteHandler = (e) => {
+                    e.preventDefault();
+                    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                    e.target.value = pastedText;
+                    debouncedAutocomplete(e.target);
+                };
+                
+                input.addEventListener('input', debouncedWrapper);
                 input.addEventListener('paste', pasteHandler);
             });
 
@@ -973,6 +1005,21 @@
                 if (field.id) modalState.data[field.id] = value;
             });
             
+            // Post-collection processing for dates
+            const finalType = modalState.subType || modalState.mainType;
+            if (finalType === 'hotel') {
+                const checkin = formatDateFromInput(modalState.data.checkin_date);
+                const checkout = formatDateFromInput(modalState.data.checkout_date);
+                if (checkin && checkout) modalState.data.dates = `${checkin} - ${checkout}`;
+            } else if (finalType === 'car_rental') {
+                const pickup = formatDateFromInput(modalState.data.pickup_date);
+                const ret = formatDateFromInput(modalState.data.return_date);
+                if (pickup && ret) modalState.data.dates = `${pickup} - ${ret}`;
+            } else if (modalState.data.date) {
+                // All single-date transports now use `date` field
+                modalState.data.date = formatDateFromInput(modalState.data.date);
+            }
+
             if (!modalState.mainType) modalState.mainType = modalState.data.mainType;
             if (modalState.mainType === 'transport' && !modalState.subType) modalState.subType = modalState.data.subType;
             
@@ -990,8 +1037,21 @@
                 finalData.route_geometry = JSON.stringify(finalData.route_geometry);
             }
             
+            // Clean up temporary date fields before saving
+            delete finalData.checkin_date;
+            delete finalData.checkout_date;
+            delete finalData.pickup_date;
+            delete finalData.return_date;
+            
             delete finalData.mainType;
             delete finalData.subType;
+            
+            // For flight, we now use `date` but old data used `dates`. 
+            // To prevent both from being saved, if `date` exists, remove `dates`.
+            if (finalData.type === 'flight' && finalData.date) {
+                delete finalData.dates;
+            }
+
 
             const cleanDataForFirebase = (obj) => {
                 if (obj === null || obj === undefined) return null;
@@ -1192,11 +1252,8 @@
             container.appendChild(div.firstChild);
             
             initMap(`map-connection-${index}`, `connection-${index}`);
-            // Re-attach paste listeners for the new inputs
-            document.querySelectorAll('#fieldset-connection-' + index + ' input[data-autocomplete-target="true"]').forEach(input => {
-                input.addEventListener('input', debouncedAutocompleteWrapper);
-                input.addEventListener('paste', pasteHandler);
-            });
+            // Re-attach listeners for the new inputs
+            initializeFieldPlugins();
             setTimeout(() => modalState.maps[`connection-${index}`]?.invalidateSize(), 10);
         }
 
@@ -1314,20 +1371,6 @@
                 currentAddressPickerTarget = null;
             }, 300);
         }
-
-        // --- Utility Functions ---
-        function formatDuration(seconds) {
-            if (seconds === undefined || seconds === null) return '-';
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        }
-
-        function formatDistance(meters) {
-            if (meters === undefined || meters === null) return '-';
-            return `${(meters / 1000).toFixed(1)} ק"מ`;
-        }
-
 
         // --- Event Listeners ---
         document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
@@ -1459,18 +1502,6 @@
             }
         });
 
-        // --- Address Autocomplete & Paste Fix ---
-        function debouncedAutocompleteWrapper(event) {
-            debouncedAutocomplete(event.target);
-        }
-
-        function pasteHandler(e) {
-            e.preventDefault();
-            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-            e.target.value = pastedText;
-            debouncedAutocomplete(e.target);
-        }
-
         async function handleAddressAutocomplete(input) {
             const suggestionsContainer = document.getElementById(`${input.id}-suggestions`);
             if (!suggestionsContainer) return;
@@ -1532,7 +1563,6 @@
         // --- Details Modal ---
         function openDetailsModal(item) {
             let contentHtml = '';
-            // Generic Header
             contentHtml += `
                 <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
                     <h3 id="details-modal-title" class="text-2xl font-bold text-slate-800">פרטי פריט</h3>
@@ -1540,7 +1570,6 @@
                 </div>
                 <div class="flex-grow overflow-y-auto p-6 space-y-6">`;
 
-            // Specific content based on type
             switch(item.type) {
                 case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
                 case 'ride': contentHtml += generateRideDetailsHTML(item); break;
@@ -1551,16 +1580,13 @@
                 default: contentHtml += `<p>אין תצוגה מפורטת עבור סוג פריט זה.</p>`;
             }
             
-            contentHtml += `</div>`; // Close content wrapper
+            contentHtml += `</div>`;
             DOM.detailsModal.querySelector('.modal-content').innerHTML = contentHtml;
 
-            // Show modal
             DOM.detailsModal.classList.remove('hidden');
             setTimeout(() => {
                 DOM.detailsModal.classList.remove('opacity-0');
                 DOM.detailsModal.querySelector('.modal-content').classList.remove('scale-95');
-                
-                // Initialize map after modal is visible
                 initDetailsMap(item);
             }, 10);
 
@@ -1638,7 +1664,7 @@
                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.dates || '-'}</div>
+                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
@@ -1772,10 +1798,8 @@
 
             allItems.forEach(item => {
                 if (categories[item.type]) {
-                    // Feature Update: Consistent price calculation for all transport
                     const travelers = item.travelers || 1;
                     const price_per_person = item.price_per_person || 0;
-                    // For 'hotel' and 'car_rental', the price is total, not per person.
                     const price = (item.type === 'hotel' || item.type === 'car_rental') 
                         ? (item.price || 0) 
                         : price_per_person * travelers;
@@ -1814,3 +1838,4 @@
     </script>
 </body>
 </html>
+
