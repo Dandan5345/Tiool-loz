@@ -316,6 +316,22 @@
             grandTotalContainer: document.getElementById('grand-total-container'),
         };
 
+        // --- Utility Functions ---
+        /**
+         * Creates a debounced function that delays invoking `func` until after `delay`
+         * milliseconds have elapsed since the last time the debounced function was invoked.
+         * @param {Function} func The function to debounce.
+         * @param {number} delay The number of milliseconds to delay.
+         * @returns {Function} Returns the new debounced function.
+         */
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
         // --- Notification System ---
         function showNotification(message, type = 'error') {
             DOM.notificationMessage.textContent = message;
@@ -881,8 +897,8 @@
 
             let html = renderProgressBar();
             html += `<div class="modal-step active" data-step="${modalState.currentStep}">
-                        <h4 class="text-xl font-bold text-slate-800 mb-6">${stepDef.title}</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">`;
+                         <h4 class="text-xl font-bold text-slate-800 mb-6">${stepDef.title}</h4>
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">`;
             
             stepDef.fields.forEach(field => {
                 // Dynamically populate destination options if needed
@@ -996,19 +1012,19 @@
                             </div>`;
                 case 'luggage':
                     return `<fieldset class="border p-4 rounded-lg">
-                            <legend class="px-2 font-semibold">פרטי כבודה (לנוסע)</legend>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <label><span class="text-sm font-semibold text-slate-600">תיקי יד</span><input type="number" id="hand_bag_count" value="${modalState.data.hand_bag_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
-                                <label><span class="text-sm font-semibold text-slate-600">טרולי (כמות)</span><input type="number" id="trolley_count" value="${modalState.data.trolley_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
-                                <label><span class="text-sm font-semibold text-slate-600">מזוודות (כמות)</span><input type="number" id="checked_bags_count" value="${modalState.data.checked_bags_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
-                            </div>
-                        </fieldset>`;
+                                <legend class="px-2 font-semibold">פרטי כבודה (לנוסע)</legend>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <label><span class="text-sm font-semibold text-slate-600">תיקי יד</span><input type="number" id="hand_bag_count" value="${modalState.data.hand_bag_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
+                                    <label><span class="text-sm font-semibold text-slate-600">טרולי (כמות)</span><input type="number" id="trolley_count" value="${modalState.data.trolley_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
+                                    <label><span class="text-sm font-semibold text-slate-600">מזוודות (כמות)</span><input type="number" id="checked_bags_count" value="${modalState.data.checked_bags_count || 1}" class="mt-1 block w-full p-2 border rounded-md"></label>
+                                </div>
+                            </fieldset>`;
                 case 'seats':
                     return `<fieldset class="border p-4 rounded-lg">
-                            <legend class="px-2 font-semibold">מקומות ישיבה</legend>
-                            <div id="seats-container" class="flex flex-wrap gap-2"></div>
-                            <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף מקום ישיבה</button>
-                        </fieldset>`;
+                                <legend class="px-2 font-semibold">מקומות ישיבה</legend>
+                                <div id="seats-container" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף מקום ישיבה</button>
+                            </fieldset>`;
                 case 'date':
                     const inputDateValue = formatDateToInput(value);
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
@@ -1205,6 +1221,17 @@
             if (document.getElementById('add-seat-btn')) {
                 (modalState.data.seats || []).forEach(seat => addSeatInput(seat));
             }
+            
+            // --- NEW: Autocomplete with Debounce ---
+            const debouncedAutocomplete = debounce(handleAddressAutocomplete, 400);
+            const autocompleteInputs = document.querySelectorAll('input[type="text"][id*="address"], input[type="text"][id*="location"], input[type="text"][id*="station"], input[type="text"][id*="destination"]');
+            autocompleteInputs.forEach(input => {
+                // Remove any old listeners to avoid duplicates
+                input.removeEventListener('input', (e) => debouncedAutocomplete(e.target));
+                // Add the new listener
+                input.addEventListener('input', (e) => debouncedAutocomplete(e.target));
+            });
+
         }
         
         function updateModalNav() {
@@ -1397,7 +1424,11 @@
                 geocoder.geocode({ address: address }, (results, status) => {
                     if (status === 'OK' && results[0]) {
                         const location = results[0].geometry.location;
-                        resolve({ success: true, coords: { lat: location.lat(), lng: location.lng() } });
+                        resolve({ 
+                            success: true, 
+                            coords: { lat: location.lat(), lng: location.lng() },
+                            fullAddress: results[0].formatted_address
+                        });
                     } else {
                         resolve({ success: false, message: `הכתובת לא נמצאה. (${status})` });
                     }
@@ -1414,17 +1445,27 @@
                 const coords = { lat: result.coords.lat, lng: result.coords.lng };
                 placeMarker(mapKey, coords, address);
                 
+                // Update the input field with the full, formatted address from Google
+                const inputId = `${mapKey}_address`; // Assumes a convention like 'hotel_address'
+                const inputElement = document.getElementById(inputId);
+                if (inputElement) {
+                    inputElement.value = result.fullAddress;
+                }
+
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
                     if (!modalState.data[legId]) modalState.data[legId] = {};
                     modalState.data[legId].coords = coords;
+                    modalState.data[legId].airport_address = result.fullAddress;
                 } else if (legId.startsWith('connection-')) {
                     const index = parseInt(legId.split('-')[1], 10);
                     if (modalState.data.connections && modalState.data.connections[index]) {
                         modalState.data.connections[index].coords = coords;
+                        modalState.data.connections[index].airport_address = result.fullAddress;
                     }
                 } else { // hotel
                      modalState.data.coords = coords;
+                     modalState.data.address = result.fullAddress;
                 }
             } else {
                 DOM.modalError.textContent = result.message;
@@ -1768,11 +1809,13 @@
             if (action === 'open-address-picker') {
                 openAddressPicker(targetInput);
             } else if (action === 'search-address') {
-                const inputId = target.dataset.targetInput;
-                const inputElement = document.getElementById(inputId);
-                if (inputElement) {
-                   await handleSearch(() => handleAddressAutocomplete(inputElement), target);
-                }
+                 const inputId = target.dataset.targetInput;
+                 const inputElement = document.getElementById(inputId);
+                 if (inputElement && inputElement.value.trim() !== '') {
+                     // Determine the map key based on the input's ID
+                     const mapKey = inputId.replace('_address', '').replace('_airport_address', '').replace('_location', '').replace('_station', '').replace('_destination','');
+                     await handleSearch(() => findAddressOnMap(mapKey, inputElement.value), target);
+                 }
             } else if (action === 'find-flight-leg') {
                 const address = document.getElementById(`${legId}_airport_address`).value;
                 await handleSearch(() => findAddressOnMap(legId, address), target);
@@ -1870,9 +1913,9 @@
                 generateStepContent();
                 updateModalNav();
                  setTimeout(() => {
-                    initializeFieldPlugins();
-                    Object.values(modalState.maps).forEach(m => m?.invalidateSize());
-                }, 10);
+                     initializeFieldPlugins();
+                     Object.values(modalState.maps).forEach(m => m?.invalidateSize());
+                 }, 10);
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
             } else if (target.id === 'calculate-final-route-btn') {
@@ -1939,7 +1982,7 @@
                     input.value = prediction.description;
                     suggestionsContainer.innerHTML = '';
                     // Automatically find on map after selection
-                    const mapKey = input.id.replace('_address', '').replace('_airport', '');
+                    const mapKey = input.id.replace('_address', '').replace('_airport_address', '').replace('_location', '').replace('_station', '').replace('_destination','');
                     findAddressOnMap(mapKey, prediction.description);
                 });
                 suggestionsContainer.appendChild(suggestionDiv);
@@ -2020,11 +2063,11 @@
         function generateHotelDetailsHTML(item) {
              let starsHtml = '';
             if (item.stars && item.stars > 0) {
-                starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
-                for (let i = 0; i < 5; i++) {
-                    starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
-                }
-                starsHtml += '</div>';
+                 starsHtml = '<strong class="text-slate-500 block">דירוג כוכבים:</strong><div class="flex items-center gap-0.5 mt-1">';
+                 for (let i = 0; i < 5; i++) {
+                     starsHtml += `<i class="fas fa-star ${i < item.stars ? 'text-yellow-400' : 'text-slate-300'}"></i>`;
+                 }
+                 starsHtml += '</div>';
             }
 
             let mealsHtml = (item.meals && Array.isArray(item.meals) && item.meals.length > 0) ? item.meals.join(', ') : '-';
