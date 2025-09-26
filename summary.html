@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
     
+    <!-- Litepicker for Date Range -->
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+
     <!-- Google Maps API Script -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker&callback=initMaps&language=iw" async defer></script>
 
@@ -79,37 +82,12 @@
             transform: translateY(-100%);
         }
 
-        /* Custom Date Input Styles */
+        /* Native Date Input Styles (Fallback) */
         input[type="date"] { position: relative; }
         input[type="date"]::-webkit-calendar-picker-indicator {
             position: absolute; right: 0; top: 0; width: 100%; height: 100%;
             padding: 0; margin: 0; background: transparent; color: transparent;
             border: none; cursor: pointer;
-        }
-        /* Style for custom date range container */
-        .date-range-container {
-            border: 1px solid #d1d5db;
-            padding: 0.5rem;
-            border-radius: 0.375rem;
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            background-color: white;
-        }
-        .date-range-container input[type="date"] {
-            border: none;
-            padding: 0.25rem;
-            background-color: transparent;
-            width: 100%;
-        }
-        .date-range-container input[type="date"]:focus {
-             outline: none;
-             box-shadow: none;
-             ring-width: 0;
-        }
-        .date-range-separator {
-            padding: 0 0.5rem;
-            color: #9ca3af;
         }
 
     </style>
@@ -392,6 +370,14 @@
             const parts = d.split('-');
             if (parts.length !== 3) return '';
             return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+
+        function formatLitepickerDateToInput(d) { // d is JS Date object from litepicker
+            if (!d) return '';
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
 
         // --- Page Initialization ---
@@ -927,7 +913,7 @@
                     field.options = (tripData?.destinations || []).map(dest => ({ value: dest.nameHe, label: dest.nameHe }));
                 }
 
-                const isFullWidth = ['addressmap', 'textarea', 'routemap', 'flightroute', 'luggage', 'seats', 'flight_search_ui', 'custom_multiselect', 'starrating'].includes(field.type);
+                const isFullWidth = ['addressmap', 'textarea', 'routemap', 'flightroute', 'luggage', 'seats', 'flight_search_ui', 'custom_multiselect', 'starrating', 'daterange'].includes(field.type);
                 html += `<div class="${isFullWidth ? 'md:col-span-2' : ''}">${renderField(field)}</div>`;
             });
             html += `</div></div>`;
@@ -952,7 +938,10 @@
                         </button>
                     </div>
                 </label>
-                ${isHotelAddress ? `<p class="text-xs text-slate-500 mt-1">הקלידו את שם המלון המלא ולחצו על כפתור החיפוש <i class="fas fa-search"></i> לאיתור במפה.</p>` : ''}
+                 ${isHotelAddress ? `<div class="mt-2 p-2 bg-sky-50 border border-sky-200 rounded-md text-sm text-sky-800 flex items-start gap-2">
+                        <i class="fas fa-info-circle mt-1"></i>
+                        <span>הקלידו את שם המלון המלא ולחצו על כפתור החיפוש <i class="fas fa-search"></i> כדי לאתר אותו אוטומטית על המפה.</span>
+                    </div>` : ''}
                 <div id="${id}-suggestions" class="autocomplete-suggestions"></div>
             </div>`;
         }
@@ -1056,15 +1045,11 @@
                                 <button type="button" id="add-seat-btn" class="mt-2 text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף מקום ישיבה</button>
                             </fieldset>`;
                 case 'daterange':
-                    const checkinValue = formatDateToInput(modalState.data.checkin_date);
-                    const checkoutValue = formatDateToInput(modalState.data.checkout_date);
                     return `<div class="md:col-span-2">
-                              <label class="block text-sm font-semibold text-slate-700">${field.label}</label>
-                              <div class="mt-1 date-range-container">
-                                <label class="block relative"><span class="absolute -top-5 right-2 text-xs font-medium text-slate-500 bg-white px-1">צ'ק-אין</span><input type="date" id="checkin_date" value="${checkinValue}" class="bg-white"></label>
-                                <i class="fa-solid fa-arrow-right-long date-range-separator"></i>
-                                <label class="block relative"><span class="absolute -top-5 right-2 text-xs font-medium text-slate-500 bg-white px-1">צ'ק-אאוט</span><input type="date" id="checkout_date" value="${checkoutValue}" class="bg-white"></label>
-                              </div>
+                              <label for="litepicker-input" class="block text-sm font-semibold text-slate-700 mb-1">${field.label}</label>
+                              <input readonly type="text" id="litepicker-input" class="w-full p-2 border rounded-md shadow-sm bg-white cursor-pointer text-center" placeholder="לחץ לבחירת תאריכים">
+                              <input type="hidden" id="checkin_date">
+                              <input type="hidden" id="checkout_date">
                             </div>`;
                 case 'date':
                     const inputDateValue = formatDateToInput(value);
@@ -1182,24 +1167,47 @@
 
                         if (checkinInput) checkinInput.value = formatDateToInput(startStr);
                         if (checkoutInput) checkoutInput.value = formatDateToInput(endStr);
+                        
+                        // Also update the litepicker if it exists
+                        const picker = document.getElementById('litepicker-input')?.litepickerInstance;
+                        if(picker){
+                            picker.setDateRange(formatDateToInput(startStr), formatDateToInput(endStr));
+                        }
                     }
                 });
             }
 
-            // Handle date range logic
-            const checkinInput = document.getElementById('checkin_date');
-            const checkoutInput = document.getElementById('checkout_date');
-            if (checkinInput && checkoutInput) {
-                checkinInput.addEventListener('change', () => {
-                    if (checkinInput.value) {
-                        checkoutInput.min = checkinInput.value;
-                        if (checkoutInput.value && checkoutInput.value < checkinInput.value) {
-                            checkoutInput.value = '';
-                        }
+            // Litepicker initialization for daterange
+            const litepickerInput = document.getElementById('litepicker-input');
+            if (litepickerInput && typeof Litepicker !== 'undefined') {
+                const checkinHidden = document.getElementById('checkin_date');
+                const checkoutHidden = document.getElementById('checkout_date');
+
+                if (modalState.data.checkin_date) {
+                    checkinHidden.value = formatDateToInput(modalState.data.checkin_date);
+                }
+                if (modalState.data.checkout_date) {
+                    checkoutHidden.value = formatDateToInput(modalState.data.checkout_date);
+                }
+                
+                const picker = new Litepicker({
+                    element: litepickerInput,
+                    singleMode: false,
+                    allowRepick: true,
+                    lang: 'he-IL',
+                    format: 'DD/MM/YYYY',
+                    delimiter: ' - ',
+                    setup: (picker) => {
+                        picker.on('selected', (date1, date2) => {
+                            checkinHidden.value = formatLitepickerDateToInput(date1.toJSDate());
+                            checkoutHidden.value = formatLitepickerDateToInput(date2.toJSDate());
+                        });
                     }
                 });
-                if (checkinInput.value) { // Set initial min value
-                    checkoutInput.min = checkinInput.value;
+                litepickerInput.litepickerInstance = picker;
+
+                if (checkinHidden.value && checkoutHidden.value) {
+                    picker.setDateRange(checkinHidden.value, checkoutHidden.value);
                 }
             }
 
@@ -2490,3 +2498,4 @@
     </script>
 </body>
 </html>
+
