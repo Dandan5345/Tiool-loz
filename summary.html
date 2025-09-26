@@ -13,8 +13,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 
-    <!-- Removed Litepicker script -->
-
     <style>
         body { font-family: 'Assistant', sans-serif; }
         
@@ -31,6 +29,25 @@
         .modal-step.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
+        /* Modal Progress Bar */
+        .progress-bar { display: flex; justify-content: space-around; margin-bottom: 1.5rem; }
+        .progress-step {
+            flex: 1; text-align: center; position: relative;
+            color: #a0aec0; font-size: 0.875rem; font-weight: 600;
+        }
+        .progress-step:not(:last-child)::after {
+            content: ''; position: absolute; top: 12px; right: -50%;
+            height: 2px; width: 100%; background-color: #e2e8f0; z-index: 0;
+        }
+        .progress-step .step-circle {
+            width: 24px; height: 24px; border-radius: 50%; background-color: #e2e8f0;
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative; z-index: 1; transition: background-color 0.3s;
+        }
+        .progress-step.active .step-circle { background-color: #3b82f6; color: white; }
+        .progress-step.active { color: #2d3748; }
+        .progress-step.active:not(:last-child)::after { background-color: #3b82f6; }
+
         /* Map Styles */
         .leaflet-container { width: 100%; border-radius: 0.5rem; border: 1px solid #e2e8f0; z-index: 10; }
         .small-map-container { height: 200px; }
@@ -42,23 +59,14 @@
 
         /* Autocomplete Styles */
         .autocomplete-suggestions {
-            position: absolute;
-            background-color: white;
-            border: 1px solid #d1d5db;
-            border-top: none;
-            border-radius: 0 0 0.375rem 0.375rem;
-            max-height: 150px;
-            overflow-y: auto;
-            z-index: 9999;
-            width: calc(100% - 40px); /* Adjust width to not cover the button */
+            position: absolute; background-color: white;
+            border: 1px solid #d1d5db; border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem; max-height: 150px;
+            overflow-y: auto; z-index: 9999;
+            width: calc(100% - 40px);
         }
-        .autocomplete-suggestion {
-            padding: 0.5rem;
-            cursor: pointer;
-        }
-        .autocomplete-suggestion:hover {
-            background-color: #f3f4f6;
-        }
+        .autocomplete-suggestion { padding: 0.5rem; cursor: pointer; }
+        .autocomplete-suggestion:hover { background-color: #f3f4f6; }
 
         /* Notification Banner */
         #notification-banner {
@@ -67,21 +75,11 @@
         }
 
         /* Native Date Input Styles */
-        input[type="date"] {
-            position: relative;
-        }
+        input[type="date"] { position: relative; }
         input[type="date"]::-webkit-calendar-picker-indicator {
-            position: absolute;
-            right: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            margin: 0;
-            background: transparent;
-            color: transparent;
-            border: none;
-            cursor: pointer;
+            position: absolute; right: 0; top: 0; width: 100%; height: 100%;
+            padding: 0; margin: 0; background: transparent; color: transparent;
+            border: none; cursor: pointer;
         }
 
     </style>
@@ -100,7 +98,7 @@
 
     <!-- Restored Static Background -->
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/MjekTyd.jpeg');"></div>
-    <div class="fixed inset-0 z-0 bg-black/50"></div>
+    <div class="fixed inset-0 z-0 bg-black/60"></div>
 
     <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
         <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
@@ -112,7 +110,7 @@
     <div id="overlay" class="fixed inset-0 bg-black/60 z-50 hidden"></div>
 
     <div class="relative z-10">
-        <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
+        <header class="bg-white/90 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16">
                     <div class="flex items-center gap-4">
@@ -130,7 +128,7 @@
         <main class="p-4 sm:p-6 lg:p-8">
             <div class="max-w-7xl mx-auto space-y-12">
                 <div class="text-center">
-                    <h2 class="text-5xl font-extrabold text-white drop-shadow-lg">הלוגיסטיקה של הטיול</h2>
+                    <h2 class="text-5xl font-extrabold text-white drop-shadow-xl">הלוגיסטיקה של הטיול</h2>
                     <p class="mt-4 text-xl text-slate-200 max-w-2xl mx-auto">כל המלונות, הטיסות, הרכבים, הרכבות והמעבורות במקום אחד.</p>
                     <button id="open-add-modal-btn" class="mt-8 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
                         <i class="fas fa-plus mr-2"></i>הוספת פריט לוגיסטי
@@ -161,8 +159,8 @@
                                 </table>
                             </div>
                         </div>
-                        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg flex flex-col justify-center">
-                            <h4 class="font-bold text-xl text-slate-700 mb-4">💰 השורה התחתונה</h4>
+                        <div class="bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-2xl shadow-lg flex flex-col justify-center items-center">
+                            <h4 class="font-bold text-xl text-slate-700 mb-2">💰 השורה התחתונה</h4>
                             <div id="grand-total-container" class="text-center">
                             </div>
                         </div>
@@ -505,7 +503,7 @@
                 case 'flight':
                     title = `טיסה`;
                     icon = 'fa-plane-departure';
-                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} ← ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.date || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from?.destination || '?'} → ${item.to?.destination || '?'}</p><p class="text-sm text-slate-500">${item.airline || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'car_rental':
                     title = `רכב שכור`;
@@ -515,17 +513,17 @@
                 case 'ferry':
                     title = `מעבורת`;
                     icon = 'fa-ship';
-                    details = `<p class="font-semibold text-slate-700">${item.from_destination || '?'} ← ${item.to_destination || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from_destination || '?'} → ${item.to_destination || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'train':
                     title = `רכבת`;
                     icon = 'fa-train';
-                    details = `<p class="font-semibold text-slate-700">${item.from_station || '?'} ← ${item.to_station || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from_station || '?'} → ${item.to_station || '?'}</p><p class="text-sm text-slate-500">${item.company || ''} | ${item.date || ''}</p>`;
                     break;
                 case 'ride':
                     title = `הסעה / מונית`;
                     icon = 'fa-taxi';
-                    details = `<p class="font-semibold text-slate-700">${item.from_address?.split(',')[0] || '?'} ← ${item.to_address?.split(',')[0] || '?'}</p><p class="text-sm text-slate-500">${item.date || ''} | ${item.pickup_time || ''}</p>`;
+                    details = `<p class="font-semibold text-slate-700">${item.from_address?.split(',')[0] || '?'} → ${item.to_address?.split(',')[0] || '?'}</p><p class="text-sm text-slate-500">${item.date || ''} | ${item.pickup_time || ''}</p>`;
                     break;
                 default:
                     title = "מעבר לא ידוע";
@@ -536,7 +534,7 @@
             card.innerHTML = `
                 <div class="flex-grow">
                      <div class="flex justify-between items-start mb-2">
-                         <div class="flex items-center gap-3">
+                         <div class="flex items-center gap-4">
                              <i class="fas ${icon} fa-2x text-sky-500 w-8 text-center"></i>
                              <div>
                                  <h4 class="font-bold text-lg text-slate-800">${title}</h4>
@@ -547,7 +545,7 @@
                              <button class="delete-btn text-slate-400 hover:text-red-500" data-id="${item.id}" data-name="${title}" title="מחיקה"><i class="fas fa-trash"></i></button>
                          </div>
                      </div>
-                     <div class="pr-11">${details}</div>
+                     <div class="pr-12">${details}</div>
                 </div>
                 <div class="mt-auto pt-4 border-t flex justify-between items-center text-slate-700">
                     <div class="flex items-center gap-1 text-sm"><i class="fa-solid fa-users text-slate-400"></i><span>${travelers}</span></div>
@@ -584,19 +582,18 @@
                     }
                 }
 
-                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
-                if (modalState.data.dates && modalState.data.dates.includes(' - ')) {
-                    const [start, end] = modalState.data.dates.split(' - ');
-                    if (modalState.mainType === 'hotel') {
-                        modalState.data.checkin_date = start;
-                        modalState.data.checkout_date = end;
-                    } else if (modalState.subType === 'car_rental') {
-                        modalState.data.pickup_date = start;
-                        modalState.data.return_date = end;
-                    }
-                } else if (modalState.subType === 'flight') {
-                    // Flight uses 'date' internally now, but old data might have 'dates'
-                    modalState.data.date = modalState.data.dates || modalState.data.date;
+                // **FIX**: Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
+                const type = itemToEdit.type;
+                if (type === 'hotel' && itemToEdit.dates) {
+                    const [start, end] = itemToEdit.dates.split(' - ');
+                    modalState.data.checkin_date = start;
+                    modalState.data.checkout_date = end;
+                } else if (type === 'car_rental' && itemToEdit.dates) {
+                    const [start, end] = itemToEdit.dates.split(' - ');
+                    modalState.data.pickup_date = start;
+                    modalState.data.return_date = end;
+                } else if (['flight', 'ride', 'ferry', 'train'].includes(type) && itemToEdit.date) {
+                    modalState.data.date = itemToEdit.date;
                 }
 
             } else {
@@ -758,6 +755,22 @@
             return [];
         }
 
+        function renderProgressBar() {
+            const stepDefinitions = getStepDefinition();
+            const totalSteps = stepDefinitions.length;
+            if (totalSteps <= 1) return '';
+
+            let html = '<div class="progress-bar">';
+            for (let i = 0; i < totalSteps; i++) {
+                const isActive = (i + 1) <= modalState.currentStep ? 'active' : '';
+                html += `<div class="progress-step ${isActive}">
+                            <div class="step-circle">${i + 1}</div>
+                         </div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
         function generateStepContent() {
             const stepDefinitions = getStepDefinition();
             if (!stepDefinitions || stepDefinitions.length === 0) {
@@ -774,7 +787,8 @@
                 return;
             }
 
-            let html = `<div class="modal-step active" data-step="${modalState.currentStep}">
+            let html = renderProgressBar();
+            html += `<div class="modal-step active" data-step="${modalState.currentStep}">
                 <h4 class="text-xl font-bold text-slate-800 mb-6">${stepDef.title}</h4>`;
             
             stepDef.fields.forEach(field => {
@@ -815,13 +829,14 @@
             switch(field.type) {
                 case 'radio':
                     return `<div class="space-y-2">
-                            <label class="block text-sm font-semibold text-slate-600">${field.label || ''}</label>
-                            <div class="flex flex-wrap gap-4">${field.options.map(opt => `
-                                <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors">
-                                    <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="form-radio">
-                                    <span>${opt.label || opt}</span>
-                                </label>`).join('')}
-                            </div></div>`;
+                                <label class="block text-sm font-semibold text-slate-600">${field.label || ''}</label>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${field.options.map(opt => `
+                                    <label class="flex flex-col items-center justify-center gap-2 p-4 border-2 rounded-lg cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-colors hover:border-blue-400">
+                                        <input type="radio" id="${field.id}-${opt.value || opt}" name="${field.id}" value="${opt.value || opt}" ${ (opt.value || opt) === value ? 'checked' : ''} class="hidden">
+                                        <span class="text-2xl">${opt.label.split(' ')[0]}</span>
+                                        <span class="font-bold text-slate-700">${opt.label.split(' ')[1]}</span>
+                                    </label>`).join('')}
+                                </div></div>`;
                 case 'textarea':
                     return `<label class="block"><span class="text-sm font-semibold text-slate-600">${field.label}</span>
                                 <textarea id="${field.id}" class="mt-1 block w-full p-2 border rounded-md shadow-sm" rows="3">${modalState.data[field.id] || ''}</textarea>
@@ -913,10 +928,20 @@
                 </div>
             </fieldset>`;
         }
+        
+        function placeMarker(mapKey, coords, popupText = '') {
+            const map = modalState.maps[mapKey];
+            const layerGroup = modalState.mapLayers[mapKey];
+            if (!map || !layerGroup) return;
+
+            const latLng = [coords.lat, coords.lng || coords.lon];
+            map.setView(latLng, 13);
+            layerGroup.clearLayers();
+            const marker = L.marker(latLng).addTo(layerGroup);
+            if(popupText) marker.bindPopup(popupText);
+        }
 
         function initializeFieldPlugins() {
-            // Litepicker initialization removed
-            
             const debouncedAutocomplete = debounce(handleAddressAutocomplete, 300);
             
             document.querySelectorAll('input[data-autocomplete-target="true"]').forEach(input => {
@@ -932,11 +957,29 @@
                 input.addEventListener('paste', pasteHandler);
             });
 
-            if (document.getElementById('map-container')) initMap('map-container', 'hotel');
-            if (document.querySelector('[id^="map-from"]')) initMap('map-from', 'from');
-            if (document.querySelector('[id^="map-to"]')) initMap('map-to', 'to');
-            (modalState.data.connections || []).forEach((conn, i) => initMap(`map-connection-${i}`, `connection-${i}`));
-            if (document.querySelector('[id^="map-final-route"]')) initMap('map-final-route', 'final-route');
+            // **FIX**: Initialize maps and populate with existing data if editing
+            if (document.getElementById('map-container')) {
+                initMap('map-container', 'hotel');
+                if (modalState.data.coords) placeMarker('hotel', modalState.data.coords);
+            }
+            if (document.querySelector('[id^="map-from"]')) {
+                initMap('map-from', 'from');
+                if (modalState.data.from?.coords) placeMarker('from', modalState.data.from.coords, modalState.data.from.destination);
+            }
+            if (document.querySelector('[id^="map-to"]')) {
+                initMap('map-to', 'to');
+                if (modalState.data.to?.coords) placeMarker('to', modalState.data.to.coords, modalState.data.to.destination);
+            }
+            (modalState.data.connections || []).forEach((conn, i) => {
+                const mapId = `map-connection-${i}`;
+                const mapKey = `connection-${i}`;
+                initMap(mapId, mapKey);
+                if (conn.coords) placeMarker(mapKey, conn.coords, conn.destination);
+            });
+            if (document.querySelector('[id^="map-final-route"]')) {
+                initMap('map-final-route', 'final-route');
+                showFinalRouteOnMap(); // Draw flight route immediately if data exists
+            }
             if (document.getElementById('map-ride-route')) {
                 initMap('map-ride-route', 'ride-route');
                 if (modalState.data.route_geometry && Array.isArray(modalState.data.route_geometry)) {
@@ -1130,16 +1173,11 @@
         async function findAddressOnMap(mapKey, address) {
             DOM.modalError.textContent = 'מחפש...';
             const result = await geocodeAddress(address);
-            const map = modalState.maps[mapKey];
-            const layerGroup = modalState.mapLayers[mapKey];
-
-            if (result.success && map && layerGroup) {
+            
+            if (result.success) {
                 DOM.modalError.textContent = '';
                 const coords = { lat: result.coords.lat, lng: result.coords.lon };
-                map.setView(coords, 13);
-                layerGroup.clearLayers();
-                
-                L.marker(coords).addTo(layerGroup);
+                placeMarker(mapKey, coords);
                 
                 const legId = mapKey;
                 if (legId === 'from' || legId === 'to') {
@@ -1626,78 +1664,78 @@
         }
         
         function generateRideDetailsHTML(item) {
-            const title = `הסעה: ${item.from_address?.split(',')[0] || ''} ← ${item.to_address?.split(',')[0] || ''}`;
+            const title = `הסעה: ${item.from_address?.split(',')[0] || ''} → ${item.to_address?.split(',')[0] || ''}`;
             let route_geometry = item.route_geometry;
             if(typeof route_geometry === 'string') {
                 try { route_geometry = JSON.parse(route_geometry); } catch(e) { route_geometry = null; }
             }
 
             return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
-                </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                <div class="grid grid-cols-1 gap-4">
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-taxi text-sky-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מאיפה:</strong> ${item.from_address || '-'}</div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">לאיפה:</strong> ${item.to_address || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת איסוף:</strong> ${item.pickup_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברה:</strong> ${item.company || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שם נהג:</strong> ${item.driver_name || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">טלפון נהג:</strong> ${item.driver_phone ? `<a href="tel:${item.driver_phone}" class="text-blue-600 hover:underline">${item.driver_phone}</a>` : '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מספר רכב:</strong> ${item.vehicle_number || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">פרטי רכב:</strong> ${item.vehicle_details || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
+                 </div>
+                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 <div class="grid grid-cols-1 gap-4">
                      <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                </div>
-                ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
-            `;
+                 </div>
+                 ${route_geometry ? '<div id="details-map" class="details-map-container"></div>' : ''}
+             `;
         }
 
         function generateFlightDetailsHTML(item) {
-            const title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+            const title = `טיסה: ${item.from?.destination || ''} → ${item.to?.destination || ''}`;
             const travelers = item.travelers || (item.seats?.length || 1);
             const totalPrice = (item.price_per_person || 0) * travelers;
             return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
-                    <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
-                </div>
-                ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container"></div>' : ''}
-            `;
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-plane-departure text-sky-500"></i> ${title}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">חברת תעופה:</strong> ${item.airline || '-'} #${item.flight_number || ''}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
+                     <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
+                 </div>
+                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                 ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container"></div>' : ''}
+             `;
         }
 
         function generateCarRentalDetailsHTML(item) {
             return `
-                <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
-                    <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0).toLocaleString()}</div>
-                </div>
-                 ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
-                 <div class="grid grid-cols-1 gap-4">
+                 <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-car text-green-500"></i> רכב שכור: ${item.destination || ''}</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                     <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מיקום איסוף:</strong> ${item.pickup_location || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריכים:</strong> ${item.dates || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעות:</strong> ${item.pickup_time || '?'} - ${item.return_time || '?'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">סוג רכב:</strong> ${item.car_type || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">הוזמן דרך:</strong> ${item.booked_via || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
+                     <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0).toLocaleString()}</div>
+                 </div>
+                  ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
+                  <div class="grid grid-cols-1 gap-4">
                      <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
-                </div>
-            `;
+                 </div>
+             `;
         }
         
         function generateFerryDetailsHTML(item) {
-             const title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
+             const title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
              return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-ship text-indigo-500"></i> ${title}</h4>
@@ -1713,11 +1751,11 @@
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                  </div>
-            `;
+             `;
         }
         
         function generateTrainDetailsHTML(item) {
-             const title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
+             const title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
              const totalPrice = (item.price_per_person || 0) * (item.travelers || 1);
              return `
                  <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3"><i class="fas fa-train text-orange-500"></i> ${title}</h4>
@@ -1734,7 +1772,7 @@
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
                  </div>
-            `;
+             `;
         }
 
         function initDetailsMap(item) {
@@ -1785,7 +1823,19 @@
             setTimeout(() => detailsMap.invalidateSize(), 100);
         }
 
-        // --- Summary Table Logic ---
+        // --- Summary Table & Helpers ---
+        function formatDuration(seconds) {
+            if (!seconds) return '-';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return `${h > 0 ? h + 'ש ' : ''}${m}ד`;
+        }
+
+        function formatDistance(meters) {
+            if (!meters) return '-';
+            return `${(meters / 1000).toFixed(1)} ק"מ`;
+        }
+
         function renderSummaryTables() {
             const categories = {
                 hotel: { label: '🏨 מלונות', total: 0 },
@@ -1828,7 +1878,7 @@
                 </tr>`;
 
             DOM.grandTotalContainer.innerHTML = `
-                <p class="text-4xl font-bold text-blue-600 drop-shadow-sm font-mono">$${grandTotal.toLocaleString()}</p>
+                <p class="text-5xl font-bold text-blue-600 drop-shadow-sm font-mono">$${grandTotal.toLocaleString()}</p>
                 <p class="text-slate-500 mt-1">עלות כוללת משוערת</p>
             `;
         }
@@ -1838,4 +1888,3 @@
     </script>
 </body>
 </html>
-
