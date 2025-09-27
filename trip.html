@@ -103,7 +103,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50">
+<body>
 
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
@@ -298,12 +298,12 @@
                     <!-- NEW: Expense Summary Section -->
                     <section id="quick-expense-summary" class="max-w-4xl mx-auto">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <a id="today-expense-card-link" href="#" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                            <a id="today-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
                                 <i class="fas fa-sun text-3xl mb-2"></i>
                                 <span class="font-bold">הוצאות היום</span>
                                 <span id="today-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
                             </a>
-                            <a id="total-expense-card-link" href="#" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                            <a id="total-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
                                 <i class="fas fa-wallet text-3xl mb-2"></i>
                                 <span class="font-bold">סך כל הוצאות הטיול</span>
                                 <span id="total-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
@@ -495,15 +495,15 @@
             if (logisticsUnsubscribe) logisticsUnsubscribe();
             const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
             const q = query(logisticsCollectionRef);
-            logisticsUnsubscribe = onSnapshot(q, (snapshot) => {
+            logisticsUnsubscribe = onSnapshot(q, async (snapshot) => {
                 allLogisticsItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                populateSummaries(allLogisticsItems);
+                await populateSummaries(allLogisticsItems);
             }, (error) => {
                 console.error("Logistics snapshot error:", error);
             });
         }
 
-        // --- NEW: Expenses Logic ---
+        // --- Expenses Logic ---
         function listenForExpenses() {
             if (expensesUnsubscribe) expensesUnsubscribe();
             const expensesCollectionRef = collection(db, "trips", tripId, "expenses");
@@ -535,42 +535,6 @@
             DOM.todayExpensesSummary.textContent = `₪${todayTotalILS.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             DOM.totalExpensesSummary.textContent = `₪${grandTotalILS.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
-
-
-        // --- NEW: Currency Conversion Logic (from expenses.html) ---
-        async function prefetchAllCurrencyRates(expenses) {
-            const uniqueCurrencies = [...new Set(expenses.map(e => e.currency))];
-            const promises = uniqueCurrencies
-                .filter(c => c !== 'ILS' && !rateCache[`${c}-ILS`])
-                .map(c => getRate(c, 'ILS'));
-            await Promise.all(promises);
-        }
-
-        async function getRate(from, to) {
-            if (from === to) return 1;
-            const cacheKey = `${from}-${to}`;
-            if (rateCache[cacheKey]) return rateCache[cacheKey];
-            try {
-                const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
-                if (!res.ok) throw new Error('API error');
-                const data = await res.json();
-                const rate = data.rates[to];
-                if (typeof rate !== 'number') return 1;
-                rateCache[cacheKey] = rate;
-                return rate;
-            } catch (error) {
-                console.error('Failed to fetch currency rate:', error);
-                return 1; // Fallback rate
-            }
-        }
-        
-        async function convertToILS(amount, currency) {
-            if (currency === 'ILS') return amount;
-            const rate = rateCache[`${currency}-ILS`] || await getRate(currency, 'ILS');
-            return amount * rate;
-        }
-        // --- End of New Currency Logic ---
-
 
         // --- Settings Logic ---
         function applySettings() {
@@ -643,7 +607,6 @@
         function populateUI() {
             DOM.tripTitle.textContent = tripData.name;
             DOM.openShortcutsBtn.href = `shortcuts.html?tripId=${tripId}`;
-            // NEW: Set href for expense cards
             DOM.todayExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
             DOM.totalExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
             buildSidebarMenu();
@@ -652,7 +615,7 @@
         }
 
         // --- Sorting and Summary Population ---
-        function populateSummaries(items) {
+        async function populateSummaries(items) {
             const hotels = items.filter(item => item.type === 'hotel');
             const transports = items.filter(item => ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(item.type));
 
@@ -704,7 +667,7 @@
 
             renderHotelSummary(hotels);
             renderTransportSummary(transports);
-            renderCostsSummary(items);
+            await renderCostsSummary(items);
         }
 
         function renderHotelSummary(hotels) {
@@ -840,9 +803,10 @@
             }).join('');
         }
 
-        function renderCostsSummary(items) {
+        async function renderCostsSummary(items) {
             const container = DOM.costsSummaryContainer;
-            const USD_TO_ILS_RATE = 3.7; // שער המרה קבוע לצורך הדוגמה
+            const usdToIlsRate = await getRate('USD', 'ILS');
+            
             let totalCost = 0;
             let hotelCost = 0;
             let transportCost = 0;
@@ -868,7 +832,7 @@
                      <div class="text-center">
                         <p class="text-slate-600 text-lg">סה"כ עלות משוערת (לוגיסטיקה)</p>
                         <p class="text-4xl font-extrabold text-blue-700 mt-1">$${totalCost.toLocaleString()}</p>
-                        <p class="text-xl font-bold text-slate-500 mt-1">~ ₪${(totalCost * USD_TO_ILS_RATE).toLocaleString()}*</p>
+                        <p class="text-xl font-bold text-slate-500 mt-1">~ ₪${(totalCost * usdToIlsRate).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*</p>
                     </div>
                     <div class="pt-4 border-t">
                         <table class="w-full text-right">
@@ -883,18 +847,18 @@
                                 <tr class="border-b">
                                     <td class="py-2 text-slate-600">🏨 מלונות</td>
                                     <td class="py-2 text-slate-800 font-mono text-left">$${hotelCost.toLocaleString()}</td>
-                                    <td class="py-2 text-slate-500 font-mono text-left">₪${(hotelCost * USD_TO_ILS_RATE).toLocaleString()}</td>
+                                    <td class="py-2 text-slate-500 font-mono text-left">₪${(hotelCost * usdToIlsRate).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                                 <tr class="border-b">
                                     <td class="py-2 text-slate-600">✈️ מעברים</td>
                                     <td class="py-2 text-slate-800 font-mono text-left">$${transportCost.toLocaleString()}</td>
-                                    <td class="py-2 text-slate-500 font-mono text-left">₪${(transportCost * USD_TO_ILS_RATE).toLocaleString()}</td>
+                                    <td class="py-2 text-slate-500 font-mono text-left">₪${(transportCost * usdToIlsRate).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                     <div class="text-center text-xs text-slate-400 pt-2">
-                        *ההמרה לשקל היא הערכה בלבד לפי שער של ${USD_TO_ILS_RATE} ₪ ל-$.
+                        *ההמרה לשקל היא לפי שער עדכני של ${usdToIlsRate.toFixed(4)} ₪ ל-$.
                         <a href="logistics.html?tripId=${tripId}" class="block mt-1 text-sm text-blue-600 font-semibold hover:underline">לניהול עלויות ופירוט מלא</a>
                     </div>
                 </div>
@@ -926,7 +890,7 @@
             `).join('');
         }
 
-        // ---------- Helper: format + weekday ----------
+        // --- Helper Functions ---
         function parseDDMMYYYY(s){
             if (!s || typeof s !== 'string') return null;
             const [d,m,y] = s.split('/').map(Number);
@@ -939,6 +903,38 @@
         }
         function dotted(d){
             return `${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()}`;
+        }
+        
+        async function prefetchAllCurrencyRates(expenses) {
+            const uniqueCurrencies = [...new Set(expenses.map(e => e.currency))];
+            const promises = uniqueCurrencies
+                .filter(c => c !== 'ILS' && !rateCache[`${c}-ILS`])
+                .map(c => getRate(c, 'ILS'));
+            await Promise.all(promises);
+        }
+
+        async function getRate(from, to) {
+            if (from === to) return 1;
+            const cacheKey = `${from}-${to}`;
+            if (rateCache[cacheKey]) return rateCache[cacheKey];
+            try {
+                const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                const rate = data.rates[to];
+                if (typeof rate !== 'number') return 1;
+                rateCache[cacheKey] = rate;
+                return rate;
+            } catch (error) {
+                console.error('Failed to fetch currency rate:', error);
+                return 1; // Fallback rate
+            }
+        }
+        
+        async function convertToILS(amount, currency) {
+            if (currency === 'ILS') return amount;
+            const rate = rateCache[`${currency}-ILS`] || await getRate(currency, 'ILS');
+            return amount * rate;
         }
 
         function buildSidebarMenu() {
@@ -1025,7 +1021,7 @@
             }
         }
 
-        // --- Helper Functions ---
+        // --- More Helper Functions ---
         function generateDatesFromRange(rangeStr) {
             if (!rangeStr || !rangeStr.includes(' - ')) return [];
             const [startStr, endStr] = rangeStr.split(' - ');
@@ -1639,3 +1635,4 @@
     </script>
 </body>
 </html>
+
