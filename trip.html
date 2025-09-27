@@ -295,6 +295,22 @@
                         </div>
                     </section>
 
+                    <!-- NEW: Expense Summary Section -->
+                    <section id="quick-expense-summary" class="max-w-4xl mx-auto">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <a id="today-expense-card-link" href="#" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                                <i class="fas fa-sun text-3xl mb-2"></i>
+                                <span class="font-bold">הוצאות היום</span>
+                                <span id="today-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
+                            </a>
+                            <a id="total-expense-card-link" href="#" class="main-nav-button bg-white/20 backdrop-blur-md hover:bg-white/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                                <i class="fas fa-wallet text-3xl mb-2"></i>
+                                <span class="font-bold">סך כל הוצאות הטיול</span>
+                                <span id="total-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
+                            </a>
+                        </div>
+                    </section>
+
                     <section>
                         <h3 class="text-3xl font-bold text-white mb-4 text-center drop-shadow-md">מפת המסע הכללית</h3>
                         <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg"><div id="trip-map-container"></div></div>
@@ -407,14 +423,22 @@
             deleteModal2: document.getElementById('delete-modal-2'),
             cancelDelete2: document.getElementById('cancel-delete-2'),
             confirmDelete2: document.getElementById('confirm-delete-2'),
+            // NEW expense summary elements
+            todayExpensesSummary: document.getElementById('today-expenses-summary'),
+            totalExpensesSummary: document.getElementById('total-expenses-summary'),
+            todayExpenseCardLink: document.getElementById('today-expense-card-link'),
+            totalExpenseCardLink: document.getElementById('total-expense-card-link'),
         };
 
         let currentUser = null;
         let tripId = null;
         let tripData = null;
         let allLogisticsItems = [];
+        let allExpenses = [];
         let logisticsUnsubscribe = null;
+        let expensesUnsubscribe = null;
         let detailsMap = null;
+        let rateCache = {};
 
         const editUI = new Map();
 
@@ -453,6 +477,7 @@
                     applySettings();
                     populateUI();
                     listenForLogistics();
+                    listenForExpenses(); // NEW: Listen for expenses
                     DOM.loadingOverlay.style.opacity = '0';
                     setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
 
@@ -477,6 +502,75 @@
                 console.error("Logistics snapshot error:", error);
             });
         }
+
+        // --- NEW: Expenses Logic ---
+        function listenForExpenses() {
+            if (expensesUnsubscribe) expensesUnsubscribe();
+            const expensesCollectionRef = collection(db, "trips", tripId, "expenses");
+            expensesUnsubscribe = onSnapshot(expensesCollectionRef, async (snapshot) => {
+                allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                await prefetchAllCurrencyRates(allExpenses);
+                renderExpenseSummary(allExpenses);
+            }, (error) => {
+                console.error("Expenses snapshot error:", error);
+                DOM.todayExpensesSummary.textContent = 'שגיאה';
+                DOM.totalExpensesSummary.textContent = 'שגיאה';
+            });
+        }
+
+        async function renderExpenseSummary(expenses) {
+            const todayString = new Date().toISOString().split('T')[0];
+            const todayExpenses = expenses.filter(exp => exp.date === todayString);
+
+            let todayTotalILS = 0;
+            for (const exp of todayExpenses) {
+                todayTotalILS += await convertToILS(Number(exp.amount) || 0, exp.currency);
+            }
+
+            let grandTotalILS = 0;
+            for (const exp of expenses) {
+                grandTotalILS += await convertToILS(Number(exp.amount) || 0, exp.currency);
+            }
+
+            DOM.todayExpensesSummary.textContent = `₪${todayTotalILS.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            DOM.totalExpensesSummary.textContent = `₪${grandTotalILS.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+
+        // --- NEW: Currency Conversion Logic (from expenses.html) ---
+        async function prefetchAllCurrencyRates(expenses) {
+            const uniqueCurrencies = [...new Set(expenses.map(e => e.currency))];
+            const promises = uniqueCurrencies
+                .filter(c => c !== 'ILS' && !rateCache[`${c}-ILS`])
+                .map(c => getRate(c, 'ILS'));
+            await Promise.all(promises);
+        }
+
+        async function getRate(from, to) {
+            if (from === to) return 1;
+            const cacheKey = `${from}-${to}`;
+            if (rateCache[cacheKey]) return rateCache[cacheKey];
+            try {
+                const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                const rate = data.rates[to];
+                if (typeof rate !== 'number') return 1;
+                rateCache[cacheKey] = rate;
+                return rate;
+            } catch (error) {
+                console.error('Failed to fetch currency rate:', error);
+                return 1; // Fallback rate
+            }
+        }
+        
+        async function convertToILS(amount, currency) {
+            if (currency === 'ILS') return amount;
+            const rate = rateCache[`${currency}-ILS`] || await getRate(currency, 'ILS');
+            return amount * rate;
+        }
+        // --- End of New Currency Logic ---
+
 
         // --- Settings Logic ---
         function applySettings() {
@@ -519,10 +613,16 @@
                 // Delete all documents in the 'logistics' subcollection
                 const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
                 const logisticsSnapshot = await getDocs(logisticsCollectionRef);
-                const deletePromises = logisticsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deletePromises);
+                const deleteLogisticsPromises = logisticsSnapshot.docs.map(d => deleteDoc(d.ref));
+                
+                // Delete all documents in the 'expenses' subcollection
+                const expensesCollectionRef = collection(db, "trips", tripId, "expenses");
+                const expensesSnapshot = await getDocs(expensesCollectionRef);
+                const deleteExpensesPromises = expensesSnapshot.docs.map(d => deleteDoc(d.ref));
 
                 // TODO: Add deletion for other subcollections if they exist (e.g., attractions, checklists)
+                
+                await Promise.all([...deleteLogisticsPromises, ...deleteExpensesPromises]);
 
                 // Delete the main trip document
                 await deleteDoc(doc(db, "trips", tripId));
@@ -543,6 +643,9 @@
         function populateUI() {
             DOM.tripTitle.textContent = tripData.name;
             DOM.openShortcutsBtn.href = `shortcuts.html?tripId=${tripId}`;
+            // NEW: Set href for expense cards
+            DOM.todayExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
+            DOM.totalExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
             buildSidebarMenu();
             buildTripMap();
             buildNavButtons();
@@ -679,7 +782,7 @@
 
                 switch(item.type) {
                     case 'flight':
-                        title = `${item.from?.destination || '?'} &larr; ${item.to?.destination || '?'}`;
+                        title = `${item.from?.destination || '?'} &rarr; ${item.to?.destination || '?'}`;
                         subtitle = `${item.airline || ''} #${item.flight_number || ''}`;
                         navAddress = item.from?.airport_address || item.from?.airport_name;
                         break;
@@ -689,12 +792,12 @@
                         navAddress = item.pickup_location;
                         break;
                     case 'ferry':
-                        title = `${item.from_destination || ''} &larr; ${item.to_destination || ''}`;
+                        title = `${item.from_destination || ''} &rarr; ${item.to_destination || ''}`;
                         subtitle = item.company || '';
                         navAddress = item.from_destination;
                         break;
                     case 'train':
-                        title = `${item.from_station || ''} &larr; ${item.to_station || ''}`;
+                        title = `${item.from_station || ''} &rarr; ${item.to_station || ''}`;
                         subtitle = item.company || '';
                         navAddress = item.from_station;
                         break;
@@ -1070,10 +1173,10 @@
             let title = 'פרטי פריט';
             if (item.type === 'hotel') title = item.name;
             else if (item.type === 'ride') title = `הסעה מ: ${item.from_address?.split(',')[0] || ''}`;
-            else if (item.type === 'flight') title = `טיסה: ${item.from?.destination || ''} ← ${item.to?.destination || ''}`;
+            else if (item.type === 'flight') title = `טיסה: ${item.from?.destination || ''} → ${item.to?.destination || ''}`;
             else if (item.type === 'car_rental') title = `רכב שכור ב${item.destination || ''}`;
-            else if (item.type === 'ferry') title = `מעבורת: ${item.from_destination || ''} ← ${item.to_destination || ''}`;
-            else if (item.type === 'train') title = `רכבת: ${item.from_station || ''} ← ${item.to_station || ''}`;
+            else if (item.type === 'ferry') title = `מעבורת: ${item.from_destination || ''} → ${item.to_destination || ''}`;
+            else if (item.type === 'train') title = `רכבת: ${item.from_station || ''} → ${item.to_station || ''}`;
 
             DOM.detailsModalTitle.textContent = title;
             DOM.detailsModalBody.innerHTML = generateDetailsHtml(item);
