@@ -319,6 +319,21 @@
       });
     }
 
+    function renderStars(rating) {
+      if (!rating || typeof rating !== 'number' || rating <= 0) return '';
+      let starsHtml = `<div class="rating-stars flex items-center gap-1" title="דירוג: ${rating.toFixed(1)} מתוך 5">`;
+      const fullStars = Math.floor(rating);
+      const halfStar = rating % 1 >= 0.4;
+      const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+
+      for(let i = 0; i < fullStars; i++) starsHtml += '<i class="fas fa-star"></i>';
+      if(halfStar) starsHtml += '<i class="fas fa-star-half-alt"></i>';
+      for(let i = 0; i < emptyStars; i++) starsHtml += '<i class="far fa-star"></i>';
+      
+      starsHtml += `<span class="text-xs text-slate-500 font-semibold ml-1">(${rating.toFixed(1)})</span></div>`;
+      return starsHtml;
+    }
+
     // ---------- Google Maps API Loader & Functions ----------
     function loadGoogleMapsApi() {
       if (window.google && window.google.maps) {
@@ -375,9 +390,8 @@
     
     function initGooglePlacesAutocomplete(inputElement, onSelectCallback) {
         if (!gmapsApiLoaded || !inputElement) return;
-
         const autocomplete = new google.maps.places.Autocomplete(inputElement, {
-            fields: ["name", "formatted_address", "geometry", "website", "opening_hours", "photos", "types"],
+            fields: ["name", "formatted_address", "geometry", "website", "opening_hours", "photos", "types", "rating"],
             types: ["establishment"]
         });
 
@@ -387,17 +401,16 @@
                 console.warn("Autocomplete's returned place contains no geometry");
                 return;
             }
-
             const details = {
                 name: place.name,
                 location: place.formatted_address,
                 coords: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
                 website: place.website || '',
                 hours: place.opening_hours ? place.opening_hours.weekday_text.join('\n') : '',
-                photos: place.photos ? place.photos.slice(0, 5).map(p => p.getUrl({ maxWidth: 800 })) : [],
-                types: place.types || []
+                photos: place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 800 })) : [],
+                types: place.types || [],
+                rating: place.rating || null
             };
-
             if (onSelectCallback) onSelectCallback(details);
         });
     }
@@ -465,7 +478,7 @@
 
     function openModalHandler(itemId = null) {
       editingItemId = itemId;
-      selectedGooglePlaceDetails = null; // Reset this on every open
+      selectedGooglePlaceDetails = null;
       form.reset();
       for (let i = 1; i <= 9; i++) {
         const c = document.getElementById(`step-${i}`);
@@ -638,7 +651,7 @@
                 }
                 
                 if (!item || !item.coords) {
-                   gmaps_initAddEditMap(); // Default location
+                   gmaps_initAddEditMap();
                 }
                 break;
             case 5:
@@ -815,12 +828,13 @@
                 <button data-id="${item.id}" class="navigate-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition ${!hasCoords ? 'opacity-50 cursor-not-allowed' : ''}" title="נווט למקום" ${!hasCoords ? 'disabled' : ''}>
                     <i class="fa-solid fa-diamond-turn-right"></i>
                 </button>`;
+              
+              const ratingHtml = renderStars(item.rating);
 
               card.innerHTML = `
                 <div class="flex-grow">
-                  <div class="flex justify-between items-start mb-2">
-                    <h5 class="text-base md:text-lg font-bold text-slate-800 flex-1">${item.name}</h5>
-                  </div>
+                  <h5 class="text-base md:text-lg font-bold text-slate-800 flex-1 mb-1">${item.name}</h5>
+                  ${ratingHtml ? `<div class="mb-2">${ratingHtml}</div>` : ''}
                   <div class="flex flex-wrap gap-2 min-h-[26px] mb-3">${tags}</div>
                   ${item.shortDescription ? `<p class="text-sm text-slate-600 mb-4">${item.shortDescription}</p>` : ''}
                   ${distanceHtml}
@@ -862,11 +876,13 @@
       if (item.isKosher==='כן') tags += `<span class="text-sm font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">כשר</span>`;
       if (item.foodType) tags += `<span class="text-sm font-bold text-sky-700 bg-sky-100 px-3 py-1 rounded-full">${siteData.foodTypes[item.foodType]||''} ${item.foodType}</span>`;
       if (item.reservation && item.reservation!=='לא') tags += `<span class="text-sm font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full">הזמנה: ${item.reservation}</span>`;
+      
+      const ratingHtml = renderStars(item.rating);
 
       let photosHtml = '';
-      if (item.photos && item.photos.length) {
+      if (item.photos && item.photos.length > 0) {
         photosHtml = `<div class="grid grid-cols-3 gap-2">
-          ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity"></a>`).join('')}
+          ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity" loading="lazy"></a>`).join('')}
         </div>`;
       }
       
@@ -876,7 +892,10 @@
         <button id="details-modal-close" class="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
         <div class="p-6 border-b">
           <h3 class="text-3xl font-bold text-slate-800">${item.name}</h3>
-          <p class="text-slate-500 mt-1">${siteData.placeTypeEmojis[item.type]||'📌'} ${item.type}</p>
+          <div class="flex justify-between items-center mt-2">
+            <p class="text-slate-500">${siteData.placeTypeEmojis[item.type]||'📌'} ${item.type}</p>
+            ${ratingHtml}
+          </div>
         </div>
         <div class="p-6 flex-grow overflow-y-auto space-y-5 bg-slate-50">
           ${tags ? `<div class="flex flex-wrap gap-3 items-center">${tags}</div>` : ''}
@@ -952,7 +971,7 @@
       navigationModal.addEventListener('click', (e) => { if (e.target.id === 'navigation-choice-modal') closeNavigationModal(); });
 
       form.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.id !== 'item-location-search-google') {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && !e.target.classList.contains('pac-target-input')) {
           e.preventDefault();
           if (!nextBtn.classList.contains('hidden')) nextBtn.click();
           else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
@@ -1085,9 +1104,12 @@
         const existing = editingItemId ? allItems.find(i=>i.id===editingItemId) : null;
         let coords = existing?.coords || null;
         let photos = existing?.photos || [];
+        let rating = existing?.rating || null;
+
         if (selectedGooglePlaceDetails) {
           coords = selectedGooglePlaceDetails.coords || coords;
           photos = selectedGooglePlaceDetails.photos?.length ? selectedGooglePlaceDetails.photos : photos;
+          rating = selectedGooglePlaceDetails.rating || rating;
         }
 
         if (!coords) {
@@ -1109,7 +1131,8 @@
           reservation: gv('item-reservation'),
           author: currentUser.uid,
           coords: coords,
-          photos: photos
+          photos: photos,
+          rating: rating
         };
 
         try {
@@ -1225,4 +1248,5 @@
   </script>
 </body>
 </html>
+
 
