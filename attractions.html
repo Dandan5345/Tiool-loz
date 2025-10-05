@@ -8,9 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet" />
-  <!-- הוסר: Leaflet CSS -->
-  <!-- הוסר: Leaflet JS -->
-
+  
   <style>
     body { font-family: 'Assistant', sans-serif; }
     #sidebar { transition: transform 0.3s ease-in-out; }
@@ -44,23 +42,37 @@
 
     /* Google Places Autocomplete dropdown */
     .pac-container {
-        z-index: 1050 !important; /* Make sure it appears above the modal */
-        border-radius: 0.5rem;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.08);
-        font-family: 'Assistant', sans-serif;
+      z-index: 1050 !important; /* Must be higher than modal (z-40) */
+      border-radius: 0.5rem;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+      font-family: 'Assistant', sans-serif;
     }
     .pac-item {
-        padding: 0.5rem;
+        padding: 0.5rem 0.75rem;
         cursor: pointer;
+        border-top: none;
     }
     .pac-item:hover {
         background-color: #f1f5f9;
     }
     .pac-item-query {
         font-weight: 600;
+        color: #1e293b;
     }
-    .rating-stars { color: #f59e0b; }
+    .pac-matched {
+        font-weight: 700;
+    }
   </style>
+
+  <script>
+    // This function will be called by the Google Maps script once it's loaded.
+    // It then calls the main initialization function inside our module script.
+    function initMapsApi() {
+        window.initApp();
+    }
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker&callback=initMapsApi&language=iw" defer></script>
 </head>
 <body class="bg-slate-100">
   <div id="initial-loader">
@@ -142,7 +154,6 @@
         <div id="step-progress-bar" class="bg-blue-500 h-2.5 rounded-r-full transition-all duration-500" style="width:0%;"></div>
       </div>
       <form id="item-form" class="flex-grow overflow-y-auto p-6 space-y-6">
-        <!-- Steps content will be injected here -->
         <div id="step-1" class="modal-step"></div>
         <div id="step-2" class="modal-step"></div>
         <div id="step-3" class="modal-step"></div>
@@ -186,13 +197,11 @@
       <div class="space-y-3">
         <a id="nav-link-google" href="#" target="_blank" class="block w-full text-center bg-blue-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-600 transition"><i class="fa-brands fa-google mr-2"></i>Google Maps</a>
         <a id="nav-link-waze" href="#" target="_blank" class="block w-full text-center bg-cyan-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-cyan-600 transition"><i class="fa-brands fa-waze mr-2"></i>Waze</a>
-        <!-- הוסר: OpenStreetMap -->
+        <a id="nav-link-osm" href="#" target="_blank" class="block w-full text-center bg-orange-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-orange-600 transition"><i class="fa-solid fa-map-location-dot mr-2"></i>OpenStreetMap</a>
       </div>
     </div>
   </div>
 
-  <!-- חדש: Google Maps API Script -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c&libraries=places,marker&callback=initMaps&language=iw" async defer></script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -200,7 +209,6 @@
     import { getFirestore, doc, getDoc, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc, setDoc, arrayUnion, orderBy, enableIndexedDbPersistence, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     // ---------- Firebase ----------
-    // WARNING: Storing API keys directly in client-side code is not recommended for production.
     const firebaseConfig = {
       apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
       authDomain: "tiool-loz.firebaseapp.com",
@@ -275,28 +283,19 @@
     let allItems = [];
     let activeFilters = {};
     let isInitialLoad = true;
+
+    // מודאל צעדים
     let currentModalStep = 1;
     let totalModalSteps = 1;
     let editingItemId = null;
     let isRestaurant = false;
+
+    // מיקום משתמש
     let userLocation = null;
+
+    // Google Maps
+    let gmapAddEdit, gmapAddEditMarker, gmapDetails, gmapDetailsMarker, autocomplete;
     let selectedGooglePlaceDetails = null;
-
-    // ---------- Google Maps Integration ----------
-    let gmaps = {
-      apiReady: false,
-      addEditMap: null,
-      addEditMarker: null,
-      detailsMap: null,
-      detailsMarker: null,
-      autocomplete: null,
-      geocoder: null,
-    };
-
-    window.initMaps = function() {
-        gmaps.apiReady = true;
-        gmaps.geocoder = new google.maps.Geocoder();
-    }
 
     // ---------- Utils ----------
     function toggleSidebar() {
@@ -305,10 +304,14 @@
     }
 
     function calculateDistanceInMeters(loc1, loc2) {
-      if (!loc1 || !loc2 || !google?.maps?.geometry?.spherical) return Infinity;
-      const from = new google.maps.LatLng(loc1.lat, loc1.lng);
-      const to = new google.maps.LatLng(loc2.lat, loc2.lng);
-      return google.maps.geometry.spherical.computeDistanceBetween(from, to);
+      if (!loc1 || !loc2) return Infinity;
+      const R = 6371e3;
+      const phi1 = loc1.lat * Math.PI / 180;
+      const phi2 = loc2.lat * Math.PI / 180;
+      const dPhi = (loc2.lat - loc1.lat) * Math.PI / 180;
+      const dLam = (loc2.lng - loc1.lng) * Math.PI / 180;
+      const a = Math.sin(dPhi/2)**2 + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dLam/2)**2;
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
     async function handleGetLocation() {
@@ -335,92 +338,80 @@
       });
     }
     
-    // ---------- Google Maps Autocomplete ----------
-    function initGooglePlacesAutocomplete(inputElement, onSelectCallback) {
-        if (!gmaps.apiReady || !inputElement) return;
+    // ---------- Google Maps ----------
+    function initGoogleMap(mapId, coords = { lat: 40.7128, lng: -74.0060 }, isDraggable = false) {
+        const mapDiv = document.getElementById(mapId);
+        if (!mapDiv) return null;
 
-        gmaps.autocomplete = new google.maps.places.Autocomplete(inputElement, {
-            fields: ["name", "formatted_address", "geometry", "website", "opening_hours", "photos", "utc_offset_minutes"],
+        const map = new google.maps.Map(mapDiv, {
+            center: coords,
+            zoom: 15,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            zoomControl: true,
         });
 
-        gmaps.autocomplete.addListener('place_changed', () => {
-            const place = gmaps.autocomplete.getPlace();
-            if (!place.geometry || !place.geometry.location) {
-                console.warn("Autocomplete's returned place contains no geometry");
-                return;
-            }
-
-            const details = {
-                name: place.name || '',
-                location: place.formatted_address || '',
-                coords: {
-                    lat: place.geometry.location.lat(),
-                    lng: place.geometry.location.lng()
-                },
-                website: place.website || '',
-                hours: place.opening_hours?.weekday_text?.join('\n') || '',
-                photos: place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 400 })) : []
-            };
-            onSelectCallback(details);
-        });
-    }
-
-
-    // ---------- Google Maps functions ----------
-    function initAddEditMap(location = { lat: 40.7128, lng: -74.0060 }) {
-      if (!gmaps.apiReady) return;
-      const mapDiv = document.getElementById('map-preview');
-      if (!mapDiv) return;
-
-      if (!gmaps.addEditMap) {
-        gmaps.addEditMap = new google.maps.Map(mapDiv, {
-          center: location,
-          zoom: 13,
-          mapTypeControl: false,
-          streetViewControl: false,
-        });
-      }
-      gmaps.addEditMap.setCenter(location);
-      gmaps.addEditMap.setZoom(15);
-      
-      if (!gmaps.addEditMarker) {
-        gmaps.addEditMarker = new google.maps.marker.AdvancedMarkerElement({
-          position: location,
-          map: gmaps.addEditMap,
-          gmpDraggable: true,
-        });
-        gmaps.addEditMarker.addListener('dragend', (e) => {
-            const pos = e.target.position;
-            if (!selectedGooglePlaceDetails) selectedGooglePlaceDetails = {};
-            selectedGooglePlaceDetails.coords = { lat: pos.lat, lng: pos.lng };
-        });
-      }
-      gmaps.addEditMarker.position = location;
-    }
-
-    function initDetailsMap(coords) {
-      if (!gmaps.apiReady) return;
-      const mapDiv = document.getElementById('details-map');
-      if (!mapDiv) return;
-      if (!gmaps.detailsMap) {
-        gmaps.detailsMap = new google.maps.Map(mapDiv, {
-          center: coords,
-          zoom: 15,
-          mapTypeControl: false,
-          streetViewControl: false,
-        });
-      } else {
-        gmaps.detailsMap.setCenter(coords);
-      }
-      
-      if (!gmaps.detailsMarker) {
-          gmaps.detailsMarker = new google.maps.marker.AdvancedMarkerElement({
+        const marker = new google.maps.Marker({
             position: coords,
-            map: gmaps.detailsMap,
-          });
-      }
-      gmaps.detailsMarker.position = coords;
+            map: map,
+            draggable: isDraggable,
+        });
+        
+        // This is a common fix for maps inside hidden elements (like modals)
+        // We'll observe when the modal becomes visible and trigger a resize.
+        const observer = new IntersectionObserver((entries) => {
+            if(entries[0].isIntersecting) {
+                google.maps.event.trigger(map, 'resize');
+                map.setCenter(coords);
+            }
+        }, { threshold: 0.1 });
+        observer.observe(mapDiv);
+
+        return { map, marker };
     }
+    
+    function initAutocomplete(inputElement) {
+        if (!inputElement || (autocomplete && autocomplete.input === inputElement)) return;
+
+        const options = {
+            fields: ["address_components", "geometry", "icon", "name", "formatted_address", "place_id", "photos", "website", "opening_hours"],
+            strictBounds: false,
+        };
+
+        autocomplete = new google.maps.places.Autocomplete(inputElement, options);
+        autocomplete.input = inputElement; // Track the input element
+        autocomplete.addListener("place_changed", handlePlaceSelection);
+    }
+    
+    function handlePlaceSelection() {
+        const place = autocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) {
+            console.warn("Autocomplete's returned place contains no geometry");
+            return;
+        }
+        selectedGooglePlaceDetails = place;
+        
+        // Auto-fill name field
+        document.getElementById('item-name').value = place.name || '';
+        
+        // Show a temporary success message in step 1
+        const step1Container = document.getElementById('step-1');
+        let successMsg = step1Container.querySelector('.google-success-msg');
+        if (!successMsg) {
+            successMsg = document.createElement('div');
+            successMsg.className = 'google-success-msg text-sm text-green-600 bg-green-50 p-3 rounded-md mt-3';
+            step1Container.appendChild(successMsg);
+        }
+        successMsg.innerHTML = `<i class="fa-solid fa-check-circle mr-2"></i><strong>${place.name}</strong> נבחר. הפרטים ימולאו אוטומטית בשלבים הבאים.`;
+        
+        // Clear subsequent steps to force them to rebuild with new data
+        for (let i = 2; i <= 9; i++) {
+            const stepEl = document.getElementById(`step-${i}`);
+            if (stepEl) stepEl.innerHTML = '';
+        }
+    }
+
 
     // ---------- סוגים מותאמים ----------
     async function loadCustomSettings() {
@@ -485,7 +476,8 @@
 
     function openModalHandler(itemId = null) {
       editingItemId = itemId;
-      selectedGooglePlaceDetails = null;
+      selectedGooglePlaceDetails = null; // Reset this on every open
+      autocomplete = null; // Reset autocomplete instance
       form.reset();
       for (let i = 1; i <= 9; i++) {
         const c = document.getElementById(`step-${i}`);
@@ -497,6 +489,7 @@
       if (editingItemId) {
         modalTitle.textContent = 'עריכת מקום';
         finishButton.textContent = 'שמור שינויים';
+        
         const item = allItems.find(i => i.id === editingItemId);
         if (item) {
           isRestaurant = item.type === 'מסעדה/אוכל';
@@ -517,25 +510,10 @@
       editingItemId = null;
       modal.classList.add('hidden'); modal.classList.remove('flex');
       showModalError('');
-      // ניקוי המפה בסגירת המודאל
-      gmaps.addEditMap = null;
-      gmaps.addEditMarker = null;
-      gmaps.autocomplete = null;
+      gmapAddEdit = null;
+      gmapAddEditMarker = null;
     }
     
-    // --- חדש: מיפוי סדר שלבים ---
-    const stepOrderMapping = {
-        1: 3, // סוג מקום
-        2: 2, // יעד
-        3: 1, // שם מקום
-        4: 4, // מיקום/מפה
-        5: 5, // הזמנה
-        6: 6, // תיאור קצר
-        7: 7, // תיאור ארוך
-        8: 8, // כשרות (מסעדה)
-        9: 9, // סוג אוכל (מסעדה)
-    };
-
     function updateModalView() {
       const itemTypeEl = document.getElementById('item-type');
       let currentType = '';
@@ -549,32 +527,19 @@
 
       const baseSteps = [1, 2, 3, 4, 5, 6, 7];
       const restaurantSteps = [8, 9];
-      let logicalSteps = [...baseSteps];
-      if (isRestaurant) logicalSteps.push(...restaurantSteps);
-      
-      totalModalSteps = logicalSteps.length;
+      let steps = [...baseSteps];
+      if (isRestaurant) steps.push(...restaurantSteps);
+      steps.sort((a, b) => a - b);
+      totalModalSteps = steps.length;
 
       document.querySelectorAll('.modal-step').forEach(s => s.classList.remove('active'));
-      
-      // קבל את מספר השלב הפיזי המתאים לשלב הלוגי הנוכחי
-      const actualStep = stepOrderMapping[logicalSteps[currentModalStep - 1]];
+      const actualStep = steps[currentModalStep - 1];
       const stepEl = document.getElementById(`step-${actualStep}`);
-
       if (stepEl) {
         if (!stepEl.innerHTML.trim()) {
-            generateStepContent(actualStep);
+          generateStepContent(actualStep);
         }
         stepEl.classList.add('active');
-        
-        // רענון המפה אם השלב הוא שלב המפה
-        if (actualStep === 4 && gmaps.addEditMap) {
-          setTimeout(() => {
-            google.maps.event.trigger(gmaps.addEditMap, 'resize');
-            if (gmaps.addEditMarker) {
-              gmaps.addEditMap.setCenter(gmaps.addEditMarker.position);
-            }
-          }, 100);
-        }
       }
 
       backStepBtn.classList.toggle('hidden', currentModalStep === 1);
@@ -599,15 +564,15 @@
       if (other) other.classList.toggle('hidden', e.target.value !== 'אחר');
     }
 
-    function createLocationHtml() {
+    function createLocationAndDetailsHtml() {
       return `
         <label class="flex items-center gap-3 text-lg font-bold text-slate-700 mb-3">
-          <i class="fa-solid fa-map-location-dot text-slate-400"></i> מיקום ופרטים נוספים <span class="text-red-500">*</span>
+          <i class="fa-solid fa-map-location-dot text-slate-400"></i> מיקום ופרטים <span class="text-red-500">*</span>
         </label>
-        <div id="map-preview"></div>
-        <div id="google-place-filled-msg" class="text-sm text-green-600 bg-green-50 p-3 rounded-md mt-3 hidden">
-          <i class="fa-solid fa-check-circle mr-2"></i> פרטי המקום מולאו מ־Google. ניתן לערוך ולהמשיך.
+        <div id="google-place-filled-msg" class="text-sm text-green-600 bg-green-50 p-3 rounded-md mb-3 hidden">
+            <i class="fa-solid fa-check-circle mr-2"></i> פרטי המקום מולאו מ-Google. ניתן לערוך ולגרור את הנעץ במפה לדיוק.
         </div>
+        <div id="map-preview"></div>
         <div class="mt-4 space-y-3 text-sm">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -616,9 +581,9 @@
             </div>
             <div>
               <label class="font-semibold text-slate-600">שעות פתיחה</label>
-              <textarea id="item-hours" class="form-textarea w-full p-2 mt-1" rows="2" placeholder="למשל: שני-שישי 10:00-18:00"></textarea>
+              <textarea id="item-hours" class="form-textarea w-full p-2 mt-1" placeholder="למשל: Mo-Fr 10:00-18:00" rows="2"></textarea>
             </div>
-            <div class="md:col-span-2">
+            <div>
               <label class="font-semibold text-slate-600">אתר אינטרנט</label>
               <input type="url" id="item-link" class="form-input w-full p-2 mt-1" placeholder="https://...">
             </div>
@@ -635,92 +600,61 @@
         const label = "flex items-center gap-3 text-lg font-bold text-slate-700 mb-3";
     
         switch(step) {
-            case 1: // שם המקום (הפך לשלב 3)
+            case 1:
                 c.innerHTML = `
                     <label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום <span class="text-red-500">*</span></label>
-                    <div id="item-name-wrapper">
-                      <input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">
-                      <button type="button" id="search-with-google-btn" class="mt-3 text-sm text-blue-600 font-semibold hover:underline">
-                        <i class="fa-brands fa-google mr-1"></i> חיפוש בעזרת Google למילוי אוטומטי
-                      </button>
+                    <div class="relative">
+                        <input type="text" id="item-name" required class="form-input w-full p-3" placeholder="הקלד שם או לחץ על הכפתור לחיפוש">
                     </div>
-                    <div id="google-search-wrapper" class="hidden">
-                      <input type="text" id="item-name-google-search" class="form-input w-full p-3" placeholder="הקלד שם מקום או כתובת...">
-                    </div>`;
-                
+                    <button type="button" id="init-google-search-btn" class="mt-4 w-full text-center bg-white border border-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.012 35.842 44 30.338 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg>
+                        חפש מקום עם Google
+                    </button>
+                `;
                 if(item) document.getElementById('item-name').value = item.name || '';
-                
-                document.getElementById('search-with-google-btn').addEventListener('click', () => {
-                    document.getElementById('item-name-wrapper').classList.add('hidden');
-                    const searchWrapper = document.getElementById('google-search-wrapper');
-                    searchWrapper.classList.remove('hidden');
-                    const searchInput = document.getElementById('item-name-google-search');
-                    searchInput.focus();
-
-                    initGooglePlacesAutocomplete(searchInput, (placeDetails) => {
-                        selectedGooglePlaceDetails = placeDetails;
-                        // Fill name and other relevant fields
-                        document.getElementById('item-name').value = placeDetails.name;
-                        
-                        // Populate other fields if they exist already
-                        const locationField = document.getElementById('item-location');
-                        if (locationField) locationField.value = placeDetails.location;
-                        const hoursField = document.getElementById('item-hours');
-                        if (hoursField) hoursField.value = placeDetails.hours;
-                        const linkField = document.getElementById('item-link');
-                        if (linkField) linkField.value = placeDetails.website;
-
-                        // Update map
-                        if(placeDetails.coords) initAddEditMap(placeDetails.coords);
-
-                        const msg = document.getElementById('google-place-filled-msg');
-                        if (msg) msg.classList.remove('hidden');
-
-                        // Hide autocomplete input and show original again
-                        document.getElementById('item-name-wrapper').classList.remove('hidden');
-                        searchWrapper.classList.add('hidden');
-                        searchInput.value = '';
-                    });
+                document.getElementById('init-google-search-btn').addEventListener('click', (e) => {
+                    const btn = e.currentTarget;
+                    const input = document.getElementById('item-name');
+                    initAutocomplete(input);
+                    input.focus();
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> חיפוש Google הופעל...`;
+                    btn.disabled = true;
                 });
                 break;
-            case 2: // יעד (הפך לשלב 2)
+            case 2:
                 c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד? <span class="text-red-500">*</span></label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`;
                 if(item) document.getElementById('item-destination').value = item.destination || '';
                 break;
-            case 3: // סוג מקום (הפך לשלב 1)
+            case 3:
                 c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום <span class="text-red-500">*</span></label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`;
                 if(item) document.getElementById('item-type').value = item.type || '';
                 document.getElementById('item-type').addEventListener('change', handleTypeChange);
                 handleTypeChange({target: document.getElementById('item-type')});
                 break;
-            case 4: // מיקום/מפה (נשאר שלב 4)
-                c.innerHTML = createLocationHtml();
-                if (item) {
-                    document.getElementById('item-location').value = item.location || '';
-                    document.getElementById('item-hours').value = item.hours || '';
-                    document.getElementById('item-link').value = item.link || '';
-                    if (item.coords) {
-                        selectedGooglePlaceDetails = { coords: item.coords };
-                        initAddEditMap(item.coords);
-                    }
-                } else if (selectedGooglePlaceDetails) {
-                    // Pre-fill from previous step if user used Google search
-                    document.getElementById('item-location').value = selectedGooglePlaceDetails.location || '';
-                    document.getElementById('item-hours').value = selectedGooglePlaceDetails.hours || '';
-                    document.getElementById('item-link').value = selectedGooglePlaceDetails.website || '';
-                    if (selectedGooglePlaceDetails.coords) initAddEditMap(selectedGooglePlaceDetails.coords);
+            case 4:
+                c.innerHTML = createLocationAndDetailsHtml();
+                
+                const locationInput = document.getElementById('item-location');
+                const hoursInput = document.getElementById('item-hours');
+                const linkInput = document.getElementById('item-link');
+                let initialCoords = { lat: 40.7128, lng: -74.0060 }; // Default to NYC
+
+                if (selectedGooglePlaceDetails) {
+                    locationInput.value = selectedGooglePlaceDetails.formatted_address || '';
+                    hoursInput.value = selectedGooglePlaceDetails.opening_hours ? selectedGooglePlaceDetails.opening_hours.weekday_text.join('\n') : '';
+                    linkInput.value = selectedGooglePlaceDetails.website || '';
+                    initialCoords = selectedGooglePlaceDetails.geometry.location.toJSON();
+                    document.getElementById('google-place-filled-msg').classList.remove('hidden');
+                } else if (item) {
+                    locationInput.value = item.location || '';
+                    hoursInput.value = item.hours || '';
+                    linkInput.value = item.link || '';
+                    if (item.coords) initialCoords = item.coords;
                 }
                 
-                if (!item || !item.coords) {
-                    const destName = document.getElementById('item-destination')?.value;
-                    if (destName && gmaps.geocoder) {
-                        gmaps.geocoder.geocode({ 'address': destName }, (results, status) => {
-                            if (status == 'OK' && results[0]?.geometry?.location) {
-                                initAddEditMap(results[0].geometry.location.toJSON());
-                            } else { initAddEditMap(); }
-                        });
-                    } else { initAddEditMap(); }
-                }
+                const { map, marker } = initGoogleMap('map-preview', initialCoords, true);
+                gmapAddEdit = map;
+                gmapAddEditMarker = marker;
                 break;
             case 5:
                 c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`;
@@ -791,7 +725,13 @@
         Object.keys(byType).sort().forEach(type => {
           if (!activeFilters[dest]) activeFilters[dest] = {};
           if (!activeFilters[dest][type]) {
-              activeFilters[dest][type] = { kosher: false, foodType: '', sortBy: 'default', sortPoint: null, sortMeta: {} };
+              activeFilters[dest][type] = { 
+                  kosher: false, 
+                  foodType: '', 
+                  sortBy: 'default', 
+                  sortPoint: null, 
+                  sortMeta: {} 
+              };
           }
           const filterState = activeFilters[dest][type];
           
@@ -807,6 +747,8 @@
 
           let itemsForType = [...byType[type]];
 
+          // --- בניית HTML עבור פילטרים ומיון ---
+          const toolsId = `${dest.replace(/\s/g,'')}-${type.replace(/[\s/]/g,'')}`;
           let filterHtml = `<div class="local-filters bg-slate-100 p-3 rounded-lg space-y-3">`;
           
           if (type === 'מסעדה/אוכל') {
@@ -815,8 +757,8 @@
                 <div class="flex items-center gap-4">
                   <span class="font-bold text-slate-600 text-sm">סינון:</span>
                   <div class="flex items-center gap-2">
-                    <input type="checkbox" id="kosher-filter-${dest}-${type}" data-destination="${dest}" data-type="${type}" class="local-filter-kosher h-4 w-4 rounded" ${filterState.kosher?'checked':''}>
-                    <label for="kosher-filter-${dest}-${type}" class="text-sm font-medium text-slate-600">כשר בלבד</label>
+                    <input type="checkbox" id="kosher-filter-${toolsId}" data-destination="${dest}" data-type="${type}" class="local-filter-kosher h-4 w-4 rounded" ${filterState.kosher?'checked':''}>
+                    <label for="kosher-filter-${toolsId}" class="text-sm font-medium text-slate-600">כשר בלבד</label>
                   </div>
                   <select data-destination="${dest}" data-type="${type}" class="local-filter-food-type form-select rounded-md text-sm py-1">
                     <option value="">כל סוגי האוכל</option>
@@ -849,7 +791,8 @@
           `;
           filterHtml += `</div>`;
           typeContent.insertAdjacentHTML('afterbegin', filterHtml);
-          
+
+          // לוגיקת פילטור ומיון
           if (type === 'מסעדה/אוכל') {
             if (filterState.kosher) itemsForType = itemsForType.filter(i=>i.isKosher==='כן');
             if (filterState.foodType) itemsForType = itemsForType.filter(i=>i.foodType===filterState.foodType);
@@ -880,8 +823,8 @@
 
               const distanceHtml = (filterState.sortBy.startsWith('distance_') && item.airDistanceKm!==undefined && item.airDistanceKm!==Infinity)
                 ? `<div class="air-distance-info flex items-center justify-center text-xs text-slate-600 mt-2 border-t pt-2 gap-2">
-                    <i class="fa-solid fa-road fa-fw text-blue-500"></i>
-                    <span>מרחק: <b>${item.airDistanceKm.toFixed(1)} ק"מ</b></span>
+                    <i class="fa-solid fa-plane-up fa-fw text-blue-500"></i>
+                    <span>מרחק אווירי: <b>${item.airDistanceKm.toFixed(1)} ק"מ</b></span>
                   </div>` : '';
 
               const hasCoords = !!item.coords;
@@ -918,6 +861,10 @@
         });
 
         destSection.appendChild(contentDiv);
+        const loader = document.createElement('div');
+        loader.className = 'section-loader hidden';
+        loader.innerHTML = `<i class="fas fa-sync-alt fa-2x fa-spin text-blue-500"></i>`;
+        destSection.appendChild(loader);
         itemsContainer.appendChild(destSection);
       });
     }
@@ -935,7 +882,7 @@
 
       let photosHtml = '';
       if (item.photos && item.photos.length) {
-        photosHtml = `<div class="grid grid-cols-3 gap-2">
+        photosHtml = `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
           ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity"></a>`).join('')}
         </div>`;
       }
@@ -976,25 +923,24 @@
       }
 
       if (item.coords) {
-        if(gmaps.apiReady) {
-            initDetailsMap(item.coords);
-        } else {
-            // If API is not ready, wait and try again
-            setTimeout(() => initDetailsMap(item.coords), 500);
-        }
+        const { map, marker } = initGoogleMap('details-map', item.coords, false);
+        gmapDetails = map;
+        gmapDetailsMarker = marker;
       }
     }
 
     function closeDetailsModal() {
       detailsModal.classList.add('hidden'); detailsModal.classList.remove('flex');
-      gmaps.detailsMap = null; gmaps.detailsMarker = null;
+      gmapDetails = null; gmapDetailsMarker = null;
     }
 
+    // --- Navigation Modal Logic ---
     function openNavigationChoiceModal(item) {
         if (!item.coords) return;
         const { lat, lng } = item.coords;
         document.getElementById('nav-link-google').href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
         document.getElementById('nav-link-waze').href = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+        document.getElementById('nav-link-osm').href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
         navigationModal.classList.remove('hidden');
         navigationModal.classList.add('flex');
     }
@@ -1027,6 +973,7 @@
       
       closeNavigationModalBtn.addEventListener('click', closeNavigationModal);
       navigationModal.addEventListener('click', (e) => { if (e.target.id === 'navigation-choice-modal') closeNavigationModal(); });
+
 
       form.addEventListener('keydown', e => {
         if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
@@ -1092,7 +1039,7 @@
                   try {
                       const location = await handleGetLocation();
                       filter.sortPoint = location;
-                      filter.sortMeta = {};
+                      filter.sortMeta = { address: 'המיקום שלי' };
                   } catch {
                       filter.sortBy = 'default';
                       filter.sortPoint = null;
@@ -1100,8 +1047,14 @@
                   }
                   renderAllItems();
               } else if (newSortBy === 'distance_hotel') {
-                  filter.sortPoint = null; 
-                  renderAllItems(); // Rerender to show hotel selector
+                  if (filter.sortMeta?.hotelId) {
+                       const selectedHotel = tripHotels.find(h => h.id === filter.sortMeta.hotelId);
+                       if (selectedHotel) filter.sortPoint = selectedHotel.coords;
+                       else filter.sortPoint = null;
+                  } else {
+                     filter.sortPoint = null; // Wait for user selection
+                  }
+                  renderAllItems();
               }
           }
 
@@ -1129,6 +1082,12 @@
         const name = gv('item-name');
         if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
         
+        const locationText = gv('item-location');
+        if (!locationText || locationText.trim() === '') {
+            showModalError('יש לבחור מקום מהחיפוש או לגרור את הנעץ במפה.');
+            return;
+        }
+
         let finalType = gv('item-type');
         if (finalType === 'אחר') {
           finalType = (gv('item-type-other')||'').trim() || 'כללי';
@@ -1148,17 +1107,22 @@
         }
 
         const existing = editingItemId ? allItems.find(i=>i.id===editingItemId) : null;
-        let coords = existing?.coords || null;
-        let photos = existing?.photos || [];
-
-        if (selectedGooglePlaceDetails) {
-          coords = selectedGooglePlaceDetails.coords || coords;
-          photos = selectedGooglePlaceDetails.photos?.length ? selectedGooglePlaceDetails.photos : photos;
+        
+        let coords = null;
+        if (gmapAddEditMarker) {
+            coords = gmapAddEditMarker.getPosition().toJSON();
+        } else if (selectedGooglePlaceDetails) {
+            coords = selectedGooglePlaceDetails.geometry.location.toJSON();
         }
 
         if (!coords) {
-            showModalError('יש לבחור מקום מהחיפוש או למקם נעץ על המפה.');
+            showModalError('לא נבחר מיקום. יש לבחור מקום מהחיפוש או לגרור את הנעץ במפה.');
             return;
+        }
+        
+        let photos = existing?.photos || [];
+        if (selectedGooglePlaceDetails && selectedGooglePlaceDetails.photos) {
+            photos = selectedGooglePlaceDetails.photos.slice(0, 5).map(p => p.getUrl({'maxWidth': 1024, 'maxHeight': 768}));
         }
 
         const data = {
@@ -1169,7 +1133,7 @@
           description: gv('item-description'),
           isKosher: isRestaurant ? gv('item-kosher') : null,
           foodType: finalFoodType,
-          location: gv('item-location'),
+          location: locationText,
           hours: gv('item-hours'),
           link: gv('item-link'),
           reservation: gv('item-reservation'),
@@ -1215,6 +1179,7 @@
       });
     }
     
+    // --- טעינת מלונות מהלוגיסטיקה ---
     async function loadTripHotels() {
         if (!tripId) return;
         try {
@@ -1260,6 +1225,7 @@
                   tripTitleLine.textContent = `אטרקציות ומסעדות לטיול - ${tripData.name}`;
                 }
                 
+                // --- טעינת נתונים נוספים ---
                 await loadTripHotels();
                 await loadCustomSettings();
                 buildMenuFromTrip();
@@ -1281,7 +1247,9 @@
       });
     }
 
-    initPage();
+    // Expose initPage to the global scope so the Google Maps callback can find it.
+    window.initApp = initPage;
+
   </script>
 </body>
 </html>
