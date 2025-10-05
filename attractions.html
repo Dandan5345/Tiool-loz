@@ -27,37 +27,25 @@
     .step-indicator { transition: all 0.4s ease-in-out; }
     .item-card { cursor: pointer; }
 
-    .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 28px; }
-    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-    input:checked + .slider { background-color: #2563eb; }
-    input:checked + .slider:before { transform: translateX(22px); }
-
     #initial-loader { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; transition: opacity 0.5s ease-out; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .plane-spinner { animation: spin 2s linear infinite; }
 
     .section-loader { position: absolute; inset: 0; background-color: rgba(241,245,249,0.8); z-index: 20; display: flex; align-items: center; justify-content: center; border-radius: 1rem; }
 
-    /* Autocomplete dropdown (Google Places) */
-    .pac-container {
-      z-index: 1050 !important; /* Make sure dropdown is above the modal */
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      font-family: 'Assistant', sans-serif;
+    /* Custom Autocomplete dropdown styling */
+    .ac-wrapper { position: relative; }
+    .ac-list {
+      position: absolute; top: 100%; right: 0; left: 0; z-index: 1050;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 0.5rem;
+      margin-top: 0.25rem; max-height: 260px; overflow-y: auto; box-shadow: 0 10px 20px rgba(0,0,0,0.08);
     }
-    .pac-item {
-      padding: 8px 12px;
-      font-size: 1rem;
-    }
-    .pac-item:hover {
-      background-color: #f1f5f9;
-    }
-    .pac-item-query {
-      font-weight: 600;
-    }
-
+    .ac-item { padding: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; }
+    .ac-item:hover { background: #f1f5f9; }
+    .ac-item-icon { color: #94a3b8; }
+    .ac-item-main { font-weight: 600; }
+    .ac-item-secondary { font-size: 0.875rem; color: #64748b; }
+    
     .rating-stars { color: #f59e0b; }
   </style>
 </head>
@@ -276,9 +264,19 @@
     let gmapsApiLoaded = false;
     let gmaps_addEditMap = null, gmaps_addEditMarker = null;
     let gmaps_detailsMap = null, gmaps_detailsMarker = null;
+    let gmaps_autocompleteService = null, gmaps_placesService = null;
     let selectedGooglePlaceDetails = null;
 
     // ---------- Utils ----------
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            const context = this;
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(context, args), delay);
+        };
+    }
+
     function toggleSidebar() {
       sidebar.classList.toggle('translate-x-full');
       overlay.classList.toggle('hidden');
@@ -354,21 +352,18 @@
       if (!mapDiv || !gmapsApiLoaded) return;
       if (!gmaps_addEditMap) {
         gmaps_addEditMap = new google.maps.Map(mapDiv, {
-          center: location,
-          zoom: 15,
-          mapTypeControl: false,
-          streetViewControl: false,
+          center: location, zoom: 15, mapTypeControl: false, streetViewControl: false,
         });
         gmaps_addEditMarker = new google.maps.Marker({
-          position: location,
-          map: gmaps_addEditMap,
-          draggable: true,
+          position: location, map: gmaps_addEditMap, draggable: true,
         });
         gmaps_addEditMarker.addListener('dragend', () => {
           const pos = gmaps_addEditMarker.getPosition();
           if (!selectedGooglePlaceDetails) selectedGooglePlaceDetails = {};
           selectedGooglePlaceDetails.coords = { lat: pos.lat(), lng: pos.lng() };
         });
+        if (!gmaps_autocompleteService) gmaps_autocompleteService = new google.maps.places.AutocompleteService();
+        if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(gmaps_addEditMap);
       } else {
         gmaps_addEditMap.setCenter(location);
         gmaps_addEditMap.setZoom(15);
@@ -388,30 +383,79 @@
       }
     }
     
-    function initGooglePlacesAutocomplete(inputElement, onSelectCallback) {
+    function initGooglePlacesCustomAutocomplete(inputElement, onSelectCallback) {
         if (!gmapsApiLoaded || !inputElement) return;
-        const autocomplete = new google.maps.places.Autocomplete(inputElement, {
-            fields: ["name", "formatted_address", "geometry", "website", "opening_hours", "photos", "types", "rating"],
-            types: ["establishment"]
-        });
 
-        autocomplete.addListener('place_changed', () => {
-            const place = autocomplete.getPlace();
-            if (!place.geometry || !place.geometry.location) {
-                console.warn("Autocomplete's returned place contains no geometry");
+        const wrapper = inputElement.closest('.ac-wrapper');
+        if (!wrapper) return;
+
+        let list = wrapper.querySelector('.ac-list');
+        if (!list) {
+            list = document.createElement('div');
+            list.className = 'ac-list hidden';
+            wrapper.appendChild(list);
+        }
+        
+        const handleSearch = debounce(async (query) => {
+            if (query.length < 2) {
+                list.innerHTML = '';
+                list.classList.add('hidden');
                 return;
             }
-            const details = {
-                name: place.name,
-                location: place.formatted_address,
-                coords: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-                website: place.website || '',
-                hours: place.opening_hours ? place.opening_hours.weekday_text.join('\n') : '',
-                photos: place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 800 })) : [],
-                types: place.types || [],
-                rating: place.rating || null
-            };
-            if (onSelectCallback) onSelectCallback(details);
+
+            gmaps_autocompleteService.getPlacePredictions({ input: query }, (predictions, status) => {
+                list.innerHTML = '';
+                if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+                    list.classList.add('hidden');
+                    return;
+                }
+
+                predictions.forEach(prediction => {
+                    const item = document.createElement('div');
+                    item.className = 'ac-item';
+                    item.innerHTML = `
+                        <i class="fas fa-map-marker-alt ac-item-icon"></i>
+                        <div>
+                            <div class="ac-item-main">${prediction.structured_formatting.main_text}</div>
+                            <div class="ac-item-secondary">${prediction.structured_formatting.secondary_text}</div>
+                        </div>`;
+                    item.addEventListener('click', () => {
+                        list.classList.add('hidden');
+                        inputElement.value = prediction.description;
+                        
+                        const request = {
+                            placeId: prediction.place_id,
+                            fields: ["name", "formatted_address", "geometry", "website", "opening_hours", "photos", "types", "rating"]
+                        };
+
+                        gmaps_placesService.getDetails(request, (place, status) => {
+                            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                                const details = {
+                                    name: place.name,
+                                    location: place.formatted_address,
+                                    coords: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
+                                    website: place.website || '',
+                                    hours: place.opening_hours ? place.opening_hours.weekday_text.join('\n') : '',
+                                    photos: place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 800 })) : [],
+                                    types: place.types || [],
+                                    rating: place.rating || null
+                                };
+                                if (onSelectCallback) onSelectCallback(details);
+                            }
+                        });
+                    });
+                    list.appendChild(item);
+                });
+                list.classList.remove('hidden');
+            });
+        }, 500); // 500ms debounce delay
+
+        inputElement.addEventListener('input', () => {
+            handleSearch(inputElement.value);
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) list.classList.add('hidden');
         });
     }
 
@@ -575,7 +619,7 @@
           <i class="fa-brands fa-google text-slate-400"></i> חיפוש מקום (Google) <span class="text-red-500">*</span>
         </label>
         <div class="ac-wrapper">
-          <input type="text" id="item-location-search-google" class="form-input w-full p-3" placeholder="הקלד שם מקום או כתובת..." required>
+          <input type="text" id="item-location-search-google" class="form-input w-full p-3" placeholder="הקלד שם מקום או כתובת...">
         </div>
         <div id="map-preview" class="mt-3"></div>
         <div id="google-place-filled-msg" class="text-sm text-green-600 bg-green-50 p-3 rounded-md mt-3 hidden">
@@ -625,7 +669,21 @@
             case 4:
                 c.innerHTML = createLocationHtml();
                 const searchInput = c.querySelector('#item-location-search-google');
-                initGooglePlacesAutocomplete(searchInput, (placeDetails) => {
+                
+                if (item) {
+                    searchInput.value = item.location || '';
+                    document.getElementById('item-location').value = item.location || '';
+                    document.getElementById('item-hours').value = item.hours || '';
+                    document.getElementById('item-link').value = item.link || '';
+                }
+                
+                if (item && item.coords) {
+                    gmaps_initAddEditMap(item.coords);
+                } else {
+                    gmaps_initAddEditMap();
+                }
+
+                initGooglePlacesCustomAutocomplete(searchInput, (placeDetails) => {
                     document.getElementById('item-location').value = placeDetails.location || '';
                     document.getElementById('item-hours').value = placeDetails.hours || '';
                     document.getElementById('item-link').value = placeDetails.website || '';
@@ -638,21 +696,6 @@
                     const msg = document.getElementById('google-place-filled-msg');
                     if (msg) msg.classList.remove('hidden');
                 });
-                
-                if (item) {
-                    document.getElementById('item-location-search-google').value = item.location || '';
-                    document.getElementById('item-location').value = item.location || '';
-                    document.getElementById('item-hours').value = item.hours || '';
-                    document.getElementById('item-link').value = item.link || '';
-                    if (item.coords) {
-                        selectedGooglePlaceDetails = { coords: item.coords, location: item.location };
-                        gmaps_initAddEditMap(item.coords);
-                    }
-                }
-                
-                if (!item || !item.coords) {
-                   gmaps_initAddEditMap();
-                }
                 break;
             case 5:
                 c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`;
@@ -971,7 +1014,7 @@
       navigationModal.addEventListener('click', (e) => { if (e.target.id === 'navigation-choice-modal') closeNavigationModal(); });
 
       form.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && !e.target.classList.contains('pac-target-input')) {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
           e.preventDefault();
           if (!nextBtn.classList.contains('hidden')) nextBtn.click();
           else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
