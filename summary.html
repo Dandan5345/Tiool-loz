@@ -97,7 +97,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class=""> <!-- 2. BG FIX: Removed bg-slate-100 from here -->
 
     <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
         <i class="fas fa-plane text-5xl text-blue-600 animate-spin"></i>
@@ -530,6 +530,19 @@
         }
 
         // --- Card Creation ---
+        /**
+         * Parses a date string in DD/MM/YYYY format into a Date object for sorting.
+         * @param {string} dateStr The date string.
+         * @returns {Date|null} A Date object or null if invalid.
+         */
+        function parseDateForSort(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string' || !dateStr.includes('/')) return null;
+            const parts = dateStr.split('/');
+            if (parts.length !== 3) return null;
+            // new Date(year, monthIndex, day)
+            return new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+
         function renderCards(container, items, cardCreator) {
             container.innerHTML = '';
             if (items.length === 0) {
@@ -539,7 +552,22 @@
                 </div>`;
                 return;
             }
-            items.sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).forEach(item => {
+            
+            // 1. SORTING FIX: Sort items chronologically
+            items.sort((a, b) => {
+                // Get the primary date string for each item. For hotels/cars, use the start date of the range.
+                const dateStringA = a.type === 'hotel' || a.type === 'car_rental' ? a.dates?.split(' - ')[0] : a.date;
+                const dateStringB = b.type === 'hotel' || b.type === 'car_rental' ? b.dates?.split(' - ')[0] : b.date;
+
+                const dateA = parseDateForSort(dateStringA);
+                const dateB = parseDateForSort(dateStringB);
+                
+                if (!dateA && !dateB) return 0; // If both have no date, keep original order
+                if (!dateA) return 1; // Put items without dates at the end
+                if (!dateB) return -1; // Keep items with dates at the start
+                
+                return dateA - dateB; // Sort ascending
+            }).forEach(item => {
                 const card = cardCreator(item);
                 container.appendChild(card);
             });
@@ -1040,32 +1068,32 @@
                     return renderAutocompleteAddressInput(field.id, field.label);
                 case 'routemap':
                     return `
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           ${renderAutocompleteAddressInput('from_address', 'מאיפה?')}
-                           ${renderAutocompleteAddressInput('to_address', 'לאיפה?')}
-                        </div>
-                        <div class="text-center my-4">
-                            <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4 text-center bg-slate-100 p-2 rounded-lg">
-                            <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
-                            <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
-                        </div>
-                        <div id="map-ride-route" class="mt-4 final-map-container map-container"></div>`;
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               ${renderAutocompleteAddressInput('from_address', 'מאיפה?')}
+                               ${renderAutocompleteAddressInput('to_address', 'לאיפה?')}
+                            </div>
+                            <div class="text-center my-4">
+                                <button type="button" data-action="calculate-ride-route" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">חשב מסלול</button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-center bg-slate-100 p-2 rounded-lg">
+                                <div><p class="text-sm text-slate-500">זמן נסיעה</p><p id="route-duration" class="font-bold text-lg">${formatDuration(modalState.data.route_duration)}</p></div>
+                                <div><p class="text-sm text-slate-500">מרחק</p><p id="route-distance" class="font-bold text-lg">${formatDistance(modalState.data.route_distance)}</p></div>
+                            </div>
+                            <div id="map-ride-route" class="mt-4 final-map-container map-container"></div>`;
                 case 'flightroute':
                     return `
-                        <div class="space-y-4">
-                            ${renderFlightLeg('from', 'מאיפה?', modalState.data, 'מאיזו עיר ממריאים?')}
-                            ${renderFlightLeg('to', 'לאיפה?', modalState.data, 'באיזו עיר נוחתים?')}
-                            <div id="connections-container" class="space-y-4">${(modalState.data.connections || []).map((conn, i) => renderFlightLeg(`connection-${i}`, `קונקשן ${i+1}`, conn)).join('')}</div>
-                            <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף קונקשן</button>
-                            <hr class="my-6"/>
-                            <h5 class="text-lg font-bold text-slate-700">מפת מסלול מסכמת</h5>
-                            <div class="text-center">
-                                <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
-                            </div>
-                            <div id="map-final-route" class="mt-4 final-map-container map-container"></div>
-                        </div>`;
+                            <div class="space-y-4">
+                                ${renderFlightLeg('from', 'מאיפה?', modalState.data, 'מאיזו עיר ממריאים?')}
+                                ${renderFlightLeg('to', 'לאיפה?', modalState.data, 'באיזו עיר נוחתים?')}
+                                <div id="connections-container" class="space-y-4">${(modalState.data.connections || []).map((conn, i) => renderFlightLeg(`connection-${i}`, `קונקשן ${i+1}`, conn)).join('')}</div>
+                                <button type="button" id="add-connection-btn" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>הוסף קונקשן</button>
+                                <hr class="my-6"/>
+                                <h5 class="text-lg font-bold text-slate-700">מפת מסלול מסכמת</h5>
+                                <div class="text-center">
+                                    <button type="button" id="calculate-final-route-btn" class="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700">הצג מסלול מלא</button>
+                                </div>
+                                <div id="map-final-route" class="mt-4 final-map-container map-container"></div>
+                            </div>`;
                 case 'luggage':
                     return `<fieldset class="border p-4 rounded-lg">
                                 <legend class="px-2 font-semibold">פרטי כבודה (לנוסע)</legend>
@@ -1098,52 +1126,52 @@
                     today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
                     const todayString = today.toISOString().slice(0, 10);
                     return `
-                        <fieldset class="border p-4 rounded-lg bg-slate-50">
-                            <legend class="px-2 font-semibold text-slate-600">חיפוש אוטומטי</legend>
-                            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                                <div class="md:col-span-2">
-                                    <label for="flight_number_search" class="block text-sm font-medium text-slate-700">מספר טיסה</label>
-                                    <input type="text" id="flight_number_search" class="mt-1 block w-full p-2 border rounded-md uppercase shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="לדוגמה: LY2523">
+                            <fieldset class="border p-4 rounded-lg bg-slate-50">
+                                <legend class="px-2 font-semibold text-slate-600">חיפוש אוטומטי</legend>
+                                <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                                    <div class="md:col-span-2">
+                                        <label for="flight_number_search" class="block text-sm font-medium text-slate-700">מספר טיסה</label>
+                                        <input type="text" id="flight_number_search" class="mt-1 block w-full p-2 border rounded-md uppercase shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="לדוגמה: LY2523">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label for="flight_date_search" class="block text-sm font-medium text-slate-700">תאריך</label>
+                                        <input type="date" id="flight_date_search" value="${todayString}" class="mt-1 block w-full p-2 border rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <button type="button" data-action="search-flight-api" class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm">
+                                            <i class="fas fa-search"></i> <span class="hidden md:inline">חפש</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="md:col-span-2">
-                                    <label for="flight_date_search" class="block text-sm font-medium text-slate-700">תאריך</label>
-                                    <input type="date" id="flight_date_search" value="${todayString}" class="mt-1 block w-full p-2 border rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                </div>
-                                <div class="md:col-span-1">
-                                    <button type="button" data-action="search-flight-api" class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm">
-                                        <i class="fas fa-search"></i> <span class="hidden md:inline">חפש</span>
-                                    </button>
-                                </div>
+                            </fieldset>
+                            <div class="flex items-center my-6">
+                                <hr class="flex-grow border-slate-200">
+                                <span class="px-4 text-sm font-semibold text-slate-500">או</span>
+                                <hr class="flex-grow border-slate-200">
                             </div>
-                        </fieldset>
-                        <div class="flex items-center my-6">
-                            <hr class="flex-grow border-slate-200">
-                            <span class="px-4 text-sm font-semibold text-slate-500">או</span>
-                            <hr class="flex-grow border-slate-200">
-                        </div>
-                        <div class="text-center">
-                            <button type="button" data-action="skip-flight-search" class="py-2 px-8 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition">
-                                המשך למילוי ידני
-                            </button>
-                        </div>
-                        `;
+                            <div class="text-center">
+                                <button type="button" data-action="skip-flight-search" class="py-2 px-8 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition">
+                                    המשך למילוי ידני
+                                </button>
+                            </div>
+                            `;
                 case 'payment_status':
                     const payment = modalState.data.payment || { status: 'unpaid', amountPaid: 0 };
                     const isPartial = payment.status === 'partial';
                     return `<fieldset class="border p-4 rounded-lg">
-                        <legend class="px-2 font-semibold text-slate-700">סטטוס תשלום</legend>
-                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
-                            <div class="flex gap-4">
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="unpaid" ${payment.status === 'unpaid' ? 'checked' : ''} class="payment-status-radio"> <span>לא שולם</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="paid" ${payment.status === 'paid' ? 'checked' : ''} class="payment-status-radio"> <span>שולם במלואו</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="partial" ${isPartial ? 'checked' : ''} class="payment-status-radio"> <span>תשלום חלקי</span></label>
+                            <legend class="px-2 font-semibold text-slate-700">סטטוס תשלום</legend>
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+                                <div class="flex gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="unpaid" ${payment.status === 'unpaid' ? 'checked' : ''} class="payment-status-radio"> <span>לא שולם</span></label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="paid" ${payment.status === 'paid' ? 'checked' : ''} class="payment-status-radio"> <span>שולם במלואו</span></label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="partial" ${isPartial ? 'checked' : ''} class="payment-status-radio"> <span>תשלום חלקי</span></label>
+                                </div>
+                                <div id="amount-paid-wrapper" class="relative ${isPartial ? '' : 'hidden'}">
+                                    <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">$</span>
+                                    <input type="number" id="amountPaid" value="${payment.amountPaid || ''}" class="p-2 border rounded-md w-32 pr-7" placeholder="סכום">
+                                </div>
                             </div>
-                            <div id="amount-paid-wrapper" class="relative ${isPartial ? '' : 'hidden'}">
-                                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">$</span>
-                                <input type="number" id="amountPaid" value="${payment.amountPaid || ''}" class="p-2 border rounded-md w-32 pr-7" placeholder="סכום">
-                            </div>
-                        </div>
-                    </fieldset>`;
+                        </fieldset>`;
                 default: // text, url, number, time, tel
                     return `<label class="block"><span class="text-sm font-semibold text-slate-700">${field.label}</span>
                     <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="${field.placeholder || ''}">
@@ -1952,14 +1980,14 @@
         async function searchFlightWithWorker(num, date) {
              const url = `${FLIGHT_API_BASE}/flights/number/${encodeURIComponent(num)}/${encodeURIComponent(date)}`;
              try {
-               const r = await fetch(url);
-               if(!r.ok){
-                   let j; 
-                   try { j=await r.json() } catch{};
-                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
-               }
-               const flights = await r.json();
-               return { success: true, flights };
+              const r = await fetch(url);
+              if(!r.ok){
+                  let j; 
+                  try { j=await r.json() } catch{};
+                  throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
+              }
+              const flights = await r.json();
+              return { success: true, flights };
              } catch(err) {
                  return { success: false, message: err.message };
              }
@@ -2047,33 +2075,33 @@
                         modalState.data.departure_time = formatApiTimeToInput(flight.departure?.scheduledTime?.local);
                         modalState.data.arrival_time = formatApiTimeToInput(flight.arrival?.scheduledTime?.local);
                         
-                           modalState.data.from = {
-                               destination: flight.departure?.airport?.name,
-                               airport_name: flight.departure?.airport?.name,
-                               airport_address: flight.departure?.airport?.name, 
-                           };
-                           modalState.data.to = {
-                               destination: flight.arrival?.airport?.name,
-                               airport_name: flight.arrival?.airport?.name,
-                               airport_address: flight.arrival?.airport?.name, 
-                           };
+                          modalState.data.from = {
+                              destination: flight.departure?.airport?.name,
+                              airport_name: flight.departure?.airport?.name,
+                              airport_address: flight.departure?.airport?.name, 
+                          };
+                          modalState.data.to = {
+                              destination: flight.arrival?.airport?.name,
+                              airport_name: flight.arrival?.airport?.name,
+                              airport_address: flight.arrival?.airport?.name, 
+                          };
 
                         modalState.flightDataFound = true;
                         modalState.currentStep = 1; // Start the flight form from step 1
                         generateStepContent();
                         updateModalNav();
-                           setTimeout(async () => {
-                               initializeFieldPlugins();
-                               if (modalState.data.from?.airport_address) {
-                                   await findAddressOnMap('from', modalState.data.from.airport_address);
-                               }
-                               if (modalState.data.to?.airport_address) {
-                                   await findAddressOnMap('to', modalState.data.to.airport_address);
-                               }
-                               if (modalState.data.from?.coords && modalState.data.to?.coords) {
-                                   showFinalRouteOnMap();
-                               }
-                           }, 100);
+                          setTimeout(async () => {
+                              initializeFieldPlugins();
+                              if (modalState.data.from?.airport_address) {
+                                  await findAddressOnMap('from', modalState.data.from.airport_address);
+                              }
+                              if (modalState.data.to?.airport_address) {
+                                  await findAddressOnMap('to', modalState.data.to.airport_address);
+                              }
+                              if (modalState.data.from?.coords && modalState.data.to?.coords) {
+                                  showFinalRouteOnMap();
+                              }
+                          }, 100);
 
                     } else {
                         DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
@@ -2085,10 +2113,10 @@
                 generateStepContent();
                 updateModalNav();
                  setTimeout(() => {
-                      initializeFieldPlugins();
-                      Object.values(modalState.maps).forEach(m => {
-                          if (m) google.maps.event.trigger(m, 'resize');
-                     });
+                     initializeFieldPlugins();
+                     Object.values(modalState.maps).forEach(m => {
+                         if (m) google.maps.event.trigger(m, 'resize');
+                    });
                  }, 100);
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
@@ -2661,4 +2689,3 @@
     </script>
 </body>
 </html>
-
