@@ -343,9 +343,9 @@
             };
         };
 
-        function showNotification(message, type = 'error') {
+        function showNotification(message, type = 'error', duration = 5000) {
             DOM.notificationMessage.textContent = message;
-            DOM.notificationBanner.className = `fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12 ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
+            DOM.notificationBanner.className = `fixed top-4 right-4 z-[101] p-4 rounded-lg shadow-lg text-white opacity-0 transform -translate-y-12 ${type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-blue-500')}`;
             
             DOM.notificationBanner.classList.remove('opacity-0', '-translate-y-12');
             DOM.notificationBanner.classList.add('opacity-100', 'translate-y-0');
@@ -353,7 +353,7 @@
             setTimeout(() => {
                 DOM.notificationBanner.classList.remove('opacity-100', 'translate-y-0');
                 DOM.notificationBanner.classList.add('opacity-0', '-translate-y-12');
-            }, 5000);
+            }, duration);
         }
 
         function formatDateToInput(d) { // Converts DD/MM/YYYY to YYYY-MM-DD
@@ -545,13 +545,25 @@
             });
         }
 
+        function getPaymentStatusBadge(item) {
+            const payment = item.payment || { status: 'unpaid' };
+            switch (payment.status) {
+                case 'paid':
+                    return '<div class="absolute top-2 left-2 text-xs font-bold bg-green-500 text-white px-2 py-0.5 rounded-full" title="שולם במלואו"><i class="fas fa-check"></i></div>';
+                case 'partial':
+                    return `<div class="absolute top-2 left-2 text-xs font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full" title="שולם חלקית: $${(payment.amountPaid || 0).toLocaleString()}"><i class="fas fa-adjust"></i></div>`;
+                case 'unpaid':
+                default:
+                    return '<div class="absolute top-2 left-2 text-xs font-bold bg-slate-400 text-white px-2 py-0.5 rounded-full" title="לא שולם"><i class="fas fa-times"></i></div>';
+            }
+        }
+
         function createHotelCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ring-1 ring-black ring-opacity-5";
+            card.className = "relative bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ring-1 ring-black ring-opacity-5";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
 
-            // Star rating HTML
             let starsHtml = '';
             if (item.stars && item.stars > 0) {
                 for (let i = 0; i < 5; i++) {
@@ -559,7 +571,6 @@
                 }
             }
 
-            // Meals HTML
             const mealIcons = {
                 'ארוחת בוקר': 'fa-coffee', 'חצי פנסיון': 'fa-plate-wheat', 'הכל כלול': 'fa-utensils',
                 'חצי מטבח בחדר': 'fa-kitchen-set', 'מטבח מלא בחדר': 'fa-blender'
@@ -570,6 +581,7 @@
             }
 
             card.innerHTML = `
+                ${getPaymentStatusBadge(item)}
                 <div class="flex-grow">
                     <div class="flex justify-between items-start">
                         <div>
@@ -597,7 +609,7 @@
 
         function createTransportCard(item) {
             const card = document.createElement('div');
-            card.className = "bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ring-1 ring-black ring-opacity-5";
+            card.className = "relative bg-white/90 backdrop-blur-sm p-5 rounded-2xl shadow-lg flex flex-col cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ring-1 ring-black ring-opacity-5";
             card.dataset.id = item.id;
             card.dataset.action = 'view-details';
             
@@ -633,6 +645,7 @@
             }
 
             card.innerHTML = `
+                ${getPaymentStatusBadge(item)}
                 <div class="flex-grow">
                      <div class="flex justify-between items-start mb-2">
                          <div class="flex items-center gap-4">
@@ -735,6 +748,8 @@
         }
         
         function getStepDefinition() {
+            const paymentStep = { title: "סטטוס תשלום", fields: [{id: 'payment', type: 'payment_status'}] };
+            
             const steps = {
                 start: { title: "איזה פריט להוסיף?", fields: [{ id: 'mainType', type: 'radio', options: [{value: 'hotel', label: '🏨 מלון'}, {value: 'transport', label: '✈️ מעבר'}] }] },
                 hotel: [
@@ -759,6 +774,7 @@
                         {id: 'link', label: 'קישור לאתר (בוקינג וכו\')', type: 'url'},
                         {id: 'additional_details', label: 'הערות נוספות', type: 'textarea'}
                     ]},
+                    paymentStep
                 ],
                 transport: { title: "איזה סוג מעבר?", fields: [{ id: 'subType', type: 'radio', options: [
                     {value: 'flight', label: '✈️ טיסה'}, 
@@ -787,7 +803,8 @@
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         { id: 'additional_details', label: 'פירוט נוסף (הערות, נקודת מפגש וכו\')', type: 'textarea'}
-                    ]}
+                    ]},
+                    paymentStep
                 ],
                 car_rental: [
                     { title: "פרטי השכרת הרכב", fields: [
@@ -807,7 +824,8 @@
                         {id: 'price', label: 'מחיר כולל (בדולרים)', type: 'number'},
                         {id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
-                    ]}
+                    ]},
+                    paymentStep
                 ],
                 flight: [
                     { title: "מסלול הטיסה", fields: [ { id: 'flightroute', type: 'flightroute'} ]},
@@ -824,7 +842,8 @@
                         { id: 'luggage', type: 'luggage' }, 
                         { id: 'seats', type: 'seats' },
                         {id: 'additional_details', label: 'פירוט נוסף (אופציונלי)', type: 'textarea'}
-                    ]}
+                    ]},
+                    paymentStep
                 ],
                 ferry: [
                     { title: "פרטי המעבורת", fields: [
@@ -842,7 +861,8 @@
                     { title: "פרטים נוספים", fields: [
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         {id: 'additional_details', label: 'פירוט נוסף (סוג כרטיס, סיפון וכו\')', type: 'textarea'}
-                    ]}
+                    ]},
+                    paymentStep
                 ],
                 train: [
                     { title: "פרטי הרכבת", fields: [
@@ -861,7 +881,8 @@
                         { id: 'booking_link', label: 'קישור להזמנה (אופציונלי)', type: 'url'},
                         { id: 'seat_info', label: 'פרטי מושבים (אופציונלי)', type: 'text'},
                         {id: 'additional_details', label: 'פירוט נוסף (מחלקה, קרון וכו\')', type: 'textarea'}
-                    ]}
+                    ]},
+                    paymentStep
                 ]
             };
             
@@ -917,7 +938,7 @@
                     field.options = (tripData?.destinations || []).map(dest => ({ value: dest.nameHe, label: dest.nameHe }));
                 }
 
-                const isFullWidth = ['addressmap', 'textarea', 'routemap', 'flightroute', 'luggage', 'seats', 'flight_search_ui', 'custom_multiselect', 'starrating', 'daterange'].includes(field.type);
+                const isFullWidth = ['addressmap', 'textarea', 'routemap', 'flightroute', 'luggage', 'seats', 'flight_search_ui', 'custom_multiselect', 'starrating', 'daterange', 'payment_status'].includes(field.type);
                 html += `<div class="${isFullWidth ? 'md:col-span-2' : ''}">${renderField(field)}</div>`;
             });
             html += `</div></div>`;
@@ -1094,6 +1115,23 @@
                             </button>
                         </div>
                         `;
+                case 'payment_status':
+                    const payment = modalState.data.payment || { status: 'unpaid', amountPaid: 0 };
+                    const isPartial = payment.status === 'partial';
+                    return `<fieldset class="border p-4 rounded-lg">
+                        <legend class="px-2 font-semibold text-slate-700">סטטוס תשלום</legend>
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="unpaid" ${payment.status === 'unpaid' ? 'checked' : ''} class="payment-status-radio"> <span>לא שולם</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="paid" ${payment.status === 'paid' ? 'checked' : ''} class="payment-status-radio"> <span>שולם במלואו</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="paymentStatus" value="partial" ${isPartial ? 'checked' : ''} class="payment-status-radio"> <span>תשלום חלקי</span></label>
+                            </div>
+                            <div id="amount-paid-wrapper" class="relative ${isPartial ? '' : 'hidden'}">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">$</span>
+                                <input type="number" id="amountPaid" value="${payment.amountPaid || ''}" class="p-2 border rounded-md w-32 pr-7" placeholder="סכום">
+                            </div>
+                        </div>
+                    </fieldset>`;
                 default: // text, url, number, time, tel
                     return `<label class="block"><span class="text-sm font-semibold text-slate-700">${field.label}</span>
                     <input type="${field.type || 'text'}" id="${field.id}" value="${value}" class="mt-1 block w-full p-2 border rounded-md shadow-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="${field.placeholder || ''}">
@@ -1215,6 +1253,18 @@
                     picker.setDateRange(checkinHidden.value, checkoutHidden.value);
                 }
             }
+            
+            // Payment status logic
+            const amountPaidWrapper = document.getElementById('amount-paid-wrapper');
+            document.querySelectorAll('.payment-status-radio').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    if (e.target.value === 'partial') {
+                        amountPaidWrapper?.classList.remove('hidden');
+                    } else {
+                        amountPaidWrapper?.classList.add('hidden');
+                    }
+                });
+            });
 
             // Handle star rating UI
             const starContainer = document.getElementById('stars-container');
@@ -1351,6 +1401,11 @@
                 } else if (field.type === 'starrating') {
                     const hiddenInput = document.getElementById(field.id);
                     value = hiddenInput ? parseInt(hiddenInput.value, 10) || 0 : 0;
+                } else if (field.type === 'payment_status') {
+                    const status = document.querySelector('input[name="paymentStatus"]:checked')?.value || 'unpaid';
+                    const amountPaid = status === 'partial' ? parseFloat(document.getElementById('amountPaid')?.value) || 0 : 0;
+                    modalState.data.payment = { status, amountPaid };
+                    return;
                 } else if (field.type === 'routemap') {
                     modalState.data.from_address = document.getElementById('from_address').value;
                     modalState.data.to_address = document.getElementById('to_address').value;
@@ -1995,18 +2050,18 @@
                         modalState.currentStep = 1; // Start the flight form from step 1
                         generateStepContent();
                         updateModalNav();
-                          setTimeout(async () => {
-                              initializeFieldPlugins();
-                              if (modalState.data.from?.airport_address) {
-                                  await findAddressOnMap('from', modalState.data.from.airport_address);
-                              }
-                              if (modalState.data.to?.airport_address) {
-                                  await findAddressOnMap('to', modalState.data.to.airport_address);
-                              }
-                              if (modalState.data.from?.coords && modalState.data.to?.coords) {
-                                  showFinalRouteOnMap();
-                              }
-                          }, 100);
+                           setTimeout(async () => {
+                               initializeFieldPlugins();
+                               if (modalState.data.from?.airport_address) {
+                                   await findAddressOnMap('from', modalState.data.from.airport_address);
+                               }
+                               if (modalState.data.to?.airport_address) {
+                                   await findAddressOnMap('to', modalState.data.to.airport_address);
+                               }
+                               if (modalState.data.from?.coords && modalState.data.to?.coords) {
+                                   showFinalRouteOnMap();
+                               }
+                           }, 100);
 
                     } else {
                         DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
@@ -2018,10 +2073,10 @@
                 generateStepContent();
                 updateModalNav();
                  setTimeout(() => {
-                     initializeFieldPlugins();
-                     Object.values(modalState.maps).forEach(m => {
-                         if (m) google.maps.event.trigger(m, 'resize');
-                    });
+                      initializeFieldPlugins();
+                      Object.values(modalState.maps).forEach(m => {
+                          if (m) google.maps.event.trigger(m, 'resize');
+                     });
                  }, 100);
             } else if (target.id === 'add-connection-btn') {
                 addConnection();
@@ -2076,7 +2131,7 @@
              else if (inputId.startsWith('to_airport')) { mapKey = 'to'; } 
              else if (inputId.startsWith('connection')) { mapKey = inputId.replace('_airport_address', '');} 
              else { return; } 
-             
+              
             const formattedAddress = await findAddressOnMap(mapKey, null, prediction.place_id);
             if (formattedAddress) {
                 inputElement.value = formattedAddress;
@@ -2227,6 +2282,7 @@
                 DOM.detailsModal.classList.remove('opacity-0');
                 DOM.detailsModalContent.classList.remove('scale-95', 'opacity-0');
                 initDetailsMap(item);
+                initDetailsPaymentControls(item.id); // Add listeners for payment controls
             }, 10);
 
             document.getElementById('details-modal-close-btn').addEventListener('click', closeDetailsModal);
@@ -2267,6 +2323,7 @@
                       <div class="p-3 bg-slate-50 rounded-lg">${starsHtml || '<strong class="text-slate-500 block">דירוג כוכבים:</strong> -'}</div>
                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">דירוג בוקינג:</strong> ${item.booking_rating || '-'}</div>
                   </div>
+                  ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg mt-4"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   <div class="grid grid-cols-2 gap-4 mt-4">
                       <a href="${item.link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
@@ -2299,6 +2356,7 @@
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר:</strong> $${((item.price_per_person || 0) * (item.travelers || 1)).toLocaleString()}</div>
                   </div>
+                   ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
@@ -2318,11 +2376,14 @@
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">תאריך:</strong> ${item.date || item.dates || '-'}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת המראה:</strong> ${item.departure_time || '-'}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">שעת נחיתה:</strong> ${item.arrival_time || '-'}</div>
-                       <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
+                       <div class="p-3 bg-slate-50 Gist AI is a new feature that will help you to understand what is happening in a meeting. It will provide a summary of the meeting, a list of action items, and a list of key decisions. It will also provide a list of the most important topics that were discussed. Gist AI is currently in beta and is available to a limited number of users. If you would like to be one of the first to try it, please sign up for the beta program.
+
+ rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${travelers}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר לנוסע:</strong> $${(item.price_per_person || 0).toLocaleString()}</div>
                        <div class="md:col-span-2 p-3 bg-green-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong><span class="font-bold text-green-700 text-base"> $${totalPrice.toLocaleString()}</span></div>
                        <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מקומות:</strong> ${(item.seats || []).join(', ') || '-'}</div>
                   </div>
+                  ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   ${(item.from?.coords || item.to?.coords) ? '<div id="details-map" class="details-map-container map-container"></div>' : ''}
                  `;
@@ -2340,6 +2401,7 @@
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${(item.price || 0). toLocaleString()}</div>
                   </div>
+                  ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
@@ -2360,6 +2422,7 @@
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
                   </div>
+                  ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
@@ -2381,6 +2444,7 @@
                        <div class="p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">נוסעים:</strong> ${item.travelers || '-'}</div>
                        <div class="md:col-span-2 p-3 bg-slate-50 rounded-lg"><strong class="text-slate-500 block">מחיר כולל:</strong> $${totalPrice.toLocaleString()}</div>
                   </div>
+                  ${generatePaymentDetailsHTML(item)}
                   ${item.additional_details ? `<div class="p-4 bg-slate-100 rounded-lg"><h5 class="font-bold mb-2">פרטים נוספים:</h5><p class="whitespace-pre-wrap">${item.additional_details}</p></div>` : ''}
                   <div class="grid grid-cols-1 gap-4">
                       <a href="${item.booking_link}" target="_blank" class="text-center bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition ${item.booking_link ? '' : 'opacity-50 cursor-not-allowed'}">קישור להזמנה <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
@@ -2461,20 +2525,25 @@
                 train: { label: '🚆 רכבות', total: 0 },
             };
 
+            let grandTotal = 0;
+            let totalPaid = 0;
+
             allItems.forEach(item => {
+                const itemPrice = getItemPrice(item);
                 if (categories[item.type]) {
-                    const travelers = item.travelers || 1;
-                    const price_per_person = item.price_per_person || 0;
-                    const price = (item.type === 'hotel' || item.type === 'car_rental') 
-                        ? (item.price || 0) 
-                        : price_per_person * travelers;
-                    
-                    categories[item.type].total += price;
+                    categories[item.type].total += itemPrice;
+                }
+                grandTotal += itemPrice;
+
+                const payment = item.payment || { status: 'unpaid' };
+                if (payment.status === 'paid') {
+                    totalPaid += itemPrice;
+                } else if (payment.status === 'partial') {
+                    totalPaid += payment.amountPaid || 0;
                 }
             });
 
             DOM.logisticsSummaryBody.innerHTML = '';
-            let grandTotal = 0;
             for (const key in categories) {
                 const category = categories[key];
                 if (category.total > 0 || allItems.some(item => item.type === key)) {
@@ -2483,7 +2552,6 @@
                             <td class="p-3">${category.label}</td>
                             <td class="p-3 font-mono text-left">$${category.total.toLocaleString()}</td>
                         </tr>`;
-                    grandTotal += category.total;
                 }
             }
              DOM.logisticsSummaryBody.innerHTML += `
@@ -2492,10 +2560,90 @@
                     <td class="p-3 font-mono text-left rounded-bl-lg">$${grandTotal.toLocaleString()}</td>
                 </tr>`;
 
+            const remaining = grandTotal - totalPaid;
             DOM.grandTotalContainer.innerHTML = `
-                <p class="text-5xl font-bold drop-shadow-sm font-mono">$${grandTotal.toLocaleString()}</p>
-                <p class="text-slate-200 mt-1">עלות כוללת משוערת</p>
+                <p class="text-4xl font-bold drop-shadow-sm font-mono">$${grandTotal.toLocaleString()}</p>
+                <p class="text-slate-200 mt-1">עלות כוללת</p>
+                <div class="mt-4 text-sm grid grid-cols-2 gap-2 w-full max-w-xs mx-auto">
+                    <div class="bg-white/20 p-2 rounded-lg">
+                        <div class="font-bold text-lg">$${totalPaid.toLocaleString()}</div>
+                        <div class="opacity-80">שולם</div>
+                    </div>
+                     <div class="bg-white/20 p-2 rounded-lg">
+                        <div class="font-bold text-lg">$${remaining.toLocaleString()}</div>
+                        <div class="opacity-80">יתרה</div>
+                    </div>
+                </div>
             `;
+        }
+
+        // --- Payment Logic ---
+        function getItemPrice(item) {
+            if (item.type === 'hotel' || item.type === 'car_rental') {
+                return item.price || 0;
+            }
+            return (item.price_per_person || 0) * (item.travelers || 1);
+        }
+        
+        function generatePaymentDetailsHTML(item) {
+            const payment = item.payment || { status: 'unpaid', amountPaid: 0 };
+            const isPartial = payment.status === 'partial';
+            const totalCost = getItemPrice(item);
+
+            return `
+            <div data-item-id="${item.id}" id="details-payment-section" class="p-4 bg-slate-100 rounded-lg">
+                <h5 class="font-bold mb-2 text-slate-700">סטטוס תשלום</h5>
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+                    <div>
+                        <select id="details-payment-status" class="p-2 border rounded-md">
+                            <option value="unpaid" ${payment.status === 'unpaid' ? 'selected' : ''}>לא שולם</option>
+                            <option value="paid" ${payment.status === 'paid' ? 'selected' : ''}>שולם במלואו</option>
+                            <option value="partial" ${isPartial ? 'selected' : ''}>תשלום חלקי</option>
+                        </select>
+                    </div>
+                    <div id="details-amount-paid-wrapper" class="relative ${isPartial ? '' : 'hidden'}">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">$</span>
+                        <input type="number" id="details-amount-paid" value="${payment.amountPaid || ''}" class="p-2 border rounded-md w-32 pr-7" placeholder="סכום">
+                        <span class="ml-2 text-slate-500">/ $${totalCost.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        function initDetailsPaymentControls(itemId) {
+            const statusSelect = document.getElementById('details-payment-status');
+            const amountWrapper = document.getElementById('details-amount-paid-wrapper');
+            const amountInput = document.getElementById('details-amount-paid');
+
+            const handleUpdate = debounce(async () => {
+                const newStatus = statusSelect.value;
+                const newAmount = newStatus === 'partial' ? parseFloat(amountInput.value) || 0 : 0;
+                
+                const itemRef = doc(db, "trips", tripId, "logistics", itemId);
+                try {
+                    await updateDoc(itemRef, {
+                        payment: {
+                            status: newStatus,
+                            amountPaid: newAmount
+                        }
+                    });
+                    showNotification('סטטוס התשלום עודכן', 'success', 2000);
+                } catch (err) {
+                    console.error("Error updating payment status:", err);
+                    showNotification('שגיאה בעדכון התשלום');
+                }
+
+            }, 700);
+
+            if (statusSelect) {
+                statusSelect.addEventListener('change', () => {
+                    amountWrapper.classList.toggle('hidden', statusSelect.value !== 'partial');
+                    handleUpdate();
+                });
+            }
+            if (amountInput) {
+                amountInput.addEventListener('input', handleUpdate);
+            }
         }
 
         // --- Start the page ---
