@@ -26,7 +26,6 @@
             overscroll-behavior-y: contain;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-            /* FIX: Set a dark background to prevent white flash on mobile overscroll */
             background-color: #0f172a; 
         }
 
@@ -47,11 +46,12 @@
             transition: transform .2s ease-out, box-shadow .2s ease-out, background-color .2s ease;
             will-change: transform, box-shadow;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         .main-nav-button:hover { transform: scale(1.02); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18); }
 
         .card {
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.98);
             border-radius: 16px;
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(226, 232, 240, 0.7);
@@ -92,7 +92,8 @@
         .transport-card .icon-chip i { color: #16a34a; }
         
         #loading-overlay { transition: opacity 0.5s ease-in-out; }
-        #page-bg { transition: background-image 1s ease, transform .6s ease; }
+        /* FIX: Removed 'transform' from transition to prevent zoom on scroll */
+        #page-bg { transition: background-image 1s ease; }
 
         .card-footer {
             margin-top: auto;
@@ -104,7 +105,8 @@
             gap: 0.5rem;
         }
 
-        /* Accordion Styles */
+        /* Accordion Styles Update */
+        .accordion-button.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
         .accordion-content {
             max-height: 0;
             overflow: hidden;
@@ -114,11 +116,17 @@
             max-height: 5000px; /* Large enough for content */
             transition: max-height 1s ease-in-out;
         }
-        .accordion-button .chevron {
-            transition: transform 0.3s ease-out;
-        }
-        .accordion-button.open .chevron {
-            transform: rotate(180deg);
+        .accordion-button .chevron { transition: transform 0.3s ease-out; }
+        .accordion-button.open .chevron { transform: rotate(180deg); }
+
+        /* Section Title Style */
+        .section-title {
+            display: inline-block;
+            background-color: rgba(0,0,0,0.2);
+            backdrop-filter: blur(5px);
+            padding: 0.5rem 1.5rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
     </style>
 </head>
@@ -142,6 +150,28 @@
                 <button id="nav-modal-close" class="mt-6 text-slate-500 hover:text-slate-700">סגור</button>
             </div>
         </div>
+        
+        <!-- NEW: Generic Info/Alert Modal -->
+        <div id="info-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[105] p-4">
+            <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm text-center">
+                <h2 id="info-modal-title" class="text-2xl font-bold mb-4">הודעה</h2>
+                <p id="info-modal-message" class="text-slate-600 mb-8">תוכן ההודעה כאן.</p>
+                <button id="info-modal-close" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-lg">הבנתי</button>
+            </div>
+        </div>
+
+        <!-- NEW: Generic Confirm Modal -->
+        <div id="confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[105] p-4">
+            <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm text-center">
+                <h2 id="confirm-modal-title" class="text-2xl font-bold mb-4">אישור פעולה</h2>
+                <p id="confirm-modal-message" class="text-slate-600 mb-8">האם אתה בטוח?</p>
+                <div class="flex justify-center gap-4">
+                    <button id="confirm-modal-cancel" class="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button id="confirm-modal-confirm" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">אישור</button>
+                </div>
+            </div>
+        </div>
+
 
         <div id="share-modal" class="modal fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 hidden opacity-0">
             <div class="modal-content bg-white rounded-2xl shadow-xl p-8 w-full max-w-lg text-center opacity-0 transform scale-95">
@@ -288,7 +318,7 @@
         </aside>
 
         <div id="main-content" class="min-h-screen">
-            <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+            <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm border-b border-white/20">
                 <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between h-16">
                         <a href="index.html" class="text-slate-700 font-bold hover:text-blue-600 transition-colors"><i class="fas fa-home"></i> דף הבית</a>
@@ -307,23 +337,21 @@
                 <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
 
                     <section class="text-center">
-                        <h2 id="trip-title" class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg">טוען את שם הטיול...</h2>
+                        <h1 id="trip-title" class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg">טוען את שם הטיול...</h1>
                         <p class="mt-4 text-lg text-slate-200 max-w-3xl mx-auto drop-shadow-md">זהו מרכז הבקרה של הטיול! מכאן אפשר לנווט לכל המידע החשוב.</p>
                         <div id="main-nav-buttons" class="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
                             <!-- Nav buttons will be injected here -->
                         </div>
                     </section>
 
-                    <!-- NEW: Expense Summary Section -->
                     <section id="quick-expense-summary" class="max-w-4xl mx-auto">
-                        <!-- UPDATED: grid-cols-2 to keep it side-by-side on mobile -->
                         <div class="grid grid-cols-2 gap-4">
-                            <a id="today-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                            <a id="today-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center border-emerald-300/50">
                                 <i class="fas fa-sun text-3xl mb-2"></i>
                                 <span class="font-bold">הוצאות היום</span>
                                 <span id="today-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
                             </a>
-                            <a id="total-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center">
+                            <a id="total-expense-card-link" href="#" class="main-nav-button bg-emerald-500/20 backdrop-blur-md hover:bg-emerald-500/30 p-4 rounded-xl text-white text-center flex flex-col items-center justify-center border-emerald-300/50">
                                 <i class="fas fa-wallet text-3xl mb-2"></i>
                                 <span class="font-bold">סך כל הוצאות הטיול</span>
                                 <span id="total-expenses-summary" class="text-2xl font-extrabold mt-1">טוען...</span>
@@ -332,20 +360,19 @@
                     </section>
 
                     <section>
-                        <h3 class="text-3xl font-bold text-white mb-4 text-center drop-shadow-md">מפת המסע הכללית</h3>
+                        <h3 class="text-3xl font-bold text-white mb-4 text-center drop-shadow-md"><span class="section-title">מפת המסע הכללית</span></h3>
                         <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg"><div id="trip-map-container"></div></div>
                     </section>
 
-                    <!-- UPDATED: Logistics Accordion Section -->
                     <section id="logistics-summary-section" class="space-y-6">
-                        <h3 class="text-3xl font-bold text-white text-center drop-shadow-md mb-6">🗂️ סיכום לוגיסטיקה</h3>
+                        <h3 class="text-3xl font-bold text-white text-center drop-shadow-md mb-6"><span class="section-title">🗂️ סיכום לוגיסטיקה</span></h3>
                         <div id="logistics-accordion-container" class="space-y-4">
                             <p class="text-white/80 text-center col-span-full">טוען סיכום לוגיסטיקה...</p>
                         </div>
                     </section>
                     
                     <section id="costs-summary-section">
-                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md">📊 סיכום עלויות</h3>
+                        <h3 class="text-3xl font-bold text-white mb-6 text-center drop-shadow-md"><span class="section-title">📊 סיכום עלויות</span></h3>
                         <div id="costs-summary-container" class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
                            <p class="text-slate-600 text-center">טוען סיכום עלויות...</p>
                         </div>
@@ -358,19 +385,25 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, enableIndexedDbPersistence, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        // UPDATED: Firebase imports from a newer version
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, onSnapshot, updateDoc, enableIndexedDbPersistence, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Init ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
+        // IMPORTANT: Using placeholder for config to be injected by environment
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config)
+            : {
+                // Fallback config for local development if needed, but should be replaced
+                apiKey: "YOUR_API_KEY",
+                authDomain: "YOUR_AUTH_DOMAIN",
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_STORAGE_BUCKET",
+                messagingSenderId: "YOUR_SENDER_ID",
+                appId: "YOUR_APP_ID"
+            };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -440,6 +473,16 @@
             totalExpensesSummary: document.getElementById('total-expenses-summary'),
             todayExpenseCardLink: document.getElementById('today-expense-card-link'),
             totalExpenseCardLink: document.getElementById('total-expense-card-link'),
+            // New Modal DOM elements
+            infoModal: document.getElementById('info-modal'),
+            infoModalTitle: document.getElementById('info-modal-title'),
+            infoModalMessage: document.getElementById('info-modal-message'),
+            infoModalClose: document.getElementById('info-modal-close'),
+            confirmModal: document.getElementById('confirm-modal'),
+            confirmModalTitle: document.getElementById('confirm-modal-title'),
+            confirmModalMessage: document.getElementById('confirm-modal-message'),
+            confirmModalCancel: document.getElementById('confirm-modal-cancel'),
+            confirmModalConfirm: document.getElementById('confirm-modal-confirm'),
         };
 
         let currentUser = null;
@@ -454,14 +497,54 @@
 
         const editUI = new Map();
 
+        // --- Custom Modal Functions ---
+        function showInfoModal(title, message, onOk = () => {}) {
+            DOM.infoModalTitle.textContent = title;
+            DOM.infoModalMessage.innerHTML = message; // Use innerHTML to allow for simple formatting
+            DOM.infoModal.classList.remove('hidden');
+            DOM.infoModalClose.onclick = () => {
+                DOM.infoModal.classList.add('hidden');
+                onOk();
+            };
+        }
+
+        function showConfirmModal(title, message, onConfirm, onCancel = () => {}) {
+            DOM.confirmModalTitle.textContent = title;
+            DOM.confirmModalMessage.innerHTML = message;
+            DOM.confirmModal.classList.remove('hidden');
+            
+            DOM.confirmModalConfirm.onclick = () => {
+                DOM.confirmModal.classList.add('hidden');
+                onConfirm();
+            };
+            DOM.confirmModalCancel.onclick = () => {
+                DOM.confirmModal.classList.add('hidden');
+                onCancel();
+            };
+        }
+
         // --- Page Initialization ---
-        function initPage() {
+        async function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('id') || urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
-                window.location.href = 'index.html';
+                showInfoModal("שגיאה", "לא נמצא מזהה טיול.", () => { window.location.href = 'index.html'; });
                 return;
+            }
+            
+            // Handle authentication
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch (error) {
+                    console.error("Custom token sign-in failed:", error);
+                }
+            } else if (!auth.currentUser) {
+                try {
+                    await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Anonymous sign-in failed:", error);
+                }
             }
 
             onAuthStateChanged(auth, (user) => {
@@ -481,7 +564,7 @@
 
             if (tripSnap.exists()) {
                 const loadedTripData = tripSnap.data();
-                 const canAccess = loadedTripData.owner === currentUser.uid || (loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid));
+                const canAccess = loadedTripData.owner === currentUser.uid || (loadedTripData.editors && loadedTripData.editors.includes(currentUser.uid));
 
                 if (canAccess) {
                     tripData = loadedTripData;
@@ -494,12 +577,10 @@
                     setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
 
                 } else {
-                    alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
-                    window.location.href = 'index.html';
+                    showInfoModal("אין גישה", "הטיול לא נמצא או שאין לך הרשאה לצפות בו.", () => { window.location.href = 'index.html'; });
                 }
             } else {
-                alert("הטיול לא נמצא או שאין לך הרשאה לצפות בו.");
-                window.location.href = 'index.html';
+                showInfoModal("שגיאה", "הטיול לא נמצא או שאין לך הרשאה לצפות בו.", () => { window.location.href = 'index.html'; });
             }
         }
 
@@ -586,29 +667,23 @@
             DOM.confirmDelete2.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> מוחק...';
             
             try {
-                // Delete all documents in the 'logistics' subcollection
                 const logisticsCollectionRef = collection(db, "trips", tripId, "logistics");
                 const logisticsSnapshot = await getDocs(logisticsCollectionRef);
                 const deleteLogisticsPromises = logisticsSnapshot.docs.map(d => deleteDoc(d.ref));
                 
-                // Delete all documents in the 'expenses' subcollection
                 const expensesCollectionRef = collection(db, "trips", tripId, "expenses");
                 const expensesSnapshot = await getDocs(expensesCollectionRef);
                 const deleteExpensesPromises = expensesSnapshot.docs.map(d => deleteDoc(d.ref));
 
-                // TODO: Add deletion for other subcollections if they exist (e.g., attractions, checklists)
-                
                 await Promise.all([...deleteLogisticsPromises, ...deleteExpensesPromises]);
 
-                // Delete the main trip document
                 await deleteDoc(doc(db, "trips", tripId));
 
-                alert('הטיול נמחק בהצלחה.');
-                window.location.href = 'index.html';
+                showInfoModal('הצלחה', 'הטיול נמחק בהצלחה.', () => { window.location.href = 'index.html'; });
 
             } catch (error) {
                 console.error("Error deleting trip:", error);
-                alert("שגיאה במחיקת הטיול. נסה שוב.");
+                showInfoModal("שגיאה", "שגיאה במחיקת הטיול. נסה שוב.");
                 DOM.confirmDelete2.disabled = false;
                 DOM.confirmDelete2.textContent = 'אני מבין, מחק לצמיתות';
             }
@@ -626,16 +701,14 @@
             buildNavButtons();
         }
 
-        // --- Sorting and Summary Population ---
         async function populateSummaries(items) {
             renderLogisticsAccordions(items);
             await renderCostsSummary(items);
         }
-
-        // --- NEW ACCORDION RENDER LOGIC ---
+        
         function renderLogisticsAccordions(items) {
             const container = DOM.logisticsAccordionContainer;
-            container.innerHTML = ''; // Clear previous content
+            container.innerHTML = ''; 
 
             const groups = {
                 hotel: { title: "🏨 מלונות", icon: "fa-hotel", items: [] },
@@ -646,14 +719,12 @@
                 train: { title: "🚆 רכבות", icon: "fa-train", items: [] },
             };
 
-            // Group items by type
             items.forEach(item => {
                 if (groups[item.type]) {
                     groups[item.type].items.push(item);
                 }
             });
 
-            // Sort items within each group
             Object.values(groups).forEach(group => {
                 group.items.sort((a, b) => {
                     const dateA = getStartDate(a);
@@ -669,18 +740,20 @@
                 const group = groups[key];
                 if (group.items.length > 0) {
                     hasContent = true;
+                    // FIX: Container now just handles layout and visual grouping
                     const accordionSection = document.createElement('div');
-                    accordionSection.className = "bg-white/10 backdrop-blur-sm rounded-2xl shadow-lg";
+                    accordionSection.className = "rounded-2xl shadow-lg overflow-hidden";
                     
                     const buttonId = `accordion-button-${key}`;
                     const contentId = `accordion-content-${key}`;
 
+                    // FIX: Button and content have the background, not the container
                     accordionSection.innerHTML = `
-                        <button id="${buttonId}" class="accordion-button w-full flex justify-between items-center p-5 text-left text-white font-bold text-xl">
+                        <button id="${buttonId}" class="accordion-button w-full flex justify-between items-center p-5 text-left text-white font-bold text-xl bg-white/10 backdrop-blur-sm transition-all duration-300">
                             <span><i class="fas ${group.icon} ml-3"></i>${group.title} (${group.items.length})</span>
                             <i class="fas fa-chevron-down chevron"></i>
                         </button>
-                        <div id="${contentId}" class="accordion-content px-4 pb-4">
+                        <div id="${contentId}" class="accordion-content p-4 bg-white/10 backdrop-blur-sm">
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <!-- Cards will be injected here -->
                             </div>
@@ -698,16 +771,28 @@
             }
 
             if (!hasContent) {
-                 container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו פריטי לוגיסטיקה. <a href="logistics.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
+                container.innerHTML = `<p class="text-white/80 text-center col-span-full">לא נוספו פריטי לוגיסטיקה. <a href="logistics.html?tripId=${tripId}" class="font-bold underline hover:text-white">הוסף עכשיו</a></p>`;
             }
 
-            // Add event listeners to accordion buttons
             container.querySelectorAll('.accordion-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const content = button.nextElementSibling;
-                    button.classList.toggle('open');
-                    content.classList.toggle('open');
+                    const isOpen = content.classList.contains('open');
+
+                    // Toggle open classes
+                    button.classList.toggle('open', !isOpen);
+                    content.classList.toggle('open', !isOpen);
+
+                    // FIX: Adjust rounding on the button itself for seamless look
+                    if (!isOpen) {
+                        button.classList.remove('rounded-b-2xl');
+                    } else {
+                         // Add a slight delay to re-apply rounding after collapse animation
+                        setTimeout(() => button.classList.add('rounded-b-2xl'), 500);
+                    }
                 });
+                // Ensure closed buttons are fully rounded
+                button.classList.add('rounded-b-2xl');
             });
         }
         
@@ -947,7 +1032,6 @@
                 return rate;
             } catch (error) {
                 console.error('Failed to fetch currency rate:', error);
-                // A reasonable fallback for USD to ILS if API fails
                 if (from === 'USD' && to === 'ILS') return 3.7; 
                 return 1; // Generic fallback
             }
@@ -1043,7 +1127,6 @@
             }
         }
 
-        // --- More Helper Functions ---
         function generateDatesFromRange(rangeStr) {
             if (!rangeStr || !rangeStr.includes(' - ')) return [];
             const [startStr, endStr] = rangeStr.split(' - ');
@@ -1170,9 +1253,7 @@
 
             openNavModal({ title: 'ניווט למלון', message: 'לא נמצא מלון להיום או בעתיד.' });
         }
-
-        // --- UPDATED DETAILS MODAL LOGIC ---
-
+        
         function openDetailsModal(item) {
             if (!item) return;
 
@@ -1188,13 +1269,12 @@
             }
 
             DOM.detailsModalBody.innerHTML = contentHtml;
-            // The title is now set within the generator functions
             
             DOM.detailsModal.classList.remove('hidden');
             setTimeout(() => {
                 DOM.detailsModal.classList.remove('opacity-0');
                 DOM.detailsModal.querySelector('.modal-content').classList.remove('opacity-0', 'scale-95');
-                initDetailsMap(item); // Use the more advanced map initializer
+                initDetailsMap(item); 
             }, 10);
         }
 
@@ -1210,8 +1290,6 @@
             }, 300);
         }
         
-        // --- DETAILS HTML GENERATORS (from logistics.html) ---
-
         function createDetailItem(icon, label, value, extraClasses = '') {
             if (!value || value === '-') return '';
             return `<div class="bg-slate-50 p-3 rounded-lg ${extraClasses}">
@@ -1277,7 +1355,7 @@
                 ${item.coords ? '<div id="details-map" class="details-map-container mt-4"></div>' : ''}
             `;
         }
-
+        
         function generateRideDetailsHTML(item) {
             const title = `הסעה: ${item.from_address?.split(',')[0] || ''} → ${item.to_address?.split(',')[0] || ''}`;
             DOM.detailsModalTitle.textContent = title;
@@ -1327,7 +1405,6 @@
                 `;
         }
         
-        // Other transport types...
          function generateCarRentalDetailsHTML(item) {
             DOM.detailsModalTitle.textContent = `רכב שכור: ${item.destination || ''}`;
             return `
@@ -1454,19 +1531,7 @@
             setTimeout(() => detailsMap.invalidateSize(), 100);
         }
 
-        function formatDuration(seconds) {
-            if (seconds === undefined || seconds === null) return '-';
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            return `${hours.toString()} שעות ו-${minutes.toString().padStart(2, '0')} דקות`;
-        }
-
-        function formatDistance(meters) {
-            if (meters === undefined || meters === null) return '-';
-            return `${(meters / 1000).toFixed(1)} ק"מ`;
-        }
-
-        // --- Edit Destinations Modal Logic (unchanged) ---
+        // --- Edit Destinations Modal Logic ---
         function openEditDestinationsModal(){
             DOM.tripDatesEdit.value = (tripData.startDate && tripData.endDate) ? `${tripData.startDate} - ${tripData.endDate}` : '';
             new Litepicker({ element: DOM.tripDatesEdit, singleMode:false, lang:'he-IL', format:'DD/MM/YYYY' });
@@ -1528,7 +1593,7 @@
 
             el.querySelector('.find-btn').addEventListener('click', async () => {
                 const q = el.querySelector('.dest-name-en').value.trim();
-                if (!q) { alert('כתוב שם יעד באנגלית לחיפוש.'); return; }
+                if (!q) { showInfoModal('חסר מידע', 'יש לכתוב שם יעד באנגלית כדי לחפש.'); return; }
                 try{
                     const btn = el.querySelector('.find-btn');
                     btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
@@ -1543,23 +1608,23 @@
                         el.querySelector('.coords').textContent = `${latNum.toFixed(5)}, ${lngNum.toFixed(5)}`;
                         el.dataset.coords = JSON.stringify({lat:latNum, lng:lngNum});
                     } else {
-                        alert('לא נמצאה תוצאה לחיפוש.');
+                        showInfoModal('חיפוש', 'לא נמצאה תוצאה לחיפוש.');
                     }
                     btn.disabled = false; btn.textContent = 'מצא';
                 }catch(e){
                     console.error(e);
-                    alert('שגיאה בחיפוש מיקום.');
+                    showInfoModal('שגיאה', 'שגיאה בחיפוש מיקום.');
                     const btn = el.querySelector('.find-btn');
                     btn.disabled = false; btn.textContent = 'מצא';
                 }
             });
 
             el.querySelector('.remove-btn').addEventListener('click', () => {
-                if (confirm('למחוק יעד זה?')) {
+                showConfirmModal('מחיקת יעד', 'למחוק יעד זה?', () => {
                     editUI.get(id).map.remove();
                     editUI.delete(id);
                     el.remove();
-                }
+                });
             });
         }
 
@@ -1608,14 +1673,13 @@
                 closeEditDestinationsModal();
             }catch(e){
                 console.error(e);
-                alert('שגיאה בשמירת השינויים.');
+                showInfoModal('שגיאה', 'שגיאה בשמירת השינויים.');
             }finally{
                 DOM.saveDestinationsBtn.disabled = false;
                 DOM.saveDestinationsBtn.textContent = 'שמור שינויים';
             }
         }
 
-        // --- Share Modal Logic ---
         function openShareModal() {
             DOM.shareModal.classList.remove('hidden');
             setTimeout(() => {
@@ -1652,7 +1716,6 @@
         DOM.closeSettingsBtn.addEventListener('click', closeSettingsModal);
         DOM.saveSettingsBtn.addEventListener('click', saveSettings);
 
-        // Delete Trip Listeners
         DOM.deleteTripBtn.addEventListener('click', () => {
             DOM.settingsModal.classList.add('hidden');
             DOM.deleteModal1.classList.remove('hidden');
@@ -1677,7 +1740,6 @@
 
         DOM.detailsModalClose.addEventListener('click', closeDetailsModal);
         
-        // Main content click listener for cards
         document.getElementById('main-content').addEventListener('click', (e) => {
             const card = e.target.closest('.card[data-id]');
             if (card) {
