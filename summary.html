@@ -2,7 +2,6 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <!-- 4. FIX: Disable double-tap to zoom via meta tag -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ניהול לוגיסטיקה</title>
     
@@ -19,9 +18,7 @@
     <style>
         body { 
             font-family: 'Assistant', sans-serif; 
-            /* 4. FIX: Alternative for disabling double-tap zoom */
             touch-action: manipulation;
-            /* 3. FIX: Prevent horizontal scrollbar which might cause artifacts */
             overflow-x: hidden;
         }
         
@@ -78,7 +75,7 @@
             border: 1px solid #d1d5db; border-top: none;
             border-radius: 0 0 0.375rem 0.375rem; max-height: 150px;
             overflow-y: auto; z-index: 9999;
-            width: calc(100% - 80px); /* Adjust width to not cover buttons */
+            width: 100%; 
         }
         .autocomplete-suggestion { padding: 0.5rem; cursor: pointer; }
         .autocomplete-suggestion:hover { background-color: #f3f4f6; }
@@ -102,8 +99,7 @@
         .litepicker .container__months .month-item-header .button-next-month {
             transform: scaleX(-1); /* Flip arrows for RTL */
         }
-
-        /* 3. FIX: Hide scrollbar corner artifact that can appear as a square */
+ 
         ::-webkit-scrollbar-corner {
             background: transparent;
         }
@@ -252,7 +248,10 @@
             geocoder = new google.maps.Geocoder();
             autocompleteService = new google.maps.places.AutocompleteService();
             directionsService = new google.maps.DirectionsService();
-            placesService = new google.maps.places.PlacesService(new google.maps.Map(document.createElement('div')));
+            // The map element passed to PlacesService is temporary and not displayed.
+            // It's required for the service to function.
+            const mapDiv = document.createElement('div');
+            placesService = new google.maps.places.PlacesService(new google.maps.Map(mapDiv));
             
             // Dispatch a custom event to let the module script know that Google Maps is ready
             window.dispatchEvent(new CustomEvent('google-maps-ready'));
@@ -565,8 +564,6 @@
                 return;
             }
             
-            // 1. FIX: Sorting logic confirmed to handle all item types.
-            // This sorts both hotels and all transport types chronologically.
             items.sort((a, b) => {
                 // Get the primary date string for each item. For hotels/cars, use the start date of the range.
                 const dateStringA = a.type === 'hotel' || a.type === 'car_rental' ? a.dates?.split(' - ')[0] : a.date;
@@ -743,6 +740,7 @@
                 modalState.mainType = (itemToEdit.type === 'hotel') ? 'hotel' : 'transport';
                 modalState.subType = ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(itemToEdit.type) ? itemToEdit.type : null;
                 modalState.data = JSON.parse(JSON.stringify(itemToEdit));
+                
                 if (modalState.subType === 'flight') {
                     modalState.flightDataFound = true; // For edits, skip search
                 }
@@ -756,19 +754,19 @@
                     }
                 }
 
-                // Deconstruct 'dates' or 'date' string into individual date fields for the native form inputs
+                // Deconstruct 'dates' string into individual date fields for the native form inputs
                 const type = itemToEdit.type;
-                if (type === 'hotel' && itemToEdit.dates) {
+                if ((type === 'hotel' || type === 'car_rental') && itemToEdit.dates) {
                     const [start, end] = itemToEdit.dates.split(' - ');
-                    modalState.data.checkin_date = start;
-                    modalState.data.checkout_date = end;
-                } else if (type === 'car_rental' && itemToEdit.dates) {
-                    const [start, end] = itemToEdit.dates.split(' - ');
-                    modalState.data.pickup_date = start;
-                    modalState.data.return_date = end;
-                } else if (['flight', 'ride', 'ferry', 'train'].includes(type) && itemToEdit.date) {
-                    modalState.data.date = itemToEdit.date;
+                    if (type === 'hotel') {
+                        modalState.data.checkin_date = start;
+                        modalState.data.checkout_date = end;
+                    } else { // car_rental
+                        modalState.data.pickup_date = start;
+                        modalState.data.return_date = end;
+                    }
                 }
+                // No need for an else-if for single dates, as `itemToEdit.date` is already in `modalState.data` from the deep copy.
 
             } else {
                 DOM.modalTitle.textContent = 'הוספת פריט חדש';
@@ -1409,9 +1407,9 @@
             // Add debounced input listener for autocomplete suggestions
             const debouncedAutocomplete = debounce(handleAddressAutocomplete, 400);
             document.querySelectorAll('input[id*="address"], input[id*="location"], input[id*="station"], input[id*="destination"]').forEach(input => {
-                 if (input.type === 'text' && input.id !== 'address') { // Exclude hotel address from live autocomplete
-                      input.addEventListener('input', () => debouncedAutocomplete(input));
-                 }
+                if (input.type === 'text') {
+                    input.addEventListener('input', () => debouncedAutocomplete(input));
+                }
             });
         }
         
@@ -1510,8 +1508,8 @@
                 const pickup = formatDateFromInput(modalState.data.pickup_date);
                 const ret = formatDateFromInput(modalState.data.return_date);
                 if (pickup && ret) modalState.data.dates = `${pickup} - ${ret}`;
-            } else if (modalState.data.date) {
-                // All single-date transports now use `date` field
+            } else if (modalState.data.date && typeof modalState.data.date === 'string' && modalState.data.date.includes('-')) {
+                // FIX: Only convert if it's in YYYY-MM-DD format to prevent errors on back/next navigation.
                 modalState.data.date = formatDateFromInput(modalState.data.date);
             }
 
@@ -1541,8 +1539,6 @@
             delete finalData.mainType;
             delete finalData.subType;
             
-            // For flight, we now use `date` but old data used `dates`. 
-            // To prevent both from being saved, if `date` exists, remove `dates`.
             if (finalData.type === 'flight' && finalData.date) {
                 delete finalData.dates;
             }
@@ -1667,24 +1663,24 @@
         
         function fetchRoute(startCoords, endCoords) {
              return new Promise((resolve) => {
-                  const request = {
-                      origin: startCoords,
-                      destination: endCoords,
-                      travelMode: 'DRIVING'
-                  };
-                  directionsService.route(request, (result, status) => {
-                      if (status == 'OK') {
-                          const route = result.routes[0].legs[0];
-                          resolve({
-                              success: true,
-                              geometry: result.routes[0].overview_path.map(p => ({lat: p.lat(), lng: p.lng()})),
-                              duration: route.duration.value, // in seconds
-                              distance: route.distance.value, // in meters
-                          });
-                      } else {
-                          resolve({ success: false, message: `לא נמצא מסלול. (${status})` });
-                      }
-                  });
+                 const request = {
+                     origin: startCoords,
+                     destination: endCoords,
+                     travelMode: 'DRIVING'
+                 };
+                 directionsService.route(request, (result, status) => {
+                     if (status == 'OK') {
+                         const route = result.routes[0].legs[0];
+                         resolve({
+                             success: true,
+                             geometry: result.routes[0].overview_path.map(p => ({lat: p.lat(), lng: p.lng()})),
+                             duration: route.duration.value, // in seconds
+                             distance: route.distance.value, // in meters
+                         });
+                     } else {
+                         resolve({ success: false, message: `לא נמצא מסלול. (${status})` });
+                     }
+                 });
              });
         }
         
@@ -1994,9 +1990,9 @@
              try {
                const r = await fetch(url);
                if(!r.ok){
-                    let j; 
-                    try { j=await r.json() } catch{};
-                    throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
+                   let j; 
+                   try { j=await r.json() } catch{};
+                   throw new Error(j?.error||"שגיאה בחיפוש הטיסה");
                }
                const flights = await r.json();
                return { success: true, flights };
@@ -2084,7 +2080,6 @@
                         modalState.data.airline = flight.airline?.name;
                         modalState.data.flight_number = flight.number;
                         
-                        // 6. FIX: Auto-fill date, with fallback to user's search date
                         const departureTimeLocal = flight.departure?.scheduledTime?.local;
                         if (departureTimeLocal) {
                             modalState.data.date = formatDateFromInput(formatApiDateToInput(departureTimeLocal));
@@ -2111,7 +2106,6 @@
                         generateStepContent();
                         updateModalNav();
                           
-                        // 5. FIX: Automatically geocode and mark airports on map
                         setTimeout(async () => {
                               initializeFieldPlugins();
                               
@@ -2135,7 +2129,7 @@
                               ]);
 
                               showFinalRouteOnMap();
-                          }, 100);
+                        }, 100);
 
                     } else {
                         DOM.modalError.textContent = result.message || 'לא נמצאה טיסה תואמת.';
@@ -2191,27 +2185,47 @@
         // --- Autocomplete and Search Logic ---
         async function handlePlaceSelection(prediction, inputElement) {
             if (!prediction || !inputElement) return;
-
-            const baseId = inputElement.id.replace('_airport_address', '');
-            const nameInput = document.getElementById(`${baseId}_airport_name`);
-            const destinationInput = document.getElementById(`${baseId}_destination`);
-
-            if (nameInput) nameInput.value = prediction.structured_formatting.main_text;
-            if (destinationInput) destinationInput.value = prediction.structured_formatting.main_text;
-
-            let mapKey;
-            const inputId = inputElement.id;
-             if (inputId.startsWith('from_airport')) { mapKey = 'from'; } 
-             else if (inputId.startsWith('to_airport')) { mapKey = 'to'; } 
-             else if (inputId.startsWith('connection')) { mapKey = inputId.replace('_airport_address', '');} 
-             else { return; } 
-              
-            const formattedAddress = await findAddressOnMap(mapKey, null, prediction.place_id);
-            if (formattedAddress) {
-                inputElement.value = formattedAddress;
+        
+            // Immediately update input to give user feedback, geocode in background
+            inputElement.value = prediction.description;
+            const suggestionsContainer = document.getElementById(`${inputElement.id}-suggestions`);
+            if (suggestionsContainer) suggestionsContainer.innerHTML = '';
+        
+            const geocodeResult = await geocodeAddress(null, prediction.place_id);
+            if (geocodeResult.success) {
+                inputElement.value = geocodeResult.formattedAddress;
+            } else {
+                // If geocoding fails, stick with the description
+                inputElement.value = prediction.description;
             }
-
-            if (modalState.subType === 'flight') {
+        
+            const inputId = inputElement.id;
+            let mapKey = null;
+        
+            // Determine which map to update and which data to store
+            if (inputId === 'address') { // Hotel
+                mapKey = 'hotel';
+                if (geocodeResult.success) modalState.data.coords = geocodeResult.coords;
+            } else if (inputId.includes('_airport_address')) { // Flight
+                mapKey = inputId.replace('_airport_address', '');
+            } else if (inputId === 'from_address') { // Ride start
+                if (geocodeResult.success) modalState.data.from_coords = geocodeResult.coords;
+            } else if (inputId === 'to_address') { // Ride end
+                if (geocodeResult.success) modalState.data.to_coords = geocodeResult.coords;
+            }
+        
+            if (mapKey && geocodeResult.success) {
+                await findAddressOnMap(mapKey, geocodeResult.formattedAddress, prediction.place_id);
+            }
+        
+            // Auto-fill related fields specifically for flights from the prediction data
+            const isFlight = inputId.includes('_airport_address');
+            if (isFlight) {
+                const baseId = inputId.replace('_airport_address', '');
+                const nameInput = document.getElementById(`${baseId}_airport_name`);
+                const destinationInput = document.getElementById(`${baseId}_destination`);
+                if (nameInput) nameInput.value = prediction.structured_formatting.main_text;
+                if (destinationInput) destinationInput.value = prediction.structured_formatting.main_text;
                 setTimeout(showFinalRouteOnMap, 100);
             }
         }
@@ -2235,17 +2249,12 @@
             const inputId = inputElement.id;
             if (inputId === 'address') {
                 mapKey = 'hotel';
-            } else if (inputId.startsWith('from_airport')) {
-                mapKey = 'from';
-            } else if (inputId.startsWith('to_airport')) {
-                mapKey = 'to';
-            } else if (inputId.startsWith('connection')) {
-                mapKey = inputId.replace('_airport_address', ''); // e.g., 'connection-0'
+            } else if (inputId.includes('airport_address')) {
+                mapKey = inputId.replace('_airport_address', '');
             } else if (inputId === 'from_address' || inputId === 'to_address') {
-                mapKey = 'ride-route';
+                mapKey = 'ride-route'; // Just a temporary key, map is handled by 'calculate'
             } else {
-                 // Fallback for other simple cases like ferry/train destinations
-                 mapKey = inputId.replace('_destination', '').replace('_station','').replace('_location', '');
+                 mapKey = inputId;
             }
 
             placesService.findPlaceFromQuery(request, async (results, status) => {
@@ -2293,7 +2302,6 @@
                 suggestionDiv.innerHTML = `<i class="fas ${isAirport ? 'fa-plane-departure' : 'fa-map-marker-alt'} fa-fw text-slate-400 mr-2"></i> ${prediction.description}`;
                 
                 suggestionDiv.addEventListener('click', () => {
-                    suggestionsContainer.innerHTML = ''; // Hide suggestions immediately
                     handlePlaceSelection(prediction, input);
                 });
                 suggestionsContainer.appendChild(suggestionDiv);
@@ -2335,7 +2343,7 @@
                     <h3 id="details-modal-title" class="text-xl md:text-2xl font-bold text-slate-800 line-clamp-1">פרטי פריט</h3>
                     <button id="details-modal-close-btn" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
                 </div>
-                <div class="flex-grow overflow-y-auto p-4 sm:p-6 space-y-6">`; // 2. FIX: Added scrollable container
+                <div class="flex-grow overflow-y-auto p-4 sm:p-6 space-y-6">`;
 
             switch(item.type) {
                 case 'hotel': contentHtml += generateHotelDetailsHTML(item); break;
@@ -2371,7 +2379,6 @@
         }
 
         // --- Details HTML Generators (Redesigned) ---
-        // 2. FIX: Helper function for creating consistent detail items
         function createDetailItem(icon, label, value, extraClasses = '') {
             if (!value || value === '-') return '';
             return `<div class="bg-slate-50 p-3 rounded-lg ${extraClasses}">
@@ -2408,7 +2415,7 @@
                      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}" target="_blank" class="text-center bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition ${item.address ? '' : 'opacity-50 cursor-not-allowed'}">ניווט <i class="fa-solid fa-diamond-turn-right text-xs"></i></a>
                  </div>
                  ${item.coords ? '<div id="details-map" class="details-map-container map-container mt-4"></div>' : ''}
-              `;
+               `;
         }
         
         function generateRideDetailsHTML(item) {
