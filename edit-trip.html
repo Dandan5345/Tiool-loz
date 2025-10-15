@@ -12,64 +12,152 @@
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Assistant', sans-serif; background-color: #f1f5f9; }
+        :root {
+            --primary-color: #4f46e5; /* indigo-600 */
+            --secondary-color: #10b981; /* emerald-500 */
+        }
+        body { font-family: 'Assistant', sans-serif; background-color: #f8fafc; }
         .leaflet-container { font-family: 'Assistant', sans-serif; }
-        #map { height: 100%; width: 100%; border-radius: 1rem; z-index: 0; }
+        
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        .place-card { transition: all 0.2s ease-in-out; border-right: 4px solid transparent; }
-        .place-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
-        .place-card.highlight { border-right-color: #3b82f6; background-color: #eff6ff; }
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .fade-out { animation: fadeOut 0.3s ease-in forwards; }
 
+        /* --- Custom Components --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-primary:hover { background-color: #4338ca; }
+        .btn-secondary { background-color: var(--secondary-color); color: white; }
+        .btn-secondary:hover { background-color: #059669; }
+        .btn-ghost { background-color: transparent; color: #475569; }
+        .btn-ghost:hover { background-color: #f1f5f9; color: #1e293b; }
+
+        /* Route Building Step Timeline */
         .route-step {
             position: relative;
-            padding-right: 3rem;
+            padding-right: 3.5rem;
             padding-bottom: 1.5rem;
+            min-height: 60px;
         }
         .route-step:not(:last-child)::before {
             content: '';
             position: absolute;
-            top: 1.5rem;
-            right: 1.25rem;
+            top: 40px;
+            right: 19px;
             width: 2px;
-            height: calc(100% - 1.25rem);
+            height: calc(100% - 20px);
             background-color: #e2e8f0;
         }
-        .step-icon {
+        .step-icon-wrapper {
             position: absolute;
             top: 0;
             right: 0;
-            width: 2.5rem;
-            height: 2.5rem;
+            width: 40px;
+            height: 40px;
             border-radius: 9999px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            border: 3px solid #f1f5f9;
+            background-color: white;
+            border: 2px solid #e2e8f0;
+        }
+        .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
+        /* Map Marker Styling */
         .custom-marker-icon {
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
             border: 2px solid white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             transition: all 0.2s ease;
         }
         .custom-marker-icon.highlight {
             transform: scale(1.5);
-            z-index: 1000;
+            z-index: 1000 !important;
         }
-        .fade-out { animation: fadeOut 0.4s ease-out forwards; }
-        @keyframes fadeOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+
+        /* --- Summary View --- */
+        #summary-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100%;
+        }
+        #summary-map-container {
+            min-height: 300px;
+            height: 40vh;
+        }
+        .summary-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .summary-step-num {
+            flex-shrink: 0;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 9999px;
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         
-        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* Print Styles */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #summary-panel, #summary-panel * {
+                visibility: visible;
+            }
+            #summary-panel {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+            #summary-map-container {
+                height: 400px;
+                width: 100%;
+                page-break-after: always;
+            }
+            #summary-details {
+                margin: 0;
+                padding: 0;
+            }
+            .no-print {
+                display: none !important;
+            }
         }
     </style>
 </head>
@@ -77,83 +165,94 @@
 
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
-        <i class="fas fa-route text-5xl text-blue-600 animate-pulse"></i>
+        <i class="fas fa-route text-5xl text-indigo-600 animate-pulse"></i>
         <p class="text-xl font-bold text-slate-700">טוען נתונים...</p>
     </div>
 
     <!-- Main Content -->
     <div id="main-content" class="h-screen flex flex-col hidden">
-        <header class="bg-white shadow-md z-20">
+        <header class="bg-white shadow-sm z-20 border-b border-slate-200">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                     <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה למרכז הטיול">
-                        <i class="fas fa-arrow-right fa-lg"></i>
-                    </a>
-                    <a id="all-routes-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="כל המסלולים השמורים">
-                        <i class="fas fa-list-ul fa-lg"></i>
-                    </a>
+                <div class="flex items-center gap-4">
+                    <i class="fas fa-route text-2xl text-indigo-600"></i>
                     <h1 class="text-xl font-bold text-slate-800">בניית מסלול חכם</h1>
                 </div>
-                 <div id="auth-container" class="text-sm font-semibold text-slate-700"></div>
+                 <div class="flex items-center gap-2">
+                    <a id="all-routes-btn" href="#" class="btn btn-ghost" title="כל המסלולים השמורים">
+                        <i class="fas fa-list-ul mr-2"></i>
+                        <span>כל המסלולים</span>
+                    </a>
+                     <a id="back-to-trip-btn" href="#" class="btn btn-ghost" title="חזרה למרכז הטיול">
+                        <i class="fas fa-arrow-right mr-2"></i>
+                        <span>חזרה לטיול</span>
+                    </a>
+                    <div id="auth-container" class="text-sm font-semibold text-slate-600 bg-slate-100 px-3 py-2 rounded-lg"></div>
+                 </div>
             </div>
         </header>
 
         <div class="flex-grow flex flex-col md:flex-row overflow-hidden">
+            
             <!-- Right Panel (Controls) -->
-            <aside id="controls-panel" class="w-full md:w-1/3 lg:w-1/4 bg-white p-4 flex flex-col overflow-y-auto no-scrollbar border-l">
+            <aside id="controls-panel" class="w-full md:w-2/5 lg:w-1/3 bg-white p-4 flex flex-col overflow-y-auto no-scrollbar border-l border-slate-200">
                 <!-- Initial State -->
                 <div id="initial-state" class="text-center p-8 flex-grow flex flex-col items-center justify-center">
-                    <i class="fas fa-magic-wand-sparkles fa-4x text-purple-400 mb-6"></i>
+                    <i class="fas fa-magic-wand-sparkles fa-4x text-indigo-400 mb-6"></i>
                     <h2 class="text-2xl font-bold text-slate-800">מוכן לבנות מסלול?</h2>
                     <p class="text-slate-500 mt-2">התחל ביצירת מסלול חדש כדי לתכנן את היום המושלם.</p>
-                    <button id="create-route-btn" class="mt-6 w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+                    <button id="create-route-btn" class="mt-8 btn btn-primary w-full max-w-sm">
                         <i class="fas fa-plus mr-2"></i> צור מסלול חדש
                     </button>
                 </div>
 
                 <!-- Building State -->
                 <div id="building-state" class="hidden flex-grow flex flex-col">
-                   <div id="current-route-info" class="mb-4 p-3 bg-slate-50 rounded-lg">
+                   <div class="space-y-1 mb-4">
                        <h2 id="route-title" class="text-2xl font-bold text-slate-800"></h2>
-                       <p id="route-destination" class="text-slate-500 font-semibold"></p>
+                       <p id="route-destination" class="text-slate-500 font-semibold flex items-center gap-2"><i class="fas fa-map-pin"></i> <span></span></p>
                    </div>
                    
-                   <!-- Current Route Steps -->
-                   <div class="mb-4">
-                       <h3 class="font-bold text-slate-700 mb-2">המסלול שלך:</h3>
-                       <div id="route-steps-container" class="space-y-0">
-                           <p id="start-prompt" class="text-center text-slate-500 bg-slate-50 p-4 rounded-lg">בחר נקודת התחלה מהרשימה או מהמפה...</p>
+                   <div class="flex-grow flex flex-col min-h-0">
+                       <div class="border bg-slate-50 rounded-lg p-4 flex-grow flex flex-col min-h-0">
+                            <h3 class="font-bold text-slate-700 mb-3 text-lg">תחנות במסלול:</h3>
+                            <div id="route-steps-container" class="flex-grow overflow-y-auto no-scrollbar pr-2 -mr-2">
+                                <p id="start-prompt" class="text-center text-slate-500 p-4">בחר נקודת התחלה מהרשימה או מהמפה...</p>
+                            </div>
+                            <button id="finish-route-btn" class="w-full btn btn-secondary mt-4 hidden"><i class="fas fa-flag-checkered mr-2"></i>סיים והצג סיכום מסלול</button>
                        </div>
                    </div>
-                   <button id="finish-route-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg hidden"><i class="fas fa-flag-checkered mr-2"></i>סיים ושמור מסלול</button>
 
-                   <!-- Suggestions & Search -->
-                   <div id="suggestions-area" class="flex-grow flex flex-col mt-4 border-t pt-4">
-                        <h3 id="suggestions-title" class="font-bold text-slate-700 mb-3 text-lg">מקומות קרובים:</h3>
-                        <!-- Search & Filter -->
-                        <div class="mb-4 space-y-2 sticky top-0 bg-white py-2">
-                            <input type="search" id="search-places-input" class="w-full p-2 border rounded-md" placeholder="🔍 חפש מקום ספציפי...">
-                            <select id="category-filter-select" class="w-full p-2 border rounded-md bg-white">
+                   <div class="flex-grow flex flex-col mt-4 pt-4 min-h-0">
+                        <h3 id="suggestions-title" class="font-bold text-slate-700 mb-3 text-lg">הוספת מקומות:</h3>
+                        <div class="mb-4 space-y-2 sticky top-0 bg-white py-2 z-10">
+                            <input type="search" id="search-places-input" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="🔍 חפש מקום ספציפי...">
+                            <select id="category-filter-select" class="w-full p-2 border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                 <option value="all">כל הקטגוריות</option>
                             </select>
                         </div>
-                        <div id="places-list-container" class="overflow-y-auto no-scrollbar space-y-3">
+                        <div id="places-list-container" class="overflow-y-auto no-scrollbar space-y-3 flex-grow">
                            <!-- Place cards will be injected here -->
                         </div>
                    </div>
                 </div>
             </aside>
 
-            <!-- Left Panel (Map) -->
-            <main class="flex-grow bg-slate-200 p-2">
-                <div id="map"></div>
+            <!-- Main Panel (Map / Summary) -->
+            <main id="main-panel" class="flex-grow bg-slate-100 p-2 md:p-4">
+                <div id="map-view" class="h-full w-full">
+                    <div id="map" class="h-full w-full rounded-2xl shadow-lg border-2 border-white"></div>
+                </div>
+                
+                <div id="summary-view" class="hidden h-full w-full bg-white rounded-2xl shadow-lg overflow-hidden">
+                   <!-- Summary will be rendered here -->
+                </div>
             </main>
         </div>
     </div>
     
     <!-- Modals -->
     <div id="create-route-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in">
             <h3 class="text-2xl font-bold text-slate-800 mb-4">יצירת מסלול חדש</h3>
             <form id="create-route-form" class="space-y-4">
                 <div>
@@ -167,11 +266,16 @@
                     </select>
                 </div>
                 <div class="flex justify-end gap-3 pt-4">
-                    <button type="button" id="cancel-create-route" class="py-2 px-5 bg-slate-200 font-semibold rounded-lg hover:bg-slate-300">ביטול</button>
-                    <button type="submit" class="py-2 px-5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">התחל לבנות</button>
+                    <button type="button" id="cancel-create-route" class="btn bg-slate-200 text-slate-700 hover:bg-slate-300">ביטול</button>
+                    <button type="submit" class="btn btn-primary">התחל לבנות</button>
                 </div>
             </form>
         </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white py-3 px-6 rounded-lg shadow-xl transition-all duration-300 transform translate-y-20 opacity-0 z-[100]">
+        <p id="toast-message"></p>
     </div>
 
 
@@ -180,7 +284,7 @@
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
     
-        // --- Firebase Config ---
+        // --- Firebase Config (Placeholder) ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -196,19 +300,19 @@
         // --- Global State & UI Elements ---
         let currentUser, tripId, tripData;
         let allPlaces = [], allHotels = [], availablePoints = [];
-        let currentRoute = [];
-        let map, routePolyline, routeDecorator, mapMarkers = new Map();
+        let currentRoute = { name: '', destination: '', steps: [] };
+        let map, summaryMap, routePolyline, routeDecorator, summaryRoutePolyline, summaryRouteDecorator, mapMarkers = new Map();
 
         const categoryIcons = {
-            "מסעדה/אוכל": { icon: "fa-utensils", color: "#fb923c" }, // orange-400
-            "מלון": { icon: "fa-hotel", color: "#8b5cf6" }, // violet-500
-            "מוזיאון": { icon: "fa-landmark", color: "#78716c" }, // stone-500
-            "קניון/מרכז קניות": { icon: "fa-shopping-bag", color: "#ec4899" }, // pink-500
-            "אטרקציה": { icon: "fa-star", color: "#f59e0b" }, // amber-500
-            "חוף": { icon: "fa-umbrella-beach", color: "#06b6d4" }, // cyan-500
-            "סיור": { icon: "fa-person-walking", color: "#10b981" }, // emerald-500
-            "סופר": { icon: "fa-shopping-cart", color: "#6366f1" }, // indigo-500
-            "default": { icon: "fa-map-marker-alt", color: "#64748b" } // slate-500
+            "מסעדה/אוכל": { icon: "fa-utensils", color: "#fb923c" },
+            "מלון": { icon: "fa-hotel", color: "#8b5cf6" },
+            "מוזיאון": { icon: "fa-landmark", color: "#78716c" },
+            "קניון/מרכז קניות": { icon: "fa-shopping-bag", color: "#ec4899" },
+            "אטרקציה": { icon: "fa-star", color: "#f59e0b" },
+            "חוף": { icon: "fa-umbrella-beach", color: "#06b6d4" },
+            "סיור": { icon: "fa-person-walking", color: "#10b981" },
+            "סופר": { icon: "fa-shopping-cart", color: "#6366f1" },
+            "default": { icon: "fa-map-marker-alt", color: "#64748b" }
         };
 
         const DOM = {
@@ -217,25 +321,26 @@
             authContainer: document.getElementById('auth-container'),
             backToTripBtn: document.getElementById('back-to-trip-btn'),
             allRoutesBtn: document.getElementById('all-routes-btn'),
-            
             initialState: document.getElementById('initial-state'),
             buildingState: document.getElementById('building-state'),
-            
             createRouteModal: document.getElementById('create-route-modal'),
             createRouteForm: document.getElementById('create-route-form'),
             createRouteBtn: document.getElementById('create-route-btn'),
             cancelCreateRouteBtn: document.getElementById('cancel-create-route'),
             destinationSelect: document.getElementById('destination-select'),
-
             routeTitle: document.getElementById('route-title'),
-            routeDestination: document.getElementById('route-destination'),
+            routeDestination: document.querySelector('#route-destination span'),
             routeStepsContainer: document.getElementById('route-steps-container'),
             startPrompt: document.getElementById('start-prompt'),
             finishRouteBtn: document.getElementById('finish-route-btn'),
             suggestionsTitle: document.getElementById('suggestions-title'),
             searchPlacesInput: document.getElementById('search-places-input'),
             categoryFilterSelect: document.getElementById('category-filter-select'),
-            placesListContainer: document.getElementById('places-list-container')
+            placesListContainer: document.getElementById('places-list-container'),
+            mapView: document.getElementById('map-view'),
+            summaryView: document.getElementById('summary-view'),
+            toast: document.getElementById('toast'),
+            toastMessage: document.getElementById('toast-message'),
         };
         
         // --- Initialization ---
@@ -243,8 +348,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('id') || urlParams.get('tripId');
             if (!tripId) {
-                alert("שגיאה: לא נמצא מזהה טיול.");
-                window.location.href = 'index.html';
+                showToast("שגיאה: לא נמצא מזהה טיול.", true);
                 return;
             }
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
@@ -260,7 +364,8 @@
                 populateDestinationSelect();
                 setupEventListeners();
                 
-                DOM.loadingOverlay.style.display = 'none';
+                DOM.loadingOverlay.classList.add('fade-out');
+                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
                 DOM.mainContent.classList.remove('hidden');
                 DOM.mainContent.classList.add('flex', 'flex-col');
             });
@@ -288,7 +393,7 @@
 
         function populateDestinationSelect() {
             DOM.destinationSelect.innerHTML = '<option value="" disabled selected>בחר יעד...</option>';
-            if (tripData && tripData.destinations) {
+            if (tripData?.destinations) {
                 tripData.destinations.forEach(dest => {
                     const option = document.createElement('option');
                     option.value = dest.nameHe;
@@ -300,12 +405,15 @@
 
         // --- UI Logic & State Transitions ---
         function startRouteBuilding(routeName, destination) {
+            currentRoute = { name: routeName, destination: destination, steps: [] };
             DOM.initialState.classList.add('hidden');
             DOM.buildingState.classList.remove('hidden');
-            DOM.buildingState.classList.add('flex', 'flex-col');
+            DOM.buildingState.classList.add('flex');
+            DOM.mapView.classList.remove('hidden');
+            DOM.summaryView.classList.add('hidden');
 
             DOM.routeTitle.textContent = routeName;
-            DOM.routeDestination.textContent = `יעד: ${destination}`;
+            DOM.routeDestination.textContent = destination;
             
             availablePoints = [
                 ...allPlaces.filter(p => p.destination === destination),
@@ -313,35 +421,52 @@
             ].filter(p => p.coords);
 
             populateCategoryFilter();
-            renderAvailablePoints();
-            initMap(destination);
+            updateSuggestions();
+            initMap('map');
             
             DOM.createRouteModal.classList.add('hidden');
             DOM.createRouteModal.classList.remove('flex');
         }
 
+        function showSummaryView() {
+            DOM.buildingState.classList.add('hidden');
+            DOM.mapView.classList.add('hidden');
+            DOM.summaryView.classList.remove('hidden');
+            renderSummary();
+            initMap('summary-map');
+            updateMapPolyline(summaryMap, summaryRoutePolyline, summaryRouteDecorator, true);
+        }
+
+        function editRoute() {
+             DOM.buildingState.classList.remove('hidden');
+             DOM.mapView.classList.remove('hidden');
+             DOM.summaryView.classList.add('hidden');
+             if(summaryMap) {
+                summaryMap.remove();
+                summaryMap = null;
+             }
+        }
+        
         function populateCategoryFilter() {
             const categories = [...new Set(availablePoints.map(p => p.type || 'ללא קטגוריה'))];
             DOM.categoryFilterSelect.innerHTML = '<option value="all">כל הקטגוריות</option>';
             categories.sort().forEach(cat => {
-                const iconInfo = categoryIcons[cat] || categoryIcons.default;
                 const option = document.createElement('option');
                 option.value = cat;
-                option.textContent = `${cat}`;
+                option.textContent = cat;
                 DOM.categoryFilterSelect.appendChild(option);
             });
         }
 
         // --- Rendering ---
-        function renderAvailablePoints(pointsToRender = availablePoints) {
+        function renderAvailablePoints() {
             const searchTerm = DOM.searchPlacesInput.value.toLowerCase();
             const category = DOM.categoryFilterSelect.value;
             
-            const filteredPoints = pointsToRender.filter(p => {
-                const nameMatch = p.name.toLowerCase().includes(searchTerm);
-                const categoryMatch = category === 'all' || p.type === category;
-                return nameMatch && categoryMatch;
-            });
+            const filteredPoints = availablePoints.filter(p => 
+                (p.name.toLowerCase().includes(searchTerm)) && 
+                (category === 'all' || p.type === category)
+            );
             
             if (filteredPoints.length === 0) {
                  DOM.placesListContainer.innerHTML = `<p class="text-center text-slate-500 p-4">לא נמצאו מקומות תואמים.</p>`;
@@ -353,96 +478,164 @@
 
         function createPlaceCardHTML(point) {
             const iconInfo = categoryIcons[point.type] || categoryIcons.default;
-            const distanceText = point.distance != null ? `<span class="text-sm font-bold text-slate-600">${point.distance.toFixed(1)} ק"מ</span>` : '';
+            const distanceText = point.distance != null ? `<span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">${point.distance.toFixed(1)} ק"מ</span>` : '';
             return `
-                <div class="place-card bg-white border rounded-lg p-3 flex items-center gap-4 cursor-pointer" data-id="${point.id}" style="border-right-color: ${iconInfo.color};">
-                    <div class="flex-shrink-0 text-lg" style="color: ${iconInfo.color};"><i class="fas ${iconInfo.icon} fa-fw"></i></div>
+                <div class="place-card bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:shadow-md hover:border-indigo-400 transition-all" data-id="${point.id}">
+                    <div class="flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;"><i class="fas ${iconInfo.icon} fa-fw"></i></div>
                     <div class="flex-grow min-w-0">
                         <p class="font-bold text-slate-800 truncate">${point.name}</p>
                         <p class="text-sm text-slate-500">${point.type}</p>
                     </div>
                     ${distanceText}
-                    <button class="add-point-btn bg-green-500 text-white w-8 h-8 rounded-full flex-shrink-0 hover:bg-green-600 transition transform hover:scale-110"><i class="fas fa-plus"></i></button>
+                    <button class="add-point-btn bg-green-500 text-white w-8 h-8 rounded-full flex-shrink-0 hover:bg-green-600 transition transform hover:scale-110 flex items-center justify-center"><i class="fas fa-plus"></i></button>
                 </div>
             `;
         }
 
         function renderCurrentRoute() {
-            if (currentRoute.length === 0) {
+            if (currentRoute.steps.length === 0) {
                 DOM.routeStepsContainer.innerHTML = '';
                 DOM.startPrompt.classList.remove('hidden');
                 DOM.finishRouteBtn.classList.add('hidden');
             } else {
                 DOM.startPrompt.classList.add('hidden');
                 DOM.finishRouteBtn.classList.remove('hidden');
-                DOM.routeStepsContainer.innerHTML = currentRoute.map((step, index) => {
+                DOM.routeStepsContainer.innerHTML = currentRoute.steps.map((step, index) => {
                     const iconInfo = categoryIcons[step.type] || categoryIcons.default;
                     return `
-                        <div class="route-step">
-                            <div class="step-icon text-white" style="background-color: ${iconInfo.color};"><i class="fas ${iconInfo.icon}"></i></div>
-                            <div class="flex justify-between items-center">
+                        <div class="route-step fade-in">
+                            <div class="step-icon-wrapper">
+                                <div class="step-icon text-white" style="background-color: ${iconInfo.color};"><i class="fas ${iconInfo.icon}"></i></div>
+                            </div>
+                            <div class="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
                                 <div>
                                     <p class="font-bold text-slate-800">${step.name}</p>
                                     <p class="text-sm text-slate-500">${index === 0 ? 'נקודת התחלה' : `תחנה ${index + 1}`}</p>
                                 </div>
-                                <button class="remove-step-btn text-red-500 hover:text-red-700 p-2" data-id="${step.id}"><i class="fas fa-times"></i></button>
+                                <button class="remove-step-btn text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50" data-id="${step.id}"><i class="fas fa-times"></i></button>
                             </div>
                         </div>
                     `;
                 }).join('');
             }
-            updateMapPolyline();
+            updateMapPolyline(map, routePolyline, routeDecorator, false);
+        }
+
+        function renderSummary() {
+            DOM.summaryView.innerHTML = `
+                <div id="summary-panel">
+                    <div id="summary-details" class="bg-white p-4 md:p-6 overflow-y-auto no-scrollbar">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 class="text-3xl font-extrabold text-slate-800">${currentRoute.name}</h2>
+                                <p class="text-slate-500 font-semibold text-lg">${currentRoute.destination}</p>
+                            </div>
+                            <div class="flex items-center gap-2 no-print">
+                                <button id="edit-route-btn" class="btn btn-ghost"><i class="fas fa-pencil-alt mr-2"></i>עריכה</button>
+                                <button id="print-route-btn" class="btn btn-ghost"><i class="fas fa-print mr-2"></i>הדפסה</button>
+                                <button id="copy-route-btn" class="btn btn-primary"><i class="fas fa-copy mr-2"></i>העתק לוז</button>
+                            </div>
+                        </div>
+                        <div id="summary-legend" class="border-t border-slate-200 pt-4">
+                            ${currentRoute.steps.map((step, index) => {
+                                const iconInfo = categoryIcons[step.type] || categoryIcons.default;
+                                return `
+                                <div class="summary-step">
+                                    <div class="summary-step-num">${index + 1}</div>
+                                    <div class="flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
+                                        <i class="fas ${iconInfo.icon} fa-fw"></i>
+                                    </div>
+                                    <div class="flex-grow">
+                                        <p class="font-bold text-slate-800">${step.name}</p>
+                                        <p class="text-sm text-slate-500">${step.type}</p>
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                    <div id="summary-map-container" class="w-full relative">
+                        <div id="summary-map" class="h-full w-full"></div>
+                    </div>
+                </div>
+            `;
+            // Add listeners for new buttons
+            document.getElementById('copy-route-btn').addEventListener('click', copyRouteToClipboard);
+            document.getElementById('print-route-btn').addEventListener('click', () => window.print());
+            document.getElementById('edit-route-btn').addEventListener('click', editRoute);
         }
 
         // --- Map Logic (Leaflet) ---
-        function initMap(destination) {
-            if (map) map.remove();
+        function initMap(mapContainerId) {
+            let targetMap = mapContainerId === 'map' ? map : summaryMap;
+            if (targetMap) targetMap.remove();
             
-            map = L.map('map');
+            targetMap = L.map(mapContainerId);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            }).addTo(map);
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            }).addTo(targetMap);
 
-            mapMarkers.forEach(marker => marker.remove());
-            mapMarkers.clear();
+            if (mapContainerId === 'map') {
+                map = targetMap;
+                mapMarkers.forEach(marker => marker.remove());
+                mapMarkers.clear();
 
-            const bounds = L.latLngBounds();
-            
-            availablePoints.forEach(p => {
-                const iconInfo = categoryIcons[p.type] || categoryIcons.default;
-                const customIcon = L.divIcon({
-                    html: `<i class="fas ${iconInfo.icon}"></i>`,
-                    className: 'custom-marker-icon',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15],
-                    popupAnchor: [0, -15],
-                    html: `<div class="custom-marker-icon" style="background-color:${iconInfo.color}; color: white; width: 30px; height: 30px; font-size: 14px;"><i class="fas ${iconInfo.icon}"></i></div>`
-                });
+                availablePoints.forEach(p => createMarker(p, map));
+                currentRoute.steps.forEach(p => createMarker(p, map));
+                
+                routePolyline = L.polyline([], {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(map);
+                routeDecorator = L.polylineDecorator(routePolyline, {
+                    patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
+                }).addTo(map);
 
-                const marker = L.marker([p.coords.lat, p.coords.lng], { icon: customIcon }).addTo(map);
-                marker.bindPopup(`<b>${p.name}</b><br>${p.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${p.id}">הוסף למסלול</button>`);
-                mapMarkers.set(p.id, marker);
-                bounds.extend([p.coords.lat, p.coords.lng]);
-            });
-
-            if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-            else {
-                 const destData = tripData.destinations.find(d => d.nameHe === destination);
-                 if(destData && destData.coords) map.setView([destData.coords.lat, destData.coords.lng], 12);
-                 else map.setView([31.7683, 35.2137], 8);
+            } else {
+                summaryMap = targetMap;
+                currentRoute.steps.forEach((p, index) => createMarker(p, summaryMap, index + 1));
+                summaryRoutePolyline = L.polyline([], {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(summaryMap);
+                summaryRouteDecorator = L.polylineDecorator(summaryRoutePolyline, {
+                    patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
+                }).addTo(summaryMap);
             }
             
-            routePolyline = L.polyline([], {color: '#ef4444', weight: 4}).addTo(map);
-            routeDecorator = L.polylineDecorator(routePolyline, {
-                patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
-            }).addTo(map);
+            updateMapBounds(targetMap);
+        }
+        
+        function createMarker(point, targetMap, label = null) {
+            const iconInfo = categoryIcons[point.type] || categoryIcons.default;
+            const markerHtml = label 
+                ? `<div class="custom-marker-icon font-bold" style="background-color:${iconInfo.color}; color: white; width: 32px; height: 32px; font-size: 16px;">${label}</div>`
+                : `<div class="custom-marker-icon" style="background-color:${iconInfo.color}; color: white; width: 30px; height: 30px; font-size: 14px;"><i class="fas ${iconInfo.icon}"></i></div>`;
+            
+            const customIcon = L.divIcon({ html: markerHtml, className: 'custom-marker-icon-wrapper', iconSize: [30, 30], iconAnchor: [15, 15] });
+            const marker = L.marker([point.coords.lat, point.coords.lng], { icon: customIcon }).addTo(targetMap);
+            
+            if (!label) { // Only add popups to the building map
+                 marker.bindPopup(`<b>${point.name}</b><br>${point.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${point.id}">הוסף למסלול</button>`);
+                 mapMarkers.set(point.id, marker);
+            }
         }
 
-        function updateMapPolyline() {
-            const latlngs = currentRoute.map(p => [p.coords.lat, p.coords.lng]);
-            routePolyline.setLatLngs(latlngs);
-            routeDecorator.setPaths(routePolyline);
-            if(latlngs.length > 0) map.fitBounds(routePolyline.getBounds(), {padding: [50, 50]});
+        function updateMapBounds(targetMap) {
+            const pointsForBounds = targetMap === map ? [...availablePoints, ...currentRoute.steps] : currentRoute.steps;
+            if (pointsForBounds.length === 0) {
+                 const destData = tripData.destinations.find(d => d.nameHe === currentRoute.destination);
+                 if(destData?.coords) targetMap.setView([destData.coords.lat, destData.coords.lng], 12);
+                 else targetMap.setView([31.7683, 35.2137], 8);
+                 return;
+            }
+            const bounds = L.latLngBounds(pointsForBounds.map(p => [p.coords.lat, p.coords.lng]));
+            if (bounds.isValid()) targetMap.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        function updateMapPolyline(targetMap, polyline, decorator, isSummary) {
+            if (!targetMap || !polyline) return;
+            const latlngs = currentRoute.steps.map(p => [p.coords.lat, p.coords.lng]);
+            polyline.setLatLngs(latlngs);
+            decorator.setPaths(polyline);
+            if(latlngs.length > 1) {
+                targetMap.fitBounds(polyline.getBounds(), {padding: [50, 50]});
+            } else if (isSummary && latlngs.length > 0) {
+                targetMap.setView(latlngs[0], 14);
+            }
         }
         
         // --- Core Route-Building Logic ---
@@ -450,32 +643,28 @@
             const cardElement = DOM.placesListContainer.querySelector(`.place-card[data-id="${pointId}"]`);
             if (!cardElement) return;
 
-            cardElement.classList.add('fade-out');
+            const pointToAdd = availablePoints.find(p => p.id === pointId);
+            if (!pointToAdd) return;
+            
+            currentRoute.steps.push(pointToAdd);
+            availablePoints = availablePoints.filter(p => p.id !== pointId);
 
-            setTimeout(() => {
-                const pointToAdd = availablePoints.find(p => p.id === pointId);
-                if (!pointToAdd) return;
-                
-                currentRoute.push(pointToAdd);
-                availablePoints = availablePoints.filter(p => p.id !== pointId);
-
-                renderCurrentRoute();
-                updateSuggestions();
-                
-                const marker = mapMarkers.get(pointId);
-                if(marker) {
-                    marker.closePopup();
-                    marker.unbindPopup();
-                    marker.bindPopup(`<b>${pointToAdd.name}</b><br><span class="font-bold text-green-600">הוסף למסלול!</span>`);
-                }
-            }, 400);
+            renderCurrentRoute();
+            updateSuggestions();
+            
+            const marker = mapMarkers.get(pointId);
+            if(marker) {
+                marker.closePopup();
+                marker.unbindPopup();
+                marker.bindPopup(`<b>${pointToAdd.name}</b><br><span class="font-bold text-green-600">הוסף למסלול!</span>`);
+            }
         }
         
         function removePointFromRoute(pointId) {
-            const pointToRemove = currentRoute.find(p => p.id === pointId);
+            const pointToRemove = currentRoute.steps.find(p => p.id === pointId);
             if(!pointToRemove) return;
             
-            currentRoute = currentRoute.filter(p => p.id !== pointId);
+            currentRoute.steps = currentRoute.steps.filter(p => p.id !== pointId);
             availablePoints.push(pointToRemove);
             
             renderCurrentRoute();
@@ -488,13 +677,13 @@
         }
 
         function updateSuggestions() {
-            if (currentRoute.length === 0) {
-                DOM.suggestionsTitle.textContent = "כל המקומות הזמינים ליעד:";
+            if (currentRoute.steps.length === 0) {
+                DOM.suggestionsTitle.textContent = "הוספת מקומות:";
                 availablePoints.forEach(p => delete p.distance);
                 availablePoints.sort((a,b) => a.name.localeCompare(b.name, 'he'));
             } else {
                 DOM.suggestionsTitle.textContent = "הצעות למקום הבא (הקרובים ביותר):";
-                const lastPoint = currentRoute[currentRoute.length - 1];
+                const lastPoint = currentRoute.steps[currentRoute.steps.length - 1];
                 availablePoints.forEach(p => { p.distance = calculateDistance(lastPoint.coords, p.coords); });
                 availablePoints.sort((a, b) => a.distance - b.distance);
             }
@@ -508,6 +697,36 @@
             const dLon = (coords2.lng - coords1.lng) * Math.PI / 180;
             const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(coords1.lat * Math.PI / 180) * Math.cos(coords2.lat * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        function copyRouteToClipboard() {
+            let message = ` маршрут *${currentRoute.name}* маршрут \n\n`;
+            message += `המסלול שלנו ל*${currentRoute.destination}*:\n\n`;
+            currentRoute.steps.forEach((step, index) => {
+                message += `${index + 1}. 📍 *${step.name}*\n`;
+                if(index < currentRoute.steps.length - 1) {
+                    message += `⬇️\n`;
+                }
+            });
+            message += `\nתהנו! ✨`;
+            
+            navigator.clipboard.writeText(message).then(() => {
+                showToast("הלו\"ז הועתק בהצלחה!");
+            }).catch(err => {
+                showToast("שגיאה בהעתקה", true);
+                console.error('Failed to copy: ', err);
+            });
+        }
+        
+        function showToast(message, isError = false) {
+            DOM.toastMessage.textContent = message;
+            DOM.toast.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-lg shadow-xl transition-all duration-300 transform z-[100]`; // Reset
+            DOM.toast.classList.add(isError ? 'bg-red-600' : 'bg-slate-800', 'translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                DOM.toast.classList.remove('translate-y-0', 'opacity-100');
+                DOM.toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
         }
 
         // --- Event Listeners Setup ---
@@ -529,14 +748,16 @@
                 if(routeName && destination) startRouteBuilding(routeName, destination);
             });
 
-            DOM.searchPlacesInput.addEventListener('input', () => updateSuggestions());
-            DOM.categoryFilterSelect.addEventListener('change', () => updateSuggestions());
+            DOM.searchPlacesInput.addEventListener('input', () => renderAvailablePoints());
+            DOM.categoryFilterSelect.addEventListener('change', () => renderAvailablePoints());
             
             DOM.placesListContainer.addEventListener('click', (e) => {
                 const card = e.target.closest('.place-card');
                 if (!card) return;
                 const id = card.dataset.id;
-                if (e.target.closest('.add-point-btn')) addPointToRoute(id);
+                if (e.target.closest('.add-point-btn')) {
+                     addPointToRoute(id);
+                }
             });
             
             DOM.placesListContainer.addEventListener('mouseover', e => {
@@ -559,20 +780,13 @@
                 if (removeBtn) removePointFromRoute(removeBtn.dataset.id);
             });
             
-            map?.on('popupopen', (e) => {
-                const addBtn = e.popup._container.querySelector('.add-point-from-popup');
-                if (addBtn) addBtn.onclick = () => addPointToRoute(addBtn.dataset.id);
-            });
-             map?.on('mouseover', e => {
-                if(e.originalEvent.target.closest('.leaflet-marker-icon')){
-                   // This is complex to link back to the card, so we'll skip this side of the interaction for now.
+            document.body.addEventListener('click', (e) => {
+                if (e.target.matches('.add-point-from-popup')) {
+                    addPointToRoute(e.target.dataset.id);
                 }
             });
 
-            DOM.finishRouteBtn.addEventListener('click', () => {
-                console.log("Finished Route:", currentRoute);
-                alert(`המסלול "${DOM.routeTitle.textContent}" נשמר עם ${currentRoute.length} תחנות!`);
-            });
+            DOM.finishRouteBtn.addEventListener('click', showSummaryView);
         }
         
         initPage();
