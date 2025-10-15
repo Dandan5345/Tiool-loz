@@ -17,8 +17,9 @@
             --secondary-color: #10b981; /* emerald-500 */
         }
         html, body {
-             height: 100%;
-             overflow: hidden;
+            height: 100%;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
         body { font-family: 'Assistant', sans-serif; background-color: #f8fafc; }
         .leaflet-container { font-family: 'Assistant', sans-serif; }
@@ -31,6 +32,8 @@
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
         .fade-out { animation: fadeOut 0.3s ease-in forwards; }
+        @keyframes slideInUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in-up { animation: slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
 
         /* --- Custom Components --- */
         .btn {
@@ -48,7 +51,7 @@
         .btn-primary:hover { background-color: #4338ca; }
         .btn-secondary { background-color: var(--secondary-color); color: white; }
         .btn-secondary:hover { background-color: #059669; }
-        .btn-ghost { background-color: transparent; color: #475569; }
+        .btn-ghost { background-color: transparent; color: #475569; border: 1px solid #cbd5e1; }
         .btn-ghost:hover { background-color: #f1f5f9; color: #1e293b; }
 
         /* Route Building Step Timeline */
@@ -106,48 +109,6 @@
             z-index: 1000 !important;
         }
         
-        /* --- Mobile-specific adjustments --- */
-        @media (max-width: 767px) {
-            .route-step {
-                padding-right: 2.75rem; /* Reduce padding */
-            }
-            .route-step:not(:last-child)::before {
-                right: 18px; /* Adjust line position */
-            }
-            .step-icon-wrapper {
-                width: 36px; /* Smaller icon wrapper */
-                height: 36px;
-            }
-            .step-icon {
-                width: 30px; /* Smaller icon */
-                height: 30px;
-            }
-
-            /* Make summary view more compact on mobile */
-            #summary-details {
-                padding: 1rem; /* Less padding */
-            }
-            #summary-details h2 {
-                font-size: 1.25rem; /* Smaller title */
-            }
-            #summary-details p {
-                font-size: 0.875rem;
-            }
-            .summary-step {
-                padding-top: 0.5rem;
-                padding-bottom: 0.5rem;
-                gap: 0.75rem;
-            }
-            .summary-step .step-number {
-                width: 1.75rem;
-                height: 1.75rem;
-            }
-            .summary-step .step-icon-display {
-                width: 2.25rem;
-                height: 2.25rem;
-            }
-        }
-        
         /* Print Styles */
         @media print {
             body * { visibility: hidden; }
@@ -179,9 +140,9 @@
     </div>
 
     <!-- Main Content -->
-    <div id="main-content" class="h-full flex-col hidden">
+    <div id="main-content" class="h-full flex flex-col hidden">
         <header class="bg-white shadow-sm z-20 border-b border-slate-200 shrink-0">
-            <div class="container mx-auto px-2 sm:px-6 lg:px-8 h-auto md:h-16 flex flex-wrap items-center justify-between gap-y-2 py-2">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 h-auto md:h-16 flex flex-wrap items-center justify-between gap-y-2 py-2">
                 <div class="flex items-center gap-2 sm:gap-4">
                     <i class="fas fa-route text-2xl text-indigo-600"></i>
                     <h1 class="text-lg sm:text-xl font-bold text-slate-800">בניית מסלול חכם</h1>
@@ -189,83 +150,69 @@
                  <div class="flex items-center gap-1 sm:gap-2">
                      <a id="all-routes-btn" href="#" class="btn btn-ghost text-sm p-2 sm:p-2 sm:px-3" title="כל המסלולים השמורים">
                          <i class="fas fa-list-ul"></i>
-                         <span class="hidden sm:inline ml-2">כל המסלולים</span>
+                         <span class="hidden sm:inline mr-2">כל המסלולים</span>
                      </a>
                       <a id="back-to-trip-btn" href="#" class="btn btn-ghost text-sm p-2 sm:p-2 sm:px-3" title="חזרה למרכז הטיול">
-                         <i class="fas fa-arrow-right"></i>
-                         <span class="hidden sm:inline ml-2">חזרה לטיול</span>
+                         <i class="fas fa-arrow-left"></i>
+                         <span class="hidden sm:inline mr-2">חזרה לטיול</span>
                      </a>
                      <div id="auth-container" class="text-xs sm:text-sm font-semibold text-slate-600 bg-slate-100 px-2 sm:px-3 py-2 rounded-lg"></div>
                  </div>
             </div>
         </header>
 
-        <!-- Main container for layout split -->
-        <div class="flex-grow flex flex-col md:flex-row overflow-hidden">
-            
-            <!-- Right Panel (Controls) -->
-            <aside id="controls-panel" class="w-full bg-white p-3 sm:p-4 flex flex-col overflow-y-auto no-scrollbar border-l-0 md:border-l md:border-slate-200 h-full">
-                <!-- Initial State -->
-                <div id="initial-state" class="text-center p-4 sm:p-8 flex-grow flex flex-col items-center justify-center">
-                    <i class="fas fa-magic-wand-sparkles text-4xl sm:text-5xl text-indigo-400 mb-6"></i>
-                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800">מוכן לבנות מסלול?</h2>
-                    <p class="text-slate-500 mt-2 text-sm sm:text-base">התחל ביצירת מסלול חדש כדי לתכנן את היום המושלם.</p>
-                    <button id="create-route-btn" class="mt-8 btn btn-primary w-full max-w-sm">
-                        <i class="fas fa-plus mr-2"></i> צור מסלול חדש
-                    </button>
-                </div>
+        <!-- Main container for layout -->
+        <div class="flex-grow overflow-y-auto no-scrollbar">
+            <!-- Initial State -->
+            <div id="initial-state" class="text-center p-4 sm:p-8 flex-grow flex flex-col items-center justify-center h-full">
+                <i class="fas fa-magic-wand-sparkles text-4xl sm:text-5xl text-indigo-400 mb-6"></i>
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-800">מוכן לבנות מסלול?</h2>
+                <p class="text-slate-500 mt-2 text-sm sm:text-base">התחל ביצירת מסלול חדש כדי לתכנן את היום המושלם.</p>
+                <button id="create-route-btn" class="mt-8 btn btn-primary w-full max-w-sm">
+                    <i class="fas fa-plus ml-2"></i> צור מסלול חדש
+                </button>
+            </div>
 
-                <!-- Building State -->
-                <div id="building-state" class="hidden flex-grow flex flex-col min-h-0">
-                    <div class="flex justify-between items-start mb-4 shrink-0">
-                        <div>
-                            <h2 id="route-title" class="text-xl sm:text-2xl font-bold text-slate-800"></h2>
-                            <p id="route-destination" class="text-slate-500 font-semibold flex items-center gap-2"><i class="fas fa-map-pin"></i> <span></span></p>
-                        </div>
-                        <button id="toggle-map-view-btn" class="btn btn-ghost text-sm shrink-0">
-                            <i class="fas fa-map-location-dot"></i>
-                            <span id="toggle-map-btn-text" class="mr-2 hidden sm:inline">הצג מפה</span>
-                        </button>
-                    </div>
-                    
-                    <div class="flex-grow flex flex-col min-h-0">
-                        <div class="border bg-slate-50 rounded-lg p-3 sm:p-4 flex-grow flex flex-col min-h-0">
-                             <h3 class="font-bold text-slate-700 mb-3 text-base sm:text-lg shrink-0">תחנות במסלול:</h3>
-                             <div id="route-steps-container" class="flex-grow overflow-y-auto no-scrollbar pr-2 -mr-2">
-                                 <p id="start-prompt" class="text-center text-slate-500 p-4">בחר נקודת התחלה מהרשימה או מהמפה...</p>
-                             </div>
-                             <button id="finish-route-btn" class="w-full btn btn-secondary mt-4 hidden shrink-0"><i class="fas fa-flag-checkered mr-2"></i>סיים והצג סיכום מסלול</button>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col mt-4 pt-4 min-h-0">
-                         <h3 id="suggestions-title" class="font-bold text-slate-700 mb-3 text-base sm:text-lg shrink-0">הוספת מקומות:</h3>
-                         <div class="mb-4 space-y-2 sticky top-0 bg-white py-2 z-10 shrink-0">
-                             <input type="search" id="search-places-input" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="🔍 חפש מקום ספציפי...">
-                             <select id="category-filter-select" class="w-full p-2 border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                 <option value="all">כל הקטגוריות</option>
-                             </select>
-                         </div>
-                         <div id="places-list-container" class="overflow-y-auto no-scrollbar space-y-3 flex-grow">
-                            <!-- Place cards will be injected here -->
-                         </div>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Main Panel (Map / Summary) -->
-            <main id="main-panel" class="flex-grow bg-slate-100 p-2 md:p-4 h-full hidden">
-                <div id="map-view" class="h-full w-full relative">
-                    <div id="map" class="h-full w-full rounded-2xl shadow-lg border-2 border-white"></div>
-                    <button id="back-to-list-btn" class="absolute top-3 right-3 z-[1000] btn btn-primary md:hidden hidden">
-                         <i class="fas fa-list-ul mr-2"></i> חזור לרשימה
-                     </button>
+            <!-- Building State -->
+            <div id="building-state" class="hidden p-3 sm:p-4 md:p-6 lg:max-w-5xl lg:mx-auto">
+                <div class="space-y-1 mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <h2 id="route-title" class="text-2xl sm:text-3xl font-bold text-slate-800"></h2>
+                    <p id="route-destination" class="text-slate-500 font-semibold flex items-center gap-2 text-lg"><i class="fas fa-map-pin"></i> <span></span></p>
                 </div>
                 
-                <div id="summary-view" class="hidden h-full w-full bg-white rounded-2xl shadow-lg overflow-hidden">
-                   <!-- Summary will be rendered here -->
+                <div class="border bg-slate-50 rounded-xl p-3 sm:p-4 min-h-[150px]">
+                     <h3 class="font-bold text-slate-700 mb-4 text-lg sm:text-xl">תחנות במסלול:</h3>
+                     <div id="route-steps-container">
+                         <div id="start-prompt" class="text-center text-slate-500 p-4">
+                             <i class="fas fa-box-open text-3xl text-slate-400 mb-3"></i>
+                             <p>המסלול שלך ריק. הוסף את התחנה הראשונה!</p>
+                         </div>
+                     </div>
                 </div>
-            </main>
+
+                <div class="my-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button id="open-add-place-modal-btn" class="w-full btn btn-secondary text-base"><i class="fas fa-plus ml-2"></i>הוסף מקום למסלול</button>
+                    <button id="select-from-map-btn" class="w-full btn btn-ghost text-base"><i class="fas fa-map-marked-alt ml-2"></i>בחר מקום מהמפה</button>
+                </div>
+                
+                <div id="map-view-container" class="mt-4">
+                    <h3 class="font-bold text-slate-700 mb-3 text-lg sm:text-xl">מפת האזור:</h3>
+                    <div id="map-view" class="h-[400px] md:h-[500px] w-full rounded-2xl overflow-hidden shadow-lg border-2 border-white">
+                        <div id="map" class="h-full w-full"></div>
+                    </div>
+                </div>
+                
+                <div class="mt-8 pt-6 border-t border-slate-200 text-center">
+                    <button id="finish-route-btn" class="w-full max-w-md btn btn-primary text-lg hidden">
+                        <i class="fas fa-flag-checkered ml-2"></i>שמור והצג סיכום מסלול
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Summary View -->
+            <div id="summary-view" class="hidden h-full w-full bg-white">
+                <!-- Summary will be rendered here -->
+            </div>
         </div>
     </div>
     
@@ -289,6 +236,24 @@
                     <button type="submit" class="btn btn-primary">התחל לבנות</button>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <div id="add-place-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-2 sm:p-4">
+        <div class="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col slide-in-up">
+            <div class="p-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <h3 class="text-xl font-bold text-slate-800">הוספת מקום למסלול</h3>
+                <button id="close-add-place-modal-btn" class="w-8 h-8 rounded-full hover:bg-slate-200 text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4 space-y-3 shrink-0">
+                 <input type="search" id="modal-search-input" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="🔍 חפש מקום ספציפי...">
+                 <select id="modal-category-filter" class="w-full p-2 border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                     <option value="all">כל הקטגוריות</option>
+                 </select>
+            </div>
+            <div id="modal-places-list-container" class="overflow-y-auto no-scrollbar p-4 pt-0 space-y-2 flex-grow">
+                 <!-- Place cards will be injected here -->
+            </div>
         </div>
     </div>
     
@@ -320,8 +285,8 @@
         let currentUser, tripId, tripData;
         let allPlaces = [], allHotels = [], availablePoints = [];
         let currentRoute = { name: '', destination: '', steps: [] };
+        let isFirstAdd = true;
         let map, summaryMap, routePolyline, routeDecorator, summaryRoutePolyline, summaryRouteDecorator, mapMarkers = new Map();
-        let isMapViewVisible = false;
 
         const categoryIcons = {
             "מסעדה/אוכל": { icon: "fa-utensils", color: "#fb923c" },
@@ -353,19 +318,18 @@
             routeStepsContainer: document.getElementById('route-steps-container'),
             startPrompt: document.getElementById('start-prompt'),
             finishRouteBtn: document.getElementById('finish-route-btn'),
-            suggestionsTitle: document.getElementById('suggestions-title'),
-            searchPlacesInput: document.getElementById('search-places-input'),
-            categoryFilterSelect: document.getElementById('category-filter-select'),
-            placesListContainer: document.getElementById('places-list-container'),
             mapView: document.getElementById('map-view'),
             summaryView: document.getElementById('summary-view'),
             toast: document.getElementById('toast'),
             toastMessage: document.getElementById('toast-message'),
-            controlsPanel: document.getElementById('controls-panel'),
-            mainPanel: document.getElementById('main-panel'),
-            toggleMapViewBtn: document.getElementById('toggle-map-view-btn'),
-            toggleMapBtnText: document.getElementById('toggle-map-btn-text'),
-            backToListBtn: document.getElementById('back-to-list-btn'),
+            // New elements
+            addPlaceModal: document.getElementById('add-place-modal'),
+            openAddPlaceModalBtn: document.getElementById('open-add-place-modal-btn'),
+            closeAddPlaceModalBtn: document.getElementById('close-add-place-modal-btn'),
+            selectFromMapBtn: document.getElementById('select-from-map-btn'),
+            modalSearchInput: document.getElementById('modal-search-input'),
+            modalCategoryFilter: document.getElementById('modal-category-filter'),
+            modalPlacesListContainer: document.getElementById('modal-places-list-container'),
         };
         
         // --- Initialization ---
@@ -435,16 +399,11 @@
         // --- UI Logic & State Transitions ---
         function startRouteBuilding(routeName, destination) {
             currentRoute = { name: routeName, destination: destination, steps: [] };
+            isFirstAdd = true;
             DOM.initialState.classList.add('hidden');
             DOM.buildingState.classList.remove('hidden');
-            DOM.buildingState.classList.add('flex');
+            DOM.mapView.classList.remove('hidden');
             DOM.summaryView.classList.add('hidden');
-            
-            if (isMapViewVisible) {
-                toggleMapView();
-            }
-            DOM.mainPanel.classList.remove('md:w-full');
-
 
             DOM.routeTitle.textContent = routeName;
             DOM.routeDestination.textContent = destination;
@@ -454,105 +413,94 @@
                 ...allHotels.filter(h => h.destination === destination)
             ].filter(p => p.coords);
 
-            populateCategoryFilter();
-            updateSuggestions();
+            populateCategoryFilter(DOM.modalCategoryFilter);
             initMap('map');
             
             DOM.createRouteModal.classList.add('hidden');
             DOM.createRouteModal.classList.remove('flex');
+            renderCurrentRoute(); // To show the initial prompt
         }
 
         function showSummaryView() {
-            DOM.controlsPanel.classList.add('hidden');
-            DOM.mainPanel.classList.remove('hidden');
-            DOM.mainPanel.classList.add('md:w-full');
-            DOM.mapView.classList.add('hidden');
+            DOM.buildingState.classList.add('hidden');
             DOM.summaryView.classList.remove('hidden');
             renderSummary();
-
-            // Defer map initialization until the next paint cycle to avoid race conditions and freezing
-            requestAnimationFrame(() => {
-                if (document.getElementById('summary-map')) {
-                    initMap('summary-map');
-                    updateMapPolyline(summaryMap, summaryRoutePolyline, summaryRouteDecorator);
-                } else {
-                    console.error("Summary map container not found after render.");
-                    showToast("שגיאה בהצגת מפת הסיכום.", true);
-                }
-            });
+            // Delay map initialization to ensure container is visible and has dimensions
+            setTimeout(() => {
+                initMap('summary-map');
+                updateMapPolyline(summaryMap, true);
+            }, 100);
         }
 
         function editRoute() {
-             DOM.controlsPanel.classList.remove('hidden');
-             DOM.mainPanel.classList.remove('md:w-full');
-             if(!isMapViewVisible) {
-                DOM.mainPanel.classList.add('hidden');
-             } else {
-                DOM.mapView.classList.remove('hidden');
-             }
+             DOM.buildingState.classList.remove('hidden');
              DOM.summaryView.classList.add('hidden');
              if(summaryMap) {
                  summaryMap.remove();
                  summaryMap = null;
              }
+             // We might need to resize the main map
              setTimeout(() => map?.invalidateSize(), 100);
         }
         
-        function populateCategoryFilter() {
+        function populateCategoryFilter(selectElement) {
             const categories = [...new Set(availablePoints.map(p => p.type || 'ללא קטגוריה'))];
-            DOM.categoryFilterSelect.innerHTML = '<option value="all">כל הקטגוריות</option>';
+            selectElement.innerHTML = '<option value="all">כל הקטגוריות</option>';
             categories.sort().forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat;
                 option.textContent = cat;
-                DOM.categoryFilterSelect.appendChild(option);
+                selectElement.appendChild(option);
             });
         }
         
-        function toggleMapView() {
-            isMapViewVisible = !isMapViewVisible;
-
-            DOM.mainPanel.classList.toggle('hidden', !isMapViewVisible);
-            DOM.mapView.classList.toggle('hidden', !isMapViewVisible);
-            
-            DOM.controlsPanel.classList.toggle('hidden', isMapViewVisible);
-            DOM.controlsPanel.classList.toggle('md:flex', isMapViewVisible);
-            
-            DOM.controlsPanel.classList.toggle('w-full', !isMapViewVisible);
-            DOM.controlsPanel.classList.toggle('md:w-2/5', isMapViewVisible);
-            DOM.controlsPanel.classList.toggle('lg:w-1/3', isMapViewVisible);
-            
-            DOM.backToListBtn.classList.toggle('hidden', !isMapViewVisible);
-            DOM.backToListBtn.classList.toggle('md:hidden', !isMapViewVisible);
-            
-            const icon = DOM.toggleMapViewBtn.querySelector('i');
-            if (isMapViewVisible) {
-                DOM.toggleMapBtnText.textContent = 'הסתר מפה';
-                icon.className = 'fas fa-list-ul mr-2 sm:mr-0';
-                setTimeout(() => map?.invalidateSize(), 150);
-            } else {
-                DOM.toggleMapBtnText.textContent = 'הצג מפה';
-                icon.className = 'fas fa-map-location-dot';
-            }
+        function openAddPlaceModal() {
+            renderModalPlacesList();
+            DOM.addPlaceModal.classList.remove('hidden');
+            DOM.addPlaceModal.classList.add('flex');
         }
-
+        
         // --- Rendering ---
-        function renderAvailablePoints() {
-            const searchTerm = DOM.searchPlacesInput.value.toLowerCase();
-            const category = DOM.categoryFilterSelect.value;
+        function renderModalPlacesList() {
+            const searchTerm = DOM.modalSearchInput.value.toLowerCase();
+            const category = DOM.modalCategoryFilter.value;
             
             const filteredPoints = availablePoints.filter(p => 
                 (p.name.toLowerCase().includes(searchTerm)) && 
                 (category === 'all' || p.type === category)
             );
-            
+
             if (filteredPoints.length === 0) {
-                 DOM.placesListContainer.innerHTML = `<p class="text-center text-slate-500 p-4">לא נמצאו מקומות תואמים.</p>`;
-                 return;
+                DOM.modalPlacesListContainer.innerHTML = `<p class="text-center text-slate-500 p-4">לא נמצאו מקומות תואמים.</p>`;
+                return;
             }
 
-            DOM.placesListContainer.innerHTML = filteredPoints.map(createPlaceCardHTML).join('');
+            let html = '';
+            if (isFirstAdd && category === 'all' && !searchTerm) {
+                // Group by category for the first add
+                const categories = [...new Set(filteredPoints.map(p => p.type || 'ללא קטגוריה'))].sort();
+                categories.forEach(cat => {
+                    html += `<h4 class="font-bold text-slate-600 bg-slate-200 p-2 rounded sticky top-0">${cat}</h4>`;
+                    html += filteredPoints.filter(p => (p.type || 'ללא קטגוריה') === cat)
+                                        .sort((a,b) => a.name.localeCompare(b.name, 'he'))
+                                        .map(createPlaceCardHTML)
+                                        .join('');
+                });
+            } else {
+                // Sort by distance for subsequent adds
+                if (!isFirstAdd) {
+                    const lastPoint = currentRoute.steps[currentRoute.steps.length - 1];
+                    filteredPoints.forEach(p => { p.distance = calculateDistance(lastPoint.coords, p.coords); });
+                    filteredPoints.sort((a, b) => a.distance - b.distance);
+                } else {
+                    // if searching/filtering on first add, just sort by name
+                    filteredPoints.sort((a,b) => a.name.localeCompare(b.name, 'he'));
+                }
+                html = filteredPoints.map(createPlaceCardHTML).join('');
+            }
+            DOM.modalPlacesListContainer.innerHTML = html;
         }
+
 
         function createPlaceCardHTML(point) {
             const iconInfo = categoryIcons[point.type] || categoryIcons.default;
@@ -596,7 +544,7 @@
                     `;
                 }).join('');
             }
-            updateMapPolyline(map, routePolyline, routeDecorator);
+            updateMapPolyline(map);
         }
 
         function renderSummary() {
@@ -609,9 +557,9 @@
                                 <p class="text-slate-500 font-semibold text-md md:text-lg">${currentRoute.destination}</p>
                             </div>
                             <div class="flex items-center flex-wrap justify-start gap-2 no-print">
-                                <button id="edit-route-btn" class="btn btn-ghost text-sm"><i class="fas fa-pencil-alt mr-2"></i>עריכה</button>
-                                <button id="print-route-btn" class="btn btn-ghost text-sm"><i class="fas fa-print mr-2"></i>הדפסה</button>
-                                <button id="copy-route-btn" class="btn btn-primary text-sm"><i class="fas fa-copy mr-2"></i>העתק לוז</button>
+                                <button id="edit-route-btn" class="btn btn-ghost text-sm"><i class="fas fa-pencil-alt ml-2"></i>עריכה</button>
+                                <button id="print-route-btn" class="btn btn-ghost text-sm"><i class="fas fa-print ml-2"></i>הדפסה</button>
+                                <button id="copy-route-btn" class="btn btn-primary text-sm"><i class="fas fa-copy ml-2"></i>העתק לוז</button>
                             </div>
                         </div>
                         <div id="summary-legend" class="border-t border-slate-200 pt-4">
@@ -627,18 +575,19 @@
             legendContainer.innerHTML = currentRoute.steps.map((step, index) => {
                 const iconInfo = categoryIcons[step.type] || categoryIcons.default;
                 return `
-                <div class="summary-step flex items-center gap-4 py-3 border-b border-slate-100 last:border-b-0">
-                    <div class="step-number flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center">${index + 1}</div>
-                    <div class="step-icon-display flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
+                <div class="flex items-center gap-4 py-3 border-b border-slate-100 last:border-b-0">
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center">${index + 1}</div>
+                    <div class="flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
                         <i class="fas ${iconInfo.icon} fa-fw"></i>
                     </div>
-                    <div class="flex-grow min-w-0">
-                        <p class="font-bold text-slate-800 truncate">${step.name}</p>
+                    <div class="flex-grow">
+                        <p class="font-bold text-slate-800">${step.name}</p>
                         <p class="text-sm text-slate-500">${step.type}</p>
                     </div>
                 </div>`;
             }).join('');
             
+            // Add listeners for new buttons
             document.getElementById('copy-route-btn').addEventListener('click', copyRouteToClipboard);
             document.getElementById('print-route-btn').addEventListener('click', () => window.print());
             document.getElementById('edit-route-btn').addEventListener('click', editRoute);
@@ -646,7 +595,9 @@
 
         // --- Map Logic (Leaflet) ---
         function initMap(mapContainerId) {
-            let targetMap = mapContainerId === 'map' ? map : summaryMap;
+            let isSummary = mapContainerId === 'summary-map';
+            let targetMap = isSummary ? summaryMap : map;
+
             if (targetMap) {
                 targetMap.remove();
                 targetMap = null;
@@ -659,29 +610,19 @@
                 attribution: '&copy; OpenStreetMap &copy; CARTO'
             }).addTo(targetMap);
 
-            if (mapContainerId === 'map') {
+            if (isSummary) {
+                summaryMap = targetMap;
+                currentRoute.steps.forEach((p, index) => createMarker(p, summaryMap, index + 1));
+            } else {
                 map = targetMap;
                 mapMarkers.forEach(marker => marker.remove());
                 mapMarkers.clear();
 
                 availablePoints.forEach(p => createMarker(p, map));
-                currentRoute.steps.forEach(p => createMarker(p, map));
-                
-                routePolyline = L.polyline([], {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(map);
-                routeDecorator = L.polylineDecorator(routePolyline, {
-                    patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
-                }).addTo(map);
-
-            } else {
-                summaryMap = targetMap;
-                currentRoute.steps.forEach((p, index) => createMarker(p, summaryMap, index + 1));
-                summaryRoutePolyline = L.polyline([], {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(summaryMap);
-                summaryRouteDecorator = L.polylineDecorator(summaryRoutePolyline, {
-                    patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
-                }).addTo(summaryMap);
             }
             
-            updateMapBounds(targetMap);
+            updateMapPolyline(targetMap, isSummary);
+            updateMapBounds(targetMap, isSummary);
         }
         
         function createMarker(point, targetMap, label = null) {
@@ -693,15 +634,15 @@
             const customIcon = L.divIcon({ html: markerHtml, className: 'custom-marker-icon-wrapper', iconSize: [30, 30], iconAnchor: [15, 15] });
             const marker = L.marker([point.coords.lat, point.coords.lng], { icon: customIcon }).addTo(targetMap);
             
-            if (!label) {
+            if (!label) { // Only add popups to the building map
                  marker.bindPopup(`<b>${point.name}</b><br>${point.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${point.id}">הוסף למסלול</button>`);
                  mapMarkers.set(point.id, marker);
             }
         }
 
-        function updateMapBounds(targetMap) {
+        function updateMapBounds(targetMap, isSummary) {
             if (!targetMap) return;
-            const pointsForBounds = targetMap === map ? [...availablePoints, ...currentRoute.steps] : currentRoute.steps;
+            const pointsForBounds = isSummary ? currentRoute.steps : availablePoints;
             if (pointsForBounds.length === 0) {
                  const destData = tripData.destinations.find(d => d.nameHe === currentRoute.destination);
                  if(destData?.coords) targetMap.setView([destData.coords.lat, destData.coords.lng], 12);
@@ -712,11 +653,25 @@
             if (bounds.isValid()) targetMap.fitBounds(bounds, { padding: [25, 25] });
         }
 
-        function updateMapPolyline(targetMap, polyline, decorator) {
-            if (!targetMap || !polyline) return;
+        function updateMapPolyline(targetMap) {
+            if (!targetMap) return;
+            
+            let polyline = targetMap === map ? routePolyline : summaryRoutePolyline;
+            let decorator = targetMap === map ? routeDecorator : summaryRouteDecorator;
+            
+            if (!polyline) {
+                polyline = L.polyline([], {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(targetMap);
+                decorator = L.polylineDecorator(polyline, {
+                    patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
+                }).addTo(targetMap);
+                 if (targetMap === map) { routePolyline = polyline; routeDecorator = decorator; }
+                 else { summaryRoutePolyline = polyline; summaryRouteDecorator = decorator; }
+            }
+
             const latlngs = currentRoute.steps.map(p => [p.coords.lat, p.coords.lng]);
             polyline.setLatLngs(latlngs);
             decorator.setPaths(polyline);
+
             if(latlngs.length > 1) {
                 targetMap.fitBounds(polyline.getBounds(), {padding: [50, 50]});
             } else if (latlngs.length === 1) {
@@ -731,9 +686,9 @@
             
             currentRoute.steps.push(pointToAdd);
             availablePoints = availablePoints.filter(p => p.id !== pointId);
+            isFirstAdd = false;
 
             renderCurrentRoute();
-            updateSuggestions();
             
             const marker = mapMarkers.get(pointId);
             if(marker) {
@@ -741,6 +696,9 @@
                 marker.unbindPopup();
                 marker.bindPopup(`<b>${pointToAdd.name}</b><br><span class="font-bold text-green-600">הוסף למסלול!</span>`);
             }
+            DOM.addPlaceModal.classList.add('hidden');
+            DOM.addPlaceModal.classList.remove('flex');
+            showToast(`"${pointToAdd.name}" הוסף למסלול!`);
         }
         
         function removePointFromRoute(pointId) {
@@ -750,27 +708,17 @@
             currentRoute.steps = currentRoute.steps.filter(p => p.id !== pointId);
             availablePoints.push(pointToRemove);
             
+            if (currentRoute.steps.length === 0) {
+                isFirstAdd = true;
+            }
+            
             renderCurrentRoute();
-            updateSuggestions();
             
             const marker = mapMarkers.get(pointId);
             if(marker) {
-                 marker.bindPopup(`<b>${pointToRemove.name}</b><br>${pointToRemove.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${pointToRemove.id}">הוסף למסלול</button>`);
+                marker.bindPopup(`<b>${pointToRemove.name}</b><br>${pointToRemove.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${pointToRemove.id}">הוסף למסלול</button>`);
             }
-        }
-
-        function updateSuggestions() {
-            if (currentRoute.steps.length === 0) {
-                DOM.suggestionsTitle.textContent = "הוספת מקומות:";
-                availablePoints.forEach(p => delete p.distance);
-                availablePoints.sort((a,b) => a.name.localeCompare(b.name, 'he'));
-            } else {
-                DOM.suggestionsTitle.textContent = "הצעות למקום הבא (הקרובים ביותר):";
-                const lastPoint = currentRoute.steps[currentRoute.steps.length - 1];
-                availablePoints.forEach(p => { p.distance = calculateDistance(lastPoint.coords, p.coords); });
-                availablePoints.sort((a, b) => a.distance - b.distance);
-            }
-            renderAvailablePoints();
+            showToast(`"${pointToRemove.name}" הוסר מהמסלול.`);
         }
 
         function calculateDistance(coords1, coords2) {
@@ -783,7 +731,7 @@
         }
 
         function copyRouteToClipboard() {
-            let message = ` маршрут *${currentRoute.name}* маршрут \n\n`;
+            let message = `*לו"ז טיול: ${currentRoute.name}*\n\n`;
             message += `המסלול שלנו ל*${currentRoute.destination}*:\n\n`;
             currentRoute.steps.forEach((step, index) => {
                 message += `${index + 1}. 📍 *${step.name}*\n`;
@@ -829,11 +777,22 @@
                 const destination = DOM.destinationSelect.value;
                 if(routeName && destination) startRouteBuilding(routeName, destination);
             });
-
-            DOM.searchPlacesInput.addEventListener('input', () => renderAvailablePoints());
-            DOM.categoryFilterSelect.addEventListener('change', () => renderAvailablePoints());
             
-            DOM.placesListContainer.addEventListener('click', (e) => {
+            // New Listeners
+            DOM.openAddPlaceModalBtn.addEventListener('click', openAddPlaceModal);
+            DOM.closeAddPlaceModalBtn.addEventListener('click', () => {
+                DOM.addPlaceModal.classList.add('hidden');
+                DOM.addPlaceModal.classList.remove('flex');
+            });
+            DOM.selectFromMapBtn.addEventListener('click', () => {
+                document.getElementById('map-view-container').scrollIntoView({ behavior: 'smooth' });
+                showToast('בחר נקודה מהמפה כדי להוסיף אותה למסלול');
+            });
+            
+            DOM.modalSearchInput.addEventListener('input', () => renderModalPlacesList());
+            DOM.modalCategoryFilter.addEventListener('change', () => renderModalPlacesList());
+
+            DOM.modalPlacesListContainer.addEventListener('click', (e) => {
                 const card = e.target.closest('.place-card');
                 if (!card) return;
                 const id = card.dataset.id;
@@ -842,20 +801,20 @@
                 }
             });
             
-            DOM.placesListContainer.addEventListener('mouseover', e => {
-                const card = e.target.closest('.place-card');
-                if (card) {
-                    const marker = mapMarkers.get(card.dataset.id);
-                    marker?.getElement()?.classList.add('highlight');
-                }
-            });
-             DOM.placesListContainer.addEventListener('mouseout', e => {
-                const card = e.target.closest('.place-card');
-                if (card) {
-                    const marker = mapMarkers.get(card.dataset.id);
-                    marker?.getElement()?.classList.remove('highlight');
-                }
-            });
+             DOM.modalPlacesListContainer.addEventListener('mouseover', e => {
+                 const card = e.target.closest('.place-card');
+                 if (card) {
+                     const marker = mapMarkers.get(card.dataset.id);
+                     marker?.getElement()?.classList.add('highlight');
+                 }
+             });
+              DOM.modalPlacesListContainer.addEventListener('mouseout', e => {
+                 const card = e.target.closest('.place-card');
+                 if (card) {
+                     const marker = mapMarkers.get(card.dataset.id);
+                     marker?.getElement()?.classList.remove('highlight');
+                 }
+             });
             
             DOM.routeStepsContainer.addEventListener('click', (e) => {
                 const removeBtn = e.target.closest('.remove-step-btn');
@@ -870,13 +829,9 @@
             });
 
             DOM.finishRouteBtn.addEventListener('click', showSummaryView);
-            
-            DOM.toggleMapViewBtn.addEventListener('click', toggleMapView);
-            DOM.backToListBtn.addEventListener('click', toggleMapView);
         }
         
         initPage();
     </script>
 </body>
 </html>
-
