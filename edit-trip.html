@@ -106,6 +106,48 @@
             z-index: 1000 !important;
         }
         
+        /* --- Mobile-specific adjustments --- */
+        @media (max-width: 767px) {
+            .route-step {
+                padding-right: 2.75rem; /* Reduce padding */
+            }
+            .route-step:not(:last-child)::before {
+                right: 18px; /* Adjust line position */
+            }
+            .step-icon-wrapper {
+                width: 36px; /* Smaller icon wrapper */
+                height: 36px;
+            }
+            .step-icon {
+                width: 30px; /* Smaller icon */
+                height: 30px;
+            }
+
+            /* Make summary view more compact on mobile */
+            #summary-details {
+                padding: 1rem; /* Less padding */
+            }
+            #summary-details h2 {
+                font-size: 1.25rem; /* Smaller title */
+            }
+            #summary-details p {
+                font-size: 0.875rem;
+            }
+            .summary-step {
+                padding-top: 0.5rem;
+                padding-bottom: 0.5rem;
+                gap: 0.75rem;
+            }
+            .summary-step .step-number {
+                width: 1.75rem;
+                height: 1.75rem;
+            }
+            .summary-step .step-icon-display {
+                width: 2.25rem;
+                height: 2.25rem;
+            }
+        }
+        
         /* Print Styles */
         @media print {
             body * { visibility: hidden; }
@@ -398,7 +440,6 @@
             DOM.buildingState.classList.add('flex');
             DOM.summaryView.classList.add('hidden');
             
-            // Ensure map is hidden on start
             if (isMapViewVisible) {
                 toggleMapView();
             }
@@ -428,11 +469,17 @@
             DOM.mapView.classList.add('hidden');
             DOM.summaryView.classList.remove('hidden');
             renderSummary();
-            // Delay map initialization to ensure container is visible and has dimensions
-            setTimeout(() => {
-                initMap('summary-map');
-                updateMapPolyline(summaryMap, summaryRoutePolyline, summaryRouteDecorator, true);
-            }, 100);
+
+            // Defer map initialization until the next paint cycle to avoid race conditions and freezing
+            requestAnimationFrame(() => {
+                if (document.getElementById('summary-map')) {
+                    initMap('summary-map');
+                    updateMapPolyline(summaryMap, summaryRoutePolyline, summaryRouteDecorator);
+                } else {
+                    console.error("Summary map container not found after render.");
+                    showToast("שגיאה בהצגת מפת הסיכום.", true);
+                }
+            });
         }
 
         function editRoute() {
@@ -448,7 +495,6 @@
                  summaryMap.remove();
                  summaryMap = null;
              }
-             // We might need to resize the main map
              setTimeout(() => map?.invalidateSize(), 100);
         }
         
@@ -466,29 +512,24 @@
         function toggleMapView() {
             isMapViewVisible = !isMapViewVisible;
 
-            // Main visibility toggles
             DOM.mainPanel.classList.toggle('hidden', !isMapViewVisible);
             DOM.mapView.classList.toggle('hidden', !isMapViewVisible);
             
-            // Controls panel visibility (mobile vs desktop)
             DOM.controlsPanel.classList.toggle('hidden', isMapViewVisible);
             DOM.controlsPanel.classList.toggle('md:flex', isMapViewVisible);
             
-            // Controls panel width
             DOM.controlsPanel.classList.toggle('w-full', !isMapViewVisible);
             DOM.controlsPanel.classList.toggle('md:w-2/5', isMapViewVisible);
             DOM.controlsPanel.classList.toggle('lg:w-1/3', isMapViewVisible);
             
-            // Back button on map for mobile
             DOM.backToListBtn.classList.toggle('hidden', !isMapViewVisible);
             DOM.backToListBtn.classList.toggle('md:hidden', !isMapViewVisible);
             
-            // Update button text and icon
             const icon = DOM.toggleMapViewBtn.querySelector('i');
             if (isMapViewVisible) {
                 DOM.toggleMapBtnText.textContent = 'הסתר מפה';
                 icon.className = 'fas fa-list-ul mr-2 sm:mr-0';
-                setTimeout(() => map?.invalidateSize(), 150); // Resize map AFTER it's visible
+                setTimeout(() => map?.invalidateSize(), 150);
             } else {
                 DOM.toggleMapBtnText.textContent = 'הצג מפה';
                 icon.className = 'fas fa-map-location-dot';
@@ -555,7 +596,7 @@
                     `;
                 }).join('');
             }
-            updateMapPolyline(map, routePolyline, routeDecorator, false);
+            updateMapPolyline(map, routePolyline, routeDecorator);
         }
 
         function renderSummary() {
@@ -586,19 +627,18 @@
             legendContainer.innerHTML = currentRoute.steps.map((step, index) => {
                 const iconInfo = categoryIcons[step.type] || categoryIcons.default;
                 return `
-                <div class="flex items-center gap-4 py-3 border-b border-slate-100 last:border-b-0">
-                    <div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center">${index + 1}</div>
-                    <div class="flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
+                <div class="summary-step flex items-center gap-4 py-3 border-b border-slate-100 last:border-b-0">
+                    <div class="step-number flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center">${index + 1}</div>
+                    <div class="step-icon-display flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
                         <i class="fas ${iconInfo.icon} fa-fw"></i>
                     </div>
-                    <div class="flex-grow">
-                        <p class="font-bold text-slate-800">${step.name}</p>
+                    <div class="flex-grow min-w-0">
+                        <p class="font-bold text-slate-800 truncate">${step.name}</p>
                         <p class="text-sm text-slate-500">${step.type}</p>
                     </div>
                 </div>`;
             }).join('');
             
-            // Add listeners for new buttons
             document.getElementById('copy-route-btn').addEventListener('click', copyRouteToClipboard);
             document.getElementById('print-route-btn').addEventListener('click', () => window.print());
             document.getElementById('edit-route-btn').addEventListener('click', editRoute);
@@ -612,7 +652,7 @@
                 targetMap = null;
             }
             
-            targetMap = L.map(mapContainerId, { zoomControl: false }); // Disable default zoom, add it in a better position
+            targetMap = L.map(mapContainerId, { zoomControl: false });
             L.control.zoom({ position: 'bottomleft' }).addTo(targetMap);
 
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -653,7 +693,7 @@
             const customIcon = L.divIcon({ html: markerHtml, className: 'custom-marker-icon-wrapper', iconSize: [30, 30], iconAnchor: [15, 15] });
             const marker = L.marker([point.coords.lat, point.coords.lng], { icon: customIcon }).addTo(targetMap);
             
-            if (!label) { // Only add popups to the building map
+            if (!label) {
                  marker.bindPopup(`<b>${point.name}</b><br>${point.type}<br><button class="w-full text-center mt-2 p-1 bg-blue-500 text-white rounded text-sm add-point-from-popup" data-id="${point.id}">הוסף למסלול</button>`);
                  mapMarkers.set(point.id, marker);
             }
@@ -686,9 +726,6 @@
         
         // --- Core Route-Building Logic ---
         function addPointToRoute(pointId) {
-            const cardElement = DOM.placesListContainer.querySelector(`.place-card[data-id="${pointId}"]`);
-            if (!cardElement) return;
-
             const pointToAdd = availablePoints.find(p => p.id === pointId);
             if (!pointToAdd) return;
             
@@ -834,7 +871,6 @@
 
             DOM.finishRouteBtn.addEventListener('click', showSummaryView);
             
-            // New Listeners for Map Toggling
             DOM.toggleMapViewBtn.addEventListener('click', toggleMapView);
             DOM.backToListBtn.addEventListener('click', toggleMapView);
         }
@@ -843,3 +879,4 @@
     </script>
 </body>
 </html>
+
