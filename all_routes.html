@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>כל המסלולים</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-color: #4f46e5; /* indigo-600 */
+            --secondary-color: #10b981; /* emerald-500 */
+        }
+        html, body {
+            height: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body { font-family: 'Assistant', sans-serif; background-color: #f8fafc; }
+        .leaflet-container { font-family: 'Assistant', sans-serif; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .fade-out { animation: fadeOut 0.3s ease-in forwards; }
+        @keyframes slideInUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in-up { animation: slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+
+        /* --- Custom Components --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem 1.25rem;
+            border-radius: 0.75rem;
+            font-weight: 700;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+        .btn:disabled { background-color: #94a3b8; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .btn-primary { background-color: var(--primary-color); color: white; border: 1px solid var(--primary-color); }
+        .btn-primary:hover:not(:disabled) { background-color: #4338ca; }
+        .btn-secondary { background: linear-gradient(to right, #10b981, #059669); color: white; border: 1px solid var(--secondary-color); }
+        .btn-secondary:hover:not(:disabled) { background: linear-gradient(to right, #059669, #10b981); }
+        .btn-ghost { background-color: white; color: #475569; border: 1px solid #cbd5e1; }
+        .btn-ghost:hover:not(:disabled) { background-color: #f8fafc; color: #1e293b; border-color: #94a3b8;}
+        .btn-danger { background-color: #ef4444; color: white; border: 1px solid #ef4444; }
+        .btn-danger:hover:not(:disabled) { background-color: #dc2626; }
+        
+        /* --- Route Card --- */
+        .route-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+            transition: all 0.2s ease-in-out;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .route-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
+            border-color: var(--primary-color);
+        }
+        .card-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .card-content {
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .card-icon {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+        
+        /* --- Tabs --- */
+        .tab-btn {
+            padding: 0.75rem 1rem;
+            font-weight: 700;
+            color: #475569;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            color: #1e293b;
+        }
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        
+        /* --- Modal --- */
+        .modal-content {
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+            width: 100%;
+            max-width: 42rem; /* lg */
+            height: 90vh;
+            max-height: 900px;
+        }
+        
+        /* --- Public/Private Toggle in Modal --- */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+        .toggle-switch input { display: none; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: var(--primary-color);
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+        }
+        
+        /* Map Marker Styling (for modal map) */
+        .custom-marker-icon-wrapper { z-index: 500; }
+        .custom-marker-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body class="h-full w-full">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-route text-5xl text-indigo-600 animate-pulse"></i>
+        <p class="text-xl font-bold text-slate-700">טוען מסלולים...</p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" class="h-full flex flex-col hidden">
+        <header class="bg-white shadow-sm z-30 border-b border-slate-200 shrink-0">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 h-auto md:h-16 flex flex-wrap items-center justify-between gap-y-2 py-2">
+                <div class="flex items-center gap-2 sm:gap-4">
+                    <i class="fas fa-list-ul text-2xl text-indigo-600"></i>
+                    <h1 class="text-lg sm:text-xl font-bold text-slate-800">ניהול מסלולים</h1>
+                </div>
+                 <div class="flex items-center gap-1 sm:gap-2">
+                     <a id="new-route-btn" href="#" class="btn btn-primary text-sm p-2 sm:p-2 sm:px-3" title="צור מסלול חדש">
+                         <i class="fas fa-plus"></i>
+                         <span class="hidden sm:inline mr-2">מסלול חדש</span>
+                     </a>
+                      <a id="back-to-trip-btn" href="#" class="btn btn-ghost text-sm p-2 sm:p-2 sm:px-3" title="חזרה למרכז הטיול">
+                         <i class="fas fa-arrow-left"></i>
+                         <span class="hidden sm:inline mr-2">חזרה לטיול</span>
+                     </a>
+                     <div id="auth-container" class="text-xs sm:text-sm font-semibold text-slate-600 bg-slate-100 px-2 sm:px-3 py-2 rounded-lg"></div>
+                 </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="shrink-0 bg-white border-b border-slate-200">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center">
+                <button id="my-routes-tab" class="tab-btn active" data-tab="my-routes">
+                    <i class="fas fa-user-alt ml-2"></i>המסלולים שלי
+                </button>
+                <button id="explore-routes-tab" class="tab-btn" data-tab="explore-routes">
+                    <i class="fas fa-globe-americas ml-2"></i>מסלולים פומביים
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main container for layout -->
+        <div class="flex-grow overflow-y-auto no-scrollbar">
+            
+            <!-- My Routes Panel -->
+            <div id="my-routes-content" class="p-4 md:p-6">
+                <div id="my-routes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                    <!-- My Routes Cards will be injected here -->
+                </div>
+                <div id="my-routes-empty" class="text-center p-12 text-slate-500 hidden">
+                    <i class="fas fa-route text-5xl text-slate-400 mb-4"></i>
+                    <p class="font-bold text-lg">עדיין לא יצרת מסלולים</p>
+                    <p class="text-sm">לחץ על "מסלול חדש" כדי להתחיל לתכנן.</p>
+                </div>
+            </div>
+
+            <!-- Explore Routes Panel -->
+            <div id="explore-routes-content" class="hidden p-4 md:p-6">
+                <!-- Search Bar -->
+                <div class="mb-6 max-w-2xl mx-auto">
+                    <div class="relative">
+                        <input type="search" id="explore-search-input" class="w-full p-3 pl-10 border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg" placeholder="חפש מסלולים לפי יעד...">
+                        <i class="fas fa-search text-slate-400 absolute right-4 top-1/2 transform -translate-y-1/2"></i>
+                    </div>
+                </div>
+                
+                <div id="explore-routes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                    <!-- Explore Routes Cards will be injected here -->
+                </div>
+                 <div id="explore-routes-empty" class="text-center p-12 text-slate-500 hidden">
+                    <i class="fas fa-search text-5xl text-slate-400 mb-4"></i>
+                    <p class="font-bold text-lg">לא נמצאו מסלולים פומביים</p>
+                    <p class="text-sm">כשתייצרו מסלולים פומביים, הם יופיעו כאן.</p>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- Route Details Modal -->
+    <div id="route-details-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+        <div class="modal-content slide-in-up">
+            <!-- Modal Header -->
+            <div class="shrink-0 p-4 flex items-center justify-between border-b border-slate-200">
+                <div class="min-w-0">
+                    <h3 id="modal-route-title" class="text-xl md:text-2xl font-bold text-slate-800 truncate"></h3>
+                    <p id="modal-route-destination" class="text-slate-500 font-semibold flex items-center gap-2 text-md"><i class="fas fa-map-pin"></i> <span></span></p>
+                </div>
+                <button id="close-modal-btn" class="w-10 h-10 rounded-full hover:bg-slate-200 text-slate-600 text-lg"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="flex-grow flex flex-col md:flex-row overflow-hidden">
+                <!-- Map -->
+                <div class="w-full md:w-1/2 h-[300px] md:h-full bg-slate-100">
+                    <div id="modal-map-container" class="h-full w-full"></div>
+                </div>
+                <!-- Steps / Legend -->
+                <div id="modal-steps-container" class="w-full md:w-1/2 h-[calc(100%-300px)] md:h-full overflow-y-auto no-scrollbar p-4 space-y-3">
+                    <!-- Steps will be injected here -->
+                </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="shrink-0 p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <!-- My Route Buttons -->
+                <div id="modal-my-route-controls" class="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <a id="modal-edit-btn" class="btn btn-ghost text-center"><i class="fas fa-pencil-alt ml-2"></i>ערוך</a>
+                    <button id="modal-delete-btn" class="btn btn-danger"><i class="fas fa-trash ml-2"></i>מחק</button>
+                    <div class="col-span-2 bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
+                        <label for="modal-public-toggle" class="text-sm font-semibold text-slate-600">מסלול פומבי</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="modal-public-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                 <!-- Explore Route Buttons -->
+                <div id="modal-explore-route-controls" class="col-span-2 grid grid-cols-1 gap-3">
+                    <button id="modal-save-btn" class="btn btn-primary"><i class="fas fa-save ml-2"></i>שמור למסלולים שלי</button>
+                    <!-- <button id="modal-copy-btn" class="btn btn-secondary"><i class="fas fa-copy ml-2"></i>העתק לוז</button> -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 left-4 sm:left-auto text-center sm:text-left bg-slate-800 text-white py-3 px-6 rounded-lg shadow-xl transition-all duration-300 transform translate-y-20 opacity-0 z-[100]">
+        <p id="toast-message"></p>
+    </div>
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getDocs, addDoc, setDoc, deleteDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    
+        // --- Firebase Config (Placeholder) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+            authDomain: "tiool-loz.firebaseapp.com",
+            projectId: "tiool-loz",
+            storageBucket: "tiool-loz.appspot.com",
+            messagingSenderId: "226069823505",
+            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Global State & UI Elements ---
+        let currentUser, tripId, tripData;
+        let myRoutes = [], exploreRoutes = [];
+        let modalMap;
+        let currentModalRoute = null; // ישמור את נתוני המסלול הפתוח במודל
+        let unsubscribeMyRoutes = () => {};
+        let unsubscribeExploreRoutes = () => {};
+
+        const categoryIcons = {
+            "מסעדה/אוכל": { icon: "fa-utensils", color: "#fb923c" },
+            "מלון": { icon: "fa-hotel", color: "#8b5cf6" },
+            "מוזיאון": { icon: "fa-landmark", color: "#78716c" },
+            "קניון/מרכז קניות": { icon: "fa-shopping-bag", color: "#ec4899" },
+            "אטרקציה": { icon: "fa-star", color: "#f59e0b" },
+            "חוף": { icon: "fa-umbrella-beach", color: "#06b6d4" },
+            "סיור": { icon: "fa-person-walking", color: "#10b981" },
+            "סופר": { icon: "fa-shopping-cart", color: "#6366f1" },
+            "default": { icon: "fa-map-marker-alt", color: "#64748b" }
+        };
+
+        const DOM = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            mainContent: document.getElementById('main-content'),
+            authContainer: document.getElementById('auth-container'),
+            backToTripBtn: document.getElementById('back-to-trip-btn'),
+            newRouteBtn: document.getElementById('new-route-btn'),
+            // Tabs
+            myRoutesTab: document.getElementById('my-routes-tab'),
+            exploreRoutesTab: document.getElementById('explore-routes-tab'),
+            myRoutesContent: document.getElementById('my-routes-content'),
+            exploreRoutesContent: document.getElementById('explore-routes-content'),
+            // Grids & Empty States
+            myRoutesGrid: document.getElementById('my-routes-grid'),
+            myRoutesEmpty: document.getElementById('my-routes-empty'),
+            exploreRoutesGrid: document.getElementById('explore-routes-grid'),
+            exploreRoutesEmpty: document.getElementById('explore-routes-empty'),
+            exploreSearchInput: document.getElementById('explore-search-input'),
+            // Modal
+            routeDetailsModal: document.getElementById('route-details-modal'),
+            closeModalBtn: document.getElementById('close-modal-btn'),
+            modalRouteTitle: document.getElementById('modal-route-title'),
+            modalRouteDestination: document.querySelector('#modal-route-destination span'),
+            modalMapContainer: document.getElementById('modal-map-container'),
+            modalStepsContainer: document.getElementById('modal-steps-container'),
+            // Modal Buttons
+            modalMyRouteControls: document.getElementById('modal-my-route-controls'),
+            modalExploreRouteControls: document.getElementById('modal-explore-route-controls'),
+            modalEditBtn: document.getElementById('modal-edit-btn'),
+            modalDeleteBtn: document.getElementById('modal-delete-btn'),
+            modalPublicToggle: document.getElementById('modal-public-toggle'),
+            modalSaveBtn: document.getElementById('modal-save-btn'),
+            // Toast
+            toast: document.getElementById('toast'),
+            toastMessage: document.getElementById('toast-message'),
+        };
+        
+        // --- Initialization ---
+        async function initPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            tripId = urlParams.get('id') || urlParams.get('tripId');
+            if (!tripId) {
+                showToast("שגיאה: לא נמצא מזהה טיול.", true);
+                return;
+            }
+            DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
+            // --- *** UPDATED LINE *** ---
+            DOM.newRouteBtn.href = `edit-trip.html?id=${tripId}`; // תוקן ל-edit-trip.html
+            
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) { window.location.href = 'login.html'; return; }
+                currentUser = user;
+                DOM.authContainer.textContent = `שלום, ${user.displayName || user.email.split('@')[0]}`;
+                
+                try {
+                    await loadTripData();
+                    setupEventListeners();
+                    // התחל להאזין לשינויים במסלולים
+                    listenToMyRoutes();
+                    listenToExploreRoutes();
+                } catch(error) {
+                    console.error("Initialization failed:", error);
+                    showToast("שגיאה בטעינת נתוני הטיול.", true);
+                } finally {
+                    DOM.loadingOverlay.classList.add('fade-out');
+                    setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
+                    DOM.mainContent.classList.remove('hidden');
+                    DOM.mainContent.classList.add('flex');
+                }
+            });
+        }
+
+        // --- Data Loading & Realtime Listening ---
+        async function loadTripData() {
+            const docRef = doc(db, 'trips', tripId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) tripData = docSnap.data();
+            else throw new Error("Trip not found");
+        }
+
+        function listenToMyRoutes() {
+            const q = query(collection(db, 'trips', tripId, 'routes'));
+            unsubscribeMyRoutes = onSnapshot(q, (snapshot) => {
+                myRoutes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderMyRoutes();
+            }, (error) => {
+                console.error("Error listening to my routes:", error);
+                showToast("שגיאה בטעינת המסלולים שלי.", true);
+            });
+        }
+        
+        function listenToExploreRoutes() {
+            const q = query(collection(db, 'publicRoutes'));
+            unsubscribeExploreRoutes = onSnapshot(q, (snapshot) => {
+                exploreRoutes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderExploreRoutes();
+            }, (error) => {
+                console.error("Error listening to explore routes:", error);
+                showToast("שגיאה בטעינת מסלולים פומביים.", true);
+            });
+        }
+
+        // --- Rendering ---
+        function renderMyRoutes() {
+            if (myRoutes.length === 0) {
+                DOM.myRoutesGrid.innerHTML = '';
+                DOM.myRoutesEmpty.classList.remove('hidden');
+                return;
+            }
+            DOM.myRoutesEmpty.classList.add('hidden');
+            DOM.myRoutesGrid.innerHTML = myRoutes
+                .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'))
+                .map(route => createRouteCardHTML(route, true))
+                .join('');
+        }
+        
+        function renderExploreRoutes() {
+            const searchTerm = DOM.exploreSearchInput.value.toLowerCase();
+            const filteredRoutes = exploreRoutes.filter(route => 
+                (route.destination || '').toLowerCase().includes(searchTerm) ||
+                (route.name || '').toLowerCase().includes(searchTerm)
+            );
+
+            if (filteredRoutes.length === 0) {
+                DOM.exploreRoutesGrid.innerHTML = '';
+                DOM.exploreRoutesEmpty.classList.remove('hidden');
+                return;
+            }
+            DOM.exploreRoutesEmpty.classList.add('hidden');
+            DOM.exploreRoutesGrid.innerHTML = filteredRoutes
+                .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'))
+                .map(route => createRouteCardHTML(route, false))
+                .join('');
+        }
+        
+        function createRouteCardHTML(route, isMyRoute) {
+            const stepCount = route.steps?.length || 0;
+            const iconInfo = categoryIcons[route.steps?.[0]?.type] || categoryIcons.default;
+            
+            return `
+                <div class="route-card fade-in" data-route-id="${route.id}" data-is-my-route="${isMyRoute}">
+                    <div class="card-header flex items-center justify-between">
+                         <p class="text-sm font-semibold text-slate-500 flex items-center gap-2"><i class="fas fa-map-pin"></i> <span>${route.destination || 'ללא יעד'}</span></p>
+                         ${!route.isPublic && isMyRoute ? '<span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full"><i class="fas fa-lock mr-1"></i>פרטי</span>' : ''}
+                    </div>
+                    <div class="card-content">
+                        <div class="card-icon" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
+                            <i class="fas ${iconInfo.icon} fa-fw"></i>
+                        </div>
+                        <div class="flex-grow min-w-0">
+                            <h3 class="font-bold text-lg text-slate-800 truncate">${route.name || 'מסלול ללא שם'}</h3>
+                            <p class="text-sm text-slate-500">${stepCount} תחנות</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderModalSteps(steps) {
+            if (!steps || steps.length === 0) {
+                DOM.modalStepsContainer.innerHTML = `<p class="text-center text-slate-500 p-4">אין תחנות במסלול זה.</p>`;
+                return;
+            }
+            DOM.modalStepsContainer.innerHTML = steps.map((step, index) => {
+                const iconInfo = categoryIcons[step.type] || categoryIcons.default;
+                return `
+                <div class="flex items-center gap-4 py-3 border-b border-slate-100 last:border-b-0">
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center">${index + 1}</div>
+                    <div class="flex-shrink-0 text-lg w-10 h-10 flex items-center justify-center rounded-lg" style="color: ${iconInfo.color}; background-color: ${iconInfo.color}20;">
+                        <i class="fas ${iconInfo.icon} fa-fw"></i>
+                    </div>
+                    <div class="flex-grow">
+                        <p class="font-bold text-slate-800">${step.name}</p>
+                        <p class="text-sm text-slate-500">${step.type}</p>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        
+        // --- Modal Logic ---
+        function openRouteModal(routeId, isMyRoute) {
+            const routeData = (isMyRoute ? myRoutes : exploreRoutes).find(r => r.id === routeId);
+            if (!routeData) {
+                showToast("שגיאה: לא ניתן למצוא את המסלול.", true);
+                return;
+            }
+            
+            currentModalRoute = routeData; // שמור את המסלול הנוכחי
+            
+            DOM.modalRouteTitle.textContent = routeData.name;
+            DOM.modalRouteDestination.textContent = routeData.destination;
+            
+            // הצג/הסתר כפתורים
+            DOM.modalMyRouteControls.style.display = isMyRoute ? 'grid' : 'none';
+            DOM.modalExploreRouteControls.style.display = isMyRoute ? 'none' : 'grid';
+            
+            // הגדר כפתור עריכה
+            // --- *** UPDATED LINE *** ---
+            DOM.modalEditBtn.href = `edit-trip.html?id=${tripId}&routeId=${routeId}`; // תוקן ל-edit-trip.html
+            
+            // הגדר כפתור פומבי/פרטי
+            DOM.modalPublicToggle.checked = routeData.isPublic;
+            
+            // רנדר תחנות
+            renderModalSteps(routeData.steps);
+            
+            // הצג מודל
+            DOM.routeDetailsModal.classList.remove('hidden');
+            DOM.routeDetailsModal.classList.add('flex');
+            
+            // אתחל מפה (בדיליי קטן)
+            setTimeout(() => initModalMap(routeData.steps), 50);
+        }
+        
+        function closeModal() {
+            DOM.routeDetailsModal.classList.add('hidden');
+            DOM.routeDetailsModal.classList.remove('flex');
+            if (modalMap) {
+                modalMap.remove();
+                modalMap = null;
+            }
+            currentModalRoute = null;
+        }
+        
+        function initModalMap(steps) {
+            if (modalMap) {
+                modalMap.remove();
+                modalMap = null;
+            }
+            
+            modalMap = L.map('modal-map-container', { zoomControl: false });
+            L.control.zoom({ position: 'bottomleft' }).addTo(modalMap);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            }).addTo(modalMap);
+            
+            if (!steps || steps.length === 0) {
+                 modalMap.setView([31.7683, 35.2137], 8); // ברירת מחדל אם אין נקודות
+                 return;
+            }
+            
+            // הוסף מרקרים
+            steps.forEach((p, index) => {
+                const iconInfo = categoryIcons[p.type] || categoryIcons.default;
+                const markerHtml = `<div class="custom-marker-icon font-bold" style="background-color:${iconInfo.color}; color: white; width: 32px; height: 32px; font-size: 16px;">${index + 1}</div>`;
+                const customIcon = L.divIcon({ html: markerHtml, className: 'custom-marker-icon-wrapper', iconSize: [30, 30], iconAnchor: [15, 15] });
+                L.marker([p.coords.lat, p.coords.lng], { icon: customIcon }).addTo(modalMap)
+                    .bindPopup(`<b>${index + 1}. ${p.name}</b><br>${p.type}`);
+            });
+
+            // הוסף קו
+            const latlngs = steps.map(p => [p.coords.lat, p.coords.lng]);
+            const polyline = L.polyline(latlngs, {color: '#ef4444', weight: 4, opacity: 0.8}).addTo(modalMap);
+            L.polylineDecorator(polyline, {
+                patterns: [ {offset: '5%', repeat: 100, symbol: L.Symbol.arrowHead({pixelSize: 12, pathOptions: {fillOpacity: 1, weight: 0, color: '#ef4444'}})}]
+            }).addTo(modalMap);
+            
+            // התאם גבולות
+            if(latlngs.length > 0) {
+                 modalMap.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+            }
+        }
+        
+        // --- Modal Actions ---
+        
+        async function handleDeleteRoute() {
+            if (!currentModalRoute) return;
+            
+            const routeId = currentModalRoute.id;
+            // שיניתי לשימוש במודל פשוט במקום alert/confirm
+            const confirmed = window.confirm(`האם אתה בטוח שברצונך למחוק את המסלול "${currentModalRoute.name}"? לא ניתן לשחזר פעולה זו.`);
+            
+            if (confirmed) {
+                DOM.modalDeleteBtn.disabled = true;
+                DOM.modalDeleteBtn.innerHTML = `<i class="fas fa-spinner fa-spin ml-2"></i>מוחק...`;
+                try {
+                    // 1. מחק מהמסלולים של הטיול
+                    await deleteDoc(doc(db, 'trips', tripId, 'routes', routeId));
+                    // 2. נסה למחוק מהמסלולים הפומביים
+                    await deleteDoc(doc(db, 'publicRoutes', routeId)).catch(e => {});
+                    
+                    showToast("המסלול נמחק בהצלחה.");
+                    closeModal();
+                    // הרנדור יתבצע אוטומטית ע"י onSnapshot
+                } catch (error) {
+                    console.error("Error deleting route:", error);
+                    showToast("שגיאה במחיקת המסלול.", true);
+                } finally {
+                    DOM.modalDeleteBtn.disabled = false;
+                    DOM.modalDeleteBtn.innerHTML = `<i class="fas fa-trash ml-2"></i>מחק`;
+                }
+            }
+        }
+        
+        async function handleTogglePublic(e) {
+            if (!currentModalRoute) return;
+            
+            const routeId = currentModalRoute.id;
+            const newIsPublic = e.target.checked;
+            
+            // עדכן מיד את הנתונים הלוקאליים
+            currentModalRoute.isPublic = newIsPublic;
+            
+            try {
+                // 1. עדכן את המסמך הראשי במסלולים של הטיול
+                await updateDoc(doc(db, 'trips', tripId, 'routes', routeId), {
+                    isPublic: newIsPublic
+                });
+                
+                // 2. עדכן את האוסף הפומבי
+                if (newIsPublic) {
+                    // הוסף/עדכן באוסף הפומבי
+                    await setDoc(doc(db, 'publicRoutes', routeId), currentModalRoute);
+                } else {
+                    // הסר מהאוסף הפומבי
+                    await deleteDoc(doc(db, 'publicRoutes', routeId)).catch(e => {});
+                }
+                
+                showToast(newIsPublic ? "המסלול הפך לפומבי" : "המסלול הפך לפרטי");
+                // הרנדור בכרטיסייה יתעדכן אוטומטית
+                
+            } catch (error) {
+                console.error("Error updating public status:", error);
+                showToast("שגיאה בעדכון סטטוס המסלול.", true);
+                // שחזר את הכפתור למצב הקודם
+                e.target.checked = !newIsPublic;
+                currentModalRoute.isPublic = !newIsPublic;
+            }
+        }
+
+        async function handleSaveRoute() {
+            if (!currentModalRoute) return;
+            
+            DOM.modalSaveBtn.disabled = true;
+            DOM.modalSaveBtn.innerHTML = `<i class="fas fa-spinner fa-spin ml-2"></i>שומר...`;
+            
+            try {
+                // צור עותק של המסלול, הפוך אותו לפרטי כברירת מחדל
+                const newRouteData = {
+                    ...currentModalRoute,
+                    isPublic: false, // מתחיל כפרטי אצל המשתמש
+                    createdBy: currentUser.uid,
+                    tripId: tripId,
+                };
+                delete newRouteData.id; // הסר את המזהה כדי ליצור מסמך חדש
+                
+                // הוסף לאוסף המסלולים של הטיול הנוכחי
+                await addDoc(collection(db, 'trips', tripId, 'routes'), newRouteData);
+                
+                showToast("המסלול נשמר בהצלחה למסלולים שלי!");
+                closeModal();
+                // עדכון הרשימה יתבצע אוטומטית
+                
+            } catch (error) {
+                console.error("Error saving route copy:", error);
+                showToast("שגיאה בשמירת המסלול.", true);
+            } finally {
+                 DOM.modalSaveBtn.disabled = false;
+                 DOM.modalSaveBtn.innerHTML = `<i class="fas fa-save ml-2"></i>שמור למסלולים שלי`;
+            }
+        }
+        
+        function showToast(message, isError = false) {
+            DOM.toastMessage.textContent = message;
+            DOM.toast.className = `fixed bottom-4 right-4 left-4 sm:left-auto text-center sm:text-left text-white py-3 px-6 rounded-lg shadow-xl transition-all duration-300 transform z-[100]`; // Reset
+            DOM.toast.classList.add(isError ? 'bg-red-600' : 'bg-slate-800', 'translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                DOM.toast.classList.remove('translate-y-0', 'opacity-100');
+                DOM.toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            // Tab Switching
+            DOM.myRoutesTab.addEventListener('click', () => {
+                DOM.myRoutesTab.classList.add('active');
+                DOM.exploreRoutesTab.classList.remove('active');
+                DOM.myRoutesContent.classList.remove('hidden');
+                DOM.exploreRoutesContent.classList.add('hidden');
+            });
+            DOM.exploreRoutesTab.addEventListener('click', () => {
+                DOM.exploreRoutesTab.classList.add('active');
+                DOM.myRoutesTab.classList.remove('active');
+                DOM.exploreRoutesContent.classList.remove('hidden');
+                DOM.myRoutesContent.classList.add('hidden');
+            });
+            
+            // Search
+            DOM.exploreSearchInput.addEventListener('input', renderExploreRoutes);
+            
+            // Open Modal
+            DOM.mainContent.addEventListener('click', (e) => {
+                const card = e.target.closest('.route-card');
+                if (card) {
+                    const routeId = card.dataset.routeId;
+                    const isMyRoute = card.dataset.isMyRoute === 'true';
+                    openRouteModal(routeId, isMyRoute);
+                }
+            });
+            
+            // Close Modal
+            DOM.closeModalBtn.addEventListener('click', closeModal);
+            DOM.routeDetailsModal.addEventListener('click', (e) => {
+                if (e.target === DOM.routeDetailsModal) closeModal();
+            });
+            
+            // Modal Actions
+            DOM.modalDeleteBtn.addEventListener('click', handleDeleteRoute);
+            DOM.modalPublicToggle.addEventListener('change', handleTogglePublic);
+            DOM.modalSaveBtn.addEventListener('click', handleSaveRoute);
+            // כפתור עריכה הוא לינק, לא צריך listener
+        }
+        
+        initPage();
+    </script>
+</body>
+</html>
+
+
