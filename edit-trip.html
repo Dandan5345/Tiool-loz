@@ -50,13 +50,14 @@
             white-space: nowrap;
             box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .btn:disabled { background-color: #94a3b8; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
         .btn-primary { background-color: var(--primary-color); color: white; border: 1px solid var(--primary-color); }
-        .btn-primary:hover { background-color: #4338ca; }
+        .btn-primary:hover:not(:disabled) { background-color: #4338ca; }
         .btn-secondary { background: linear-gradient(to right, #10b981, #059669); color: white; border: 1px solid var(--secondary-color); }
-        .btn-secondary:hover { background: linear-gradient(to right, #059669, #10b981); }
+        .btn-secondary:hover:not(:disabled) { background: linear-gradient(to right, #059669, #10b981); }
         .btn-ghost { background-color: white; color: #475569; border: 1px solid #cbd5e1; }
-        .btn-ghost:hover { background-color: #f8fafc; color: #1e293b; border-color: #94a3b8;}
+        .btn-ghost:hover:not(:disabled) { background-color: #f8fafc; color: #1e293b; border-color: #94a3b8;}
 
         /* Route Building Step Timeline */
         .route-step {
@@ -203,8 +204,16 @@
                 </div>
                                 
                 <div class="mt-12 pt-6 border-t border-slate-200 text-center">
-                    <button id="finish-route-btn" class="w-full max-w-md btn btn-primary text-lg hidden">
-                        <i class="fas fa-flag-checkered ml-2"></i>שמור והצג סיכום מסלול
+                    <!-- Public/Private Toggle -->
+                    <div class="flex items-center justify-center gap-3 mb-6">
+                        <label for="is-public-toggle" class="font-semibold text-slate-600">הצג מסלול לכולם? (פומבי)</label>
+                        <button id="is-public-toggle" role="switch" aria-checked="true" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <button id="save-route-btn" class="w-full max-w-md btn btn-primary text-lg hidden">
+                        <i class="fas fa-save ml-2"></i>שמור והצג סיכום
                     </button>
                 </div>
             </div>
@@ -275,7 +284,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getDocs, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
     
         // --- Firebase Config (Placeholder) ---
         const firebaseConfig = {
@@ -293,7 +302,8 @@
         // --- Global State & UI Elements ---
         let currentUser, tripId, tripData;
         let allPlaces = [], allHotels = [], availablePoints = [];
-        let currentRoute = { name: '', destination: '', steps: [] };
+        // currentRoute יחזיק כעת גם את המזהה ואת מצב הפרטיות
+        let currentRoute = { id: null, name: '', destination: '', steps: [], isPublic: true, createdBy: null, tripId: null };
         let isFirstAdd = true;
         let map, summaryMap, routePolyline, routeDecorator, mapMarkers = new Map();
 
@@ -326,7 +336,8 @@
             routeDestination: document.querySelector('#route-destination span'),
             routeStepsContainer: document.getElementById('route-steps-container'),
             startPrompt: document.getElementById('start-prompt'),
-            finishRouteBtn: document.getElementById('finish-route-btn'),
+            saveRouteBtn: document.getElementById('save-route-btn'), // שונה מ-finish-route-btn
+            isPublicToggle: document.getElementById('is-public-toggle'), // חדש
             summaryView: document.getElementById('summary-view'),
             toast: document.getElementById('toast'),
             toastMessage: document.getElementById('toast-message'),
@@ -347,6 +358,8 @@
         async function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('id') || urlParams.get('tripId');
+            const routeId = urlParams.get('routeId'); // לבדיקת עריכה
+            
             if (!tripId) {
                 showToast("שגיאה: לא נמצא מזהה טיול.", true);
                 return;
@@ -361,7 +374,15 @@
                 
                 try {
                     await Promise.all([ loadTripData(), loadAllPlaces(), loadAllHotels() ]);
-                    populateDestinationSelect();
+                    
+                    if (routeId) {
+                        // אם יש routeId, טוענים את המסלול לעריכה
+                        await loadRouteForEdit(routeId);
+                    } else {
+                        // אחרת, מכינים ליצירה חדשה
+                        populateDestinationSelect();
+                    }
+                    
                     setupEventListeners();
                 } catch(error) {
                     console.error("Initialization failed:", error);
@@ -394,6 +415,43 @@
             const snapshot = await getDocs(q);
             allHotels = snapshot.docs.map(d => ({ id: d.id, ...d.data(), pointType: 'hotel', type: 'מלון' }));
         }
+        
+        // --- חדש: טעינת מסלול קיים לעריכה ---
+        async function loadRouteForEdit(routeId) {
+            try {
+                const docRef = doc(db, 'trips', tripId, 'routes', routeId);
+                const docSnap = await getDoc(docRef);
+                
+                if (!docSnap.exists()) {
+                    showToast("המסלול המבוקש לא נמצא.", true);
+                    populateDestinationSelect(); // חזרה למצב יצירה
+                    return;
+                }
+                
+                const data = docSnap.data();
+                // ודא שכל השדות קיימים, עם ברירות מחדל
+                currentRoute = {
+                    id: docSnap.id,
+                    name: data.name || 'מסלול ללא שם',
+                    destination: data.destination || '',
+                    steps: data.steps || [],
+                    isPublic: data.isPublic !== undefined ? data.isPublic : true,
+                    createdBy: data.createdBy || currentUser.uid,
+                    tripId: data.tripId || tripId
+                };
+                
+                // התחל את בניית המסלול עם הנתונים שנטענו
+                startRouteBuilding(currentRoute.name, currentRoute.destination);
+                
+                // עדכן את כפתור הפרטיות
+                updatePublicToggleUI(currentRoute.isPublic);
+                
+            } catch (error) {
+                console.error("Error loading route for edit:", error);
+                showToast("שגיאה בטעינת המסלול לעריכה.", true);
+                populateDestinationSelect();
+            }
+        }
 
         function populateDestinationSelect() {
             DOM.destinationSelect.innerHTML = '<option value="" disabled selected>בחר יעד...</option>';
@@ -409,8 +467,20 @@
 
         // --- UI Logic & State Transitions ---
         function startRouteBuilding(routeName, destination) {
-            currentRoute = { name: routeName, destination: destination, steps: [] };
-            isFirstAdd = true;
+             // אם זה מסלול חדש (אין ID), אתחל אותו
+            if (!currentRoute.id) {
+                currentRoute = {
+                    id: null,
+                    name: routeName,
+                    destination: destination,
+                    steps: [],
+                    isPublic: true, // ברירת מחדל פומבי
+                    createdBy: currentUser.uid,
+                    tripId: tripId
+                };
+            }
+            
+            isFirstAdd = currentRoute.steps.length === 0;
             DOM.initialState.classList.add('hidden');
             DOM.buildingState.classList.remove('hidden');
             DOM.summaryView.classList.add('hidden');
@@ -418,16 +488,18 @@
             DOM.routeTitle.textContent = routeName;
             DOM.routeDestination.textContent = destination;
             
+            // נקודות זמינות = כל הנקודות ביעד - הנקודות שכבר במסלול
+            const stepIds = new Set(currentRoute.steps.map(s => s.id));
             availablePoints = [
                 ...allPlaces.filter(p => p.destination === destination),
                 ...allHotels.filter(h => h.destination === destination)
-            ].filter(p => p.coords);
+            ].filter(p => p.coords && !stepIds.has(p.id)); // סנן גם נקודות שכבר במסלול
 
             populateCategoryFilter(DOM.modalCategoryFilter);
             
             DOM.createRouteModal.classList.add('hidden');
             DOM.createRouteModal.classList.remove('flex');
-            renderCurrentRoute();
+            renderCurrentRoute(); // רנדר את התחנות (אם יש)
         }
 
         function showSummaryView() {
@@ -482,6 +554,14 @@
                 map.remove();
                 map = null;
             }
+        }
+        
+        function updatePublicToggleUI(isPublic) {
+            DOM.isPublicToggle.setAttribute('aria-checked', isPublic);
+            DOM.isPublicToggle.querySelector('span').classList.toggle('translate-x-5', isPublic);
+            DOM.isPublicToggle.classList.toggle('bg-indigo-600', isPublic);
+            DOM.isPublicToggle.classList.toggle('bg-gray-200', !isPublic);
+            currentRoute.isPublic = isPublic;
         }
 
         // --- Rendering ---
@@ -543,10 +623,10 @@
             if (currentRoute.steps.length === 0) {
                 DOM.routeStepsContainer.innerHTML = '';
                 DOM.startPrompt.classList.remove('hidden');
-                DOM.finishRouteBtn.classList.add('hidden');
+                DOM.saveRouteBtn.classList.add('hidden');
             } else {
                 DOM.startPrompt.classList.add('hidden');
-                DOM.finishRouteBtn.classList.remove('hidden');
+                DOM.saveRouteBtn.classList.remove('hidden');
                 DOM.routeStepsContainer.innerHTML = currentRoute.steps.map((step, index) => {
                     const iconInfo = categoryIcons[step.type] || categoryIcons.default;
                     return `
@@ -723,6 +803,53 @@
             showToast(`"${pointToRemove.name}" הוסר מהמסלול.`);
         }
 
+        // --- חדש: שמירת מסלול ---
+        async function saveRouteAndShowSummary() {
+            DOM.saveRouteBtn.disabled = true;
+            DOM.saveRouteBtn.innerHTML = `<i class="fas fa-spinner fa-spin ml-2"></i>שומר...`;
+            
+            try {
+                let routeId = currentRoute.id;
+                // הכן את האובייקט לשמירה (בלי המזהה)
+                const routeData = {
+                    name: currentRoute.name,
+                    destination: currentRoute.destination,
+                    steps: currentRoute.steps,
+                    isPublic: currentRoute.isPublic,
+                    createdBy: currentRoute.createdBy,
+                    tripId: currentRoute.tripId
+                };
+                
+                if (routeId) {
+                    // עדכון מסלול קיים
+                    await setDoc(doc(db, 'trips', tripId, 'routes', routeId), routeData);
+                } else {
+                    // יצירת מסלול חדש
+                    const docRef = await addDoc(collection(db, 'trips', tripId, 'routes'), routeData);
+                    currentRoute.id = docRef.id;
+                    routeId = docRef.id;
+                }
+                
+                // עדכון האוסף הפומבי
+                if (routeData.isPublic) {
+                    await setDoc(doc(db, 'publicRoutes', routeId), routeData);
+                } else {
+                    // אם לא פומבי, נסה למחוק מהאוסף הפומבי
+                    await deleteDoc(doc(db, 'publicRoutes', routeId)).catch(e => {});
+                }
+                
+                showToast("המסלול נשמר בהצלחה!");
+                showSummaryView();
+
+            } catch (error) {
+                console.error("Error saving route:", error);
+                showToast("שגיאה בשמירת המסלול.", true);
+            } finally {
+                DOM.saveRouteBtn.disabled = false;
+                DOM.saveRouteBtn.innerHTML = `<i class="fas fa-save ml-2"></i>שמור והצג סיכום`;
+            }
+        }
+
         function calculateDistance(coords1, coords2) {
             if(!coords1 || !coords2) return Infinity;
             const R = 6371; // km
@@ -826,8 +953,15 @@
                     addPointToRoute(e.target.dataset.id);
                 }
             });
-
-            DOM.finishRouteBtn.addEventListener('click', showSummaryView);
+            
+            // כפתור שמירה
+            DOM.saveRouteBtn.addEventListener('click', saveRouteAndShowSummary);
+            
+            // כפתור פומבי/פרטי
+            DOM.isPublicToggle.addEventListener('click', () => {
+                const isChecked = DOM.isPublicToggle.getAttribute('aria-checked') === 'true';
+                updatePublicToggleUI(!isChecked);
+            });
         }
         
         initPage();
