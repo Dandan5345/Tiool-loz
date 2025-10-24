@@ -324,7 +324,7 @@
             alertModal.classList.remove('flex');
         };
         okBtn.addEventListener('click', closeFn, { once: true });
-    }
+      }
 
     function calculateDistanceInMeters(loc1, loc2) {
       if (!loc1 || !loc2) return Infinity;
@@ -409,8 +409,7 @@
           if (!selectedGooglePlaceDetails) selectedGooglePlaceDetails = {};
           selectedGooglePlaceDetails.coords = { lat: pos.lat(), lng: pos.lng() };
         });
-        if (!gmaps_autocompleteService) gmaps_autocompleteService = new google.maps.places.AutocompleteService();
-        if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(gmaps_addEditMap);
+        // שירותי גוגל מאותחלים כעת ב-initPage
       } else {
         gmaps_addEditMap.setCenter(location);
         gmaps_addEditMap.setZoom(15);
@@ -431,7 +430,10 @@
     }
     
     function initGooglePlacesCustomAutocomplete(inputElement, onSelectCallback) {
-      if (!gmapsApiLoaded || !inputElement) return;
+      if (!gmapsApiLoaded || !inputElement || !gmaps_autocompleteService || !gmaps_placesService) {
+          console.warn('Autocomplete init failed. Services not ready.');
+          return;
+      }
 
       const wrapper = inputElement.closest('.ac-wrapper');
       if (!wrapper) return;
@@ -478,15 +480,17 @@
               gmaps_placesService.getDetails(request, (place, status) => {
                 if (status === google.maps.places.PlacesServiceStatus.OK && place) {
                   const details = {
+                    // *** FIX: שומרים placeId ***
+                    placeId: prediction.place_id,
                     name: place.name,
                     location: place.formatted_address,
                     coords: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
                     website: place.website || '',
                     hours: place.opening_hours ? place.opening_hours.weekday_text.join('\n') : '',
-                    photos: place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 800 })) : [],
+                    // *** FIX: שומרים photo_reference במקום URL זמני ***
+                    photos: place.photos ? place.photos.slice(0, 3).map(p => p.photo_reference) : [],
                     types: place.types || [],
-                    rating: place.rating || null,
-                    placeId: prediction.place_id // <-- *** FIX 1 (Part A) ***: Store the permanent ID
+                    rating: place.rating || null
                   };
                   if (onSelectCallback) onSelectCallback(details);
                 }
@@ -543,7 +547,8 @@
           });
         }
         btn.onclick = () => { submenu.classList.toggle('open'); btn.querySelector('i').classList.toggle('rotate-180'); };
-s        div.append(btn, submenu);
+line 802
+        div.append(btn, submenu);
         mainMenu.appendChild(div);
       });
     }
@@ -955,10 +960,56 @@ s        div.append(btn, submenu);
     }
 
     // ---------- Details Modal Logic ----------
-    // *** FIX 2 (Part A) ***: Split render logic from open logic
-    function renderDetailsModalContent(item) {
+    // *** FIX: הפונקציה הפכה ל-async כדי לאפשר מנגנון תיקון (מיגרציה) ***
+    async function openDetailsModal(itemId) {
+      const item = allItems.find(i=>i.id===itemId);
+      if (!item) return;
+
+      // ---------- *** מנגנון תיקון (מיגרציה) אוטומטי *** ----------
+      // בודק אם התמונות שמורות בפורמט הישן (URL) במקום בפורמט החדש (reference)
+      if (item.photos && item.photos.length > 0 && typeof item.photos[0] === 'string' && item.photos[0].startsWith('http')) {
+        // פורמט ישן זוהה. ננסה לתקן.
+        if (item.placeId && gmapsApiLoaded && gmaps_placesService) {
+          try {
+            console.log(`מתקן תמונות עבור: ${item.name} (${item.id})`);
+            const request = { placeId: item.placeId, fields: ["photos"] };
+            
+            // המרה של getDetails ל-Promise
+            const place = await new Promise((resolve, reject) => {
+              gmaps_placesService.getDetails(request, (place, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                  resolve(place);
+                } else {
+                  reject(new Error(`Places API failed: ${status}`));
+                }
+              });
+            });
+
+            // חילוץ ה-references החדשים
+            const newPhotoReferences = place.photos ? place.photos.slice(0, 3).map(p => p.photo_reference) : [];
+            
+            // עדכון הפריט ב-Firestore
+            const itemRef = doc(db, 'trips', tripId, 'places', item.id);
+            await updateDoc(itemRef, { photos: newPhotoReferences });
+            
+            // עדכון האובייקט הלוקלי כדי שה-UI יתעדכן מיד
+            item.photos = newPhotoReferences;
+            console.log(`התמונות תוקנו בהצלחה עבור: ${item.id}`);
+
+          } catch (err) {
+            console.error(`נכשל בתיקון תמונות עבור ${item.id}:`, err);
+            // לא חוסם את פתיחת המודל, פשוט רושם שגיאה
+          }
+        } else if (!item.placeId) {
+          console.warn(`לא ניתן לתקן תמונות עבור ${item.name}: חסר placeId.`);
+          // מנקה את התמונות השבורות כדי שלא יוצגו
+          item.photos = []; 
+        }
+      }
+      // ---------- *** סוף מנגנון תיקון *** ----------
+
+
       const wrap = document.getElementById('details-modal-content');
-      if (!item || !wrap) return;
 
       let tags = '';
       if (item.isKosher==='כן') tags += `<span class="text-sm font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">כשר</span>`;
@@ -967,14 +1018,20 @@ s        div.append(btn, submenu);
       
       const ratingHtml = renderStars(item.rating);
 
+      // *** FIX: בניית URL של תמונה מ-photo_reference ***
       let photosHtml = '';
       if (item.photos && item.photos.length > 0) {
         photosHtml = `<div class="grid grid-cols-3 gap-2">
-          ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity" loading="lazy" onerror="this.src='https://placehold.co/800x600/e2e8f0/94a3b8?text=Photo+Missing'; this.onerror=null;"></a>`).join('')}
+          ${item.photos.map(ref => {
+            // בדיקה אם זה עדיין URL ישן (למקרה שהתיקון נכשל)
+            if (typeof ref === 'string' && ref.startsWith('http')) {
+              return `<a href="${ref}" target="_blank"><img src="${ref}" class="w-full h-24 object-cover rounded-lg shadow-md" loading="lazy" onerror="this.src='https://placehold.co/400x200/e0e0e0/707070?text=Expired'; this.onerror=null;"></a>`;
+            }
+            // בניית ה-URL החדש והתקין
+            const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${ref}&key=${GOOGLE_MAPS_API_KEY}`;
+            return `<a href="${url}" target="_blank"><img src="${url}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity" loading="lazy"></a>`;
+          }).join('')}
         </div>`;
-      } else if (item.googlePlaceId) {
-        // Show placeholder if we know it's a google place but no photos (e.g. refresh failed)
-        photosHtml = `<div class="text-center text-sm text-slate-500 bg-slate-100 p-4 rounded-lg">לא נמצאו תמונות עבור מקום זה.</div>`;
       }
       
       const navigateButtonInModal = item.coords ? `<button data-id="${item.id}" class="navigate-btn flex-1 text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition"><i class="fa-solid fa-diamond-turn-right mr-2"></i>נווט</button>` : '';
@@ -1003,7 +1060,7 @@ s        div.append(btn, submenu);
           <button data-id="${item.id}" class="edit-btn-modal flex-1 text-center bg-slate-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-slate-700 transition"><i class="fas fa-pencil mr-2"></i>ערוך</button>
         </div>
       `;
-      
+      detailsModal.classList.remove('hidden'); detailsModal.classList.add('flex');
       document.getElementById('details-modal-close').addEventListener('click', closeDetailsModal);
       document.querySelector('.edit-btn-modal').addEventListener('click', (e)=>{ closeDetailsModal(); openModalHandler(e.currentTarget.dataset.id); });
       const navBtn = document.querySelector('#details-modal-content .navigate-btn');
@@ -1017,71 +1074,6 @@ s        div.append(btn, submenu);
 
       if (item.coords) gmaps_initDetailsMap(item.coords);
     }
-
-    // *** FIX 2 (Part B) ***: Create new async open function
-    async function openDetailsModal(itemId) {
-      const item = allItems.find(i=>i.id===itemId);
-      if (!item) return;
-
-      // Show modal shell immediately
-      detailsModal.classList.remove('hidden');
-      detailsModal.classList.add('flex');
-      const wrap = document.getElementById('details-modal-content');
-      wrap.innerHTML = `<div class="p-8 flex justify-center items-center h-48"><i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i></div>`; // Simple loader
-
-      let itemToRender = item;
-
-      // Check if data is missing/empty and needs fetching
-      if (item.googlePlaceId && (!item.photos || item.photos.length === 0)) {
-        if (!gmaps_placesService) {
-          // Ensure service is ready
-          if(gmaps_addEditMap) {
-            gmaps_placesService = new google.maps.places.PlacesService(gmaps_addEditMap);
-          } else {
-            // Create a dummy map to init the service if add/edit map was never opened
-            const dummyMapDiv = document.createElement('div');
-            gmaps_placesService = new google.maps.places.PlacesService(dummyMapDiv);
-          }
-        }
-        
-        if (gmaps_placesService) {
-          try {
-            const place = await new Promise((resolve, reject) => {
-              gmaps_placesService.getDetails({
-                placeId: item.googlePlaceId,
-                fields: ["photos", "rating"]
-              }, (place, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK) resolve(place);
-                else reject(new Error(status));
-              });
-            });
-            
-            const newPhotos = place.photos ? place.photos.slice(0, 3).map(p => p.getUrl({ maxWidth: 800 })) : [];
-            const newRating = place.rating || null;
-
-            // Update Firestore - this is the "save properly" part
-            await updateDoc(doc(db, 'trips', tripId, 'places', item.id), {
-              photos: newPhotos,
-              rating: newRating,
-              googleDataRefreshedAt: serverTimestamp()
-            });
-
-            // Update local item for immediate render, snapshot will catch up
-            itemToRender = { ...item, photos: newPhotos, rating: newRating };
-            const itemIndex = allItems.findIndex(i => i.id === item.id);
-            if(itemIndex > -1) allItems[itemIndex] = itemToRender;
-            
-          } catch (e) {
-            console.error("Failed to re-fetch Google Place details:", e);
-            // continue to render with what we have
-          }
-        }
-      }
-      
-      // Now render the modal content
-      renderDetailsModalContent(itemToRender);
-    }
-
 
     function closeDetailsModal() {
       detailsModal.classList.add('hidden'); 
@@ -1145,7 +1137,6 @@ s        div.append(btn, submenu);
         }
       });
       
-      // *** FIX: Event delegation for modal form changes ***
       form.addEventListener('change', e => {
           if (e.target.id === 'item-type') {
               handleTypeChange();
@@ -1172,7 +1163,7 @@ s        div.append(btn, submenu);
             };
             confirmBtn.addEventListener('click', handler, { once:true });
             document.getElementById('delete-modal-cancel').addEventListener('click', closeDelete, { once:true });
-t            deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
+            deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
           } else if (actionBtn.matches('.edit-btn')) {
             openModalHandler(id);
           } else if (actionBtn.matches('.navigate-btn')) {
@@ -1180,7 +1171,8 @@ t            deleteModal.classList.remove('hidden'); deleteModal.classList
           }
           return;
         }
-        openDetailsModal(id);
+        // *** FIX: קריאה לפונקציה אסינכרונית ***
+        (async () => { await openDetailsModal(id); })();
       });
 
       itemsContainer.addEventListener('change', async e => {
@@ -1278,26 +1270,24 @@ t            deleteModal.classList.remove('hidden'); deleteModal.classList
           }
         }
 
-        // ---------- *** FIX 1 (Part B) ***: Robust data gathering for photos, rating, coords, AND placeId ----------
+        // ---------- *** FIX: איסוף נתונים נכון *** ----------
         const existing = editingItemId ? allItems.find(i=>i.id === editingItemId) : null;
 
-        // Default to existing data or empty/null values
+        // ברירת מחדל לנתונים קיימים או ערכים ריקים
         let photos = existing?.photos || [];
         let rating = existing?.rating || null;
         let coords = existing?.coords || null;
-        let googlePlaceId = existing?.googlePlaceId || null; // <-- Load existing ID
+        let placeId = existing?.placeId || null; // *** FIX: שמירת placeId ***
 
-        // If a Google Place was selected during this modal session, its data takes precedence.
+        // אם נבחר מקום חדש מגוגל בסשן הזה, הנתונים שלו מקבלים עדיפות
         if (selectedGooglePlaceDetails) {
-            // Overwrite with initial data from Google.
+            // דריסה של הנתונים הישנים. selectedGooglePlaceDetails מכיל כעת photo_references
             photos = selectedGooglePlaceDetails.photos || [];
             rating = selectedGooglePlaceDetails.rating || null;
-            coords = selectedGooglePlaceDetails.coords || null;
-            googlePlaceId = selectedGooglePlaceDetails.placeId || null; // <-- Get the permanent ID
+            placeId = selectedGooglePlaceDetails.placeId || null; // *** FIX: שמירת placeId ***
         }
 
-        // The final, authoritative coordinates come from the map marker's current position.
-        // This accounts for both selecting a place and dragging the pin.
+        // הקואורדינטות הסופיות והקובעות מגיעות ממיקום המרקר על המפה
         if (gmaps_addEditMarker) {
             const markerPosition = gmaps_addEditMarker.getPosition();
             if (markerPosition) {
@@ -1305,12 +1295,12 @@ t            deleteModal.classList.remove('hidden'); deleteModal.classList
             }
         }
         
-        // Final validation for coordinates
+        // ולידציה סופית לקואורדינטות
         if (!coords) {
             showModalError('יש למקם נעץ על המפה או לבחור מקום מהחיפוש.');
             return;
         }
-        // ---------- MODIFICATION END ----------
+        // ---------- *** סוף התיקון *** ----------
 
         const data = {
           name: name,
@@ -1326,9 +1316,9 @@ t            deleteModal.classList.remove('hidden'); deleteModal.classList
           reservation: gv('item-reservation'),
           author: currentUser.uid,
           coords: coords,
-          photos: photos,
+          photos: photos, // *** כעת מכיל photo_references ***
           rating: rating,
-          googlePlaceId: googlePlaceId // <-- Save the permanent ID to Firestore
+          placeId: placeId // *** FIX: שמירת placeId ***
         };
 
         try {
@@ -1398,6 +1388,18 @@ t            deleteModal.classList.remove('hidden'); deleteModal.classList
 
       try {
         await loadGoogleMapsApi();
+        // *** FIX: אתחול שירותי גוגל באופן גלובלי ***
+        if (gmapsApiLoaded) {
+          // ניצור אלמנט מפה "דמה" נסתר כדי לאתחל את השירותים
+          const dummyMapDiv = document.createElement('div');
+          if (!gmaps_placesService) {
+            gmaps_placesService = new google.maps.places.PlacesService(new google.maps.Map(dummyMapDiv));
+          }
+          if (!gmaps_autocompleteService) {
+            gmaps_autocompleteService = new google.maps.places.AutocompleteService();
+          }
+        }
+        // *** סוף התיקון ***
       } catch (error) {
         console.error(error);
         showAlert("לא ניתן היה לטעון את שירותי המפות של גוגל. חלק מהתכונות לא יעבדו.");
