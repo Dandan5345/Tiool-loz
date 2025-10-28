@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
   <title>מסע חלומות 🗽 אטרקציות ומסעדות</title>
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -10,13 +10,23 @@
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet" />
 
   <style>
-    body { font-family: 'Assistant', sans-serif; }
+    /* Global base for smoother mobile scrolling & dark overscroll (no white box bottom) */
+    html, body {
+      background-color:#000;
+      overscroll-behavior-y: contain;
+      overscroll-behavior-x: none;
+      -webkit-text-size-adjust:100%;
+    }
+    body {
+      font-family:'Assistant',sans-serif;
+    }
+
     #sidebar { transition: transform 0.3s ease-in-out; }
     .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; }
     .submenu.open { max-height: 1200px; }
     .form-input, .form-select, .form-textarea { transition: all 0.2s ease-in-out; border-radius: 0.5rem; border: 1px solid #cbd5e1; }
     .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #38bdf8; box-shadow: 0 0 0 2px #38bdf840; outline: none; }
-    
+
     /* Animations */
     .modal-step { display: none; }
     .modal-step.active { display: block; animation: fadeIn 0.5s; }
@@ -24,7 +34,13 @@
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-    #map-preview, #details-map { height: 220px; border-radius: 0.75rem; background-color: #e2e8f0; }
+    #map-preview, #details-map {
+      height: 220px;
+      border-radius: 0.75rem;
+      background-color: #e2e8f0;
+      touch-action: auto; /* מפה עדיין זום/פאן חופשי */
+    }
+
     details > summary { list-style: none; cursor: pointer; }
     details > summary::-webkit-details-marker { display: none; }
     .chevron-icon { transition: transform 0.3s ease-out; }
@@ -32,8 +48,8 @@
     .step-indicator { transition: all 0.4s ease-in-out; }
 
     /* Item Card Styling */
-    .item-card { 
-      cursor: pointer; 
+    .item-card {
+      cursor: pointer;
       transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
     }
     .item-card-anim {
@@ -41,29 +57,71 @@
     }
 
     /* Initial Loader */
-    #initial-loader { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; transition: opacity 0.5s ease-out; }
+    #initial-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.5s ease-out;
+    }
     .plane-spinner { animation: spin 2s linear infinite; }
 
     /* Section Loader */
-    .section-loader { position: absolute; inset: 0; background-color: rgba(241,245,249,0.8); z-index: 20; display: flex; align-items: center; justify-content: center; border-radius: 1rem; }
+    .section-loader {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(241,245,249,0.8);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 1rem;
+    }
 
     /* Custom Autocomplete dropdown styling */
     .ac-wrapper { position: relative; }
     .ac-list {
-      position: absolute; top: 100%; right: 0; left: 0; z-index: 1050;
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 0.5rem;
-      margin-top: 0.25rem; max-height: 260px; overflow-y: auto; box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+      position: absolute;
+      top: 100%;
+      right: 0;
+      left: 0;
+      z-index: 1050;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      margin-top: 0.25rem;
+      max-height: 260px;
+      overflow-y: auto;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.08);
     }
-    .ac-item { padding: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; }
+    .ac-item {
+      padding: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
     .ac-item:hover { background: #f1f5f9; }
     .ac-item-icon { color: #94a3b8; }
     .ac-item-main { font-weight: 600; }
-    .ac-item-secondary { font-size: 0.875rem; color: #64748b; }
-    
+    .ac-item-secondary {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+
     .rating-stars { color: #f59e0b; }
+
+    /* When a modal is open, prevent background scroll/touch */
+    body.modal-locked {
+      overflow: hidden;
+      touch-action: none;
+    }
   </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-transparent text-slate-800">
+  <!-- Initial full-screen loader -->
   <div id="initial-loader">
     <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
     <div class="fixed inset-0 z-0 bg-black/50"></div>
@@ -73,9 +131,11 @@
     </div>
   </div>
 
+  <!-- Persistent page background -->
   <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
   <div class="fixed inset-0 z-0 bg-black/50"></div>
 
+  <!-- Sidebar -->
   <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
     <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
       <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
@@ -85,6 +145,7 @@
   </aside>
   <div id="overlay" class="fixed inset-0 bg-black/60 z-50 hidden"></div>
 
+  <!-- Main content -->
   <div id="main-content" class="relative z-10 opacity-0 transition-opacity duration-500">
     <header class="bg-white/70 backdrop-blur-md sticky top-0 z-30 shadow-sm">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -135,9 +196,10 @@
       </div>
     </main>
   </div>
-  
+
   <!-- Modals -->
-  <div id="item-modal" class="fixed inset-0 bg-black/60 z-40 hidden items-center justify-center p-4">
+  <!-- Add / Edit Item Modal -->
+  <div id="item-modal" class="fixed inset-0 bg-black/60 z-[90] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col">
       <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
         <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת מקום חדש</h3>
@@ -167,11 +229,13 @@
     </div>
   </div>
 
-  <div id="details-modal" class="fixed inset-0 bg-black/60 z-[70] hidden items-center justify-center p-4">
+  <!-- Details Modal -->
+  <div id="details-modal" class="fixed inset-0 bg-black/60 z-[95] hidden items-center justify-center p-4">
     <div id="details-modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col relative"></div>
   </div>
 
-  <div id="delete-confirm-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center">
+  <!-- Delete confirm Modal -->
+  <div id="delete-confirm-modal" class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full">
       <div class="text-red-500 mb-4"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
       <h3 id="delete-modal-title" class="text-xl font-bold text-slate-800 mb-4">האם למחוק?</h3>
@@ -182,8 +246,9 @@
       </div>
     </div>
   </div>
-  
-  <div id="alert-modal" class="fixed inset-0 bg-black/60 z-[90] hidden items-center justify-center p-4">
+
+  <!-- Alert Modal -->
+  <div id="alert-modal" class="fixed inset-0 bg-black/60 z-[110] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full animate-fadeIn">
       <h3 id="alert-modal-title" class="text-xl font-bold text-slate-800 mb-4">הודעה</h3>
       <p id="alert-modal-text" class="text-slate-600 mb-6"></p>
@@ -191,7 +256,8 @@
     </div>
   </div>
 
-  <div id="navigation-choice-modal" class="fixed inset-0 bg-black/60 z-[80] hidden items-center justify-center p-4">
+  <!-- Navigation choice (Waze / Google Maps) -->
+  <div id="navigation-choice-modal" class="fixed inset-0 bg-black/60 z-[120] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-6 text-center max-w-sm w-full relative">
       <button id="navigation-modal-close" class="absolute top-3 right-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 transition-colors"><i class="fas fa-times"></i></button>
       <h3 class="text-xl font-bold text-slate-800 mb-6">באיזו אפליקציה לנווט?</h3>
@@ -202,15 +268,17 @@
     </div>
   </div>
 
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, updateDoc, setDoc, arrayUnion, orderBy, enableIndexedDbPersistence, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import {
+      getFirestore, doc, getDoc, collection, addDoc, query,
+      onSnapshot, serverTimestamp, deleteDoc, updateDoc, setDoc,
+      arrayUnion, orderBy, enableIndexedDbPersistence, where, getDocs
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     // ---------- Firebase Configuration ----------
-    // For security, replace these with your actual Firebase project configuration.
-    // It's recommended to manage these keys using environment variables in a real application.
+    // IMPORTANT: Don't change keys here, user asked not to touch
     const firebaseConfig = {
       apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
       authDomain: "tiool-loz.firebaseapp.com",
@@ -222,7 +290,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    
+
     enableIndexedDbPersistence(db).catch((err) => {
       if (err.code === 'failed-precondition') console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
       else if (err.code === 'unimplemented') console.warn("הדפדפן לא תומך ב־Persistence.");
@@ -242,11 +310,14 @@
     let isRestaurant = false;
     let userLocation = null;
 
-    // ***** NEW: Track recover-in-flight to avoid repeated calls *****
+    // Scroll lock tracking for modals
+    let modalOpenCount = 0;
+    let scrollPosition = 0;
+
+    // Track recover-in-flight to avoid repeated calls
     const photosRepairInFlight = new Set();
 
     // ---------- Google Maps State & API Key ----------
-    // For security, it's recommended to manage API keys using environment variables.
     const GOOGLE_MAPS_API_KEY = "AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c";
     let gmapsApiLoaded = false;
     let gmaps_addEditMap = null, gmaps_addEditMarker = null;
@@ -262,10 +333,16 @@
       basePlaceTypes: ["מסעדה/אוכל","סופר","מוזיאון","קניון/מרכז קניות","אטרקציה","חוף","סיור"],
       customPlaceTypes: [],
       get placeTypes() { return [...this.basePlaceTypes, ...this.customPlaceTypes]; },
-      baseFoodTypes: { "איטלקי":"🍝","חלבי":"🧀","בשרי":"🥩","צמחוני":"🥗","אסייתי":"🍜","שווארמה":"🥙","פיצה":"🍕","המבורגר":"🍔","בית קפה":"☕" },
+      baseFoodTypes: {
+        "איטלקי":"🍝","חלבי":"🧀","בשרי":"🥩","צמחוני":"🥗","אסייתי":"🍜",
+        "שווארמה":"🥙","פיצה":"🍕","המבורגר":"🍔","בית קפה":"☕"
+      },
       customFoodTypes: {},
       get foodTypes() { return {...this.baseFoodTypes, ...this.customFoodTypes, "אחר":"🍴"}; },
-      placeTypeEmojis: { "מסעדה/אוכל":"🍔","סופר":"🛒","מוזיאון":"🏛️","קניון/מרכז קניות":"🛍️","אטרקציה":"🎢","חוף":"🏖️","סיור":"🚶‍♂️" }
+      placeTypeEmojis: {
+        "מסעדה/אוכל":"🍔","סופר":"🛒","מוזיאון":"🏛️","קניון/מרכז קניות":"🛍️",
+        "אטרקציה":"🎢","חוף":"🏖️","סיור":"🚶‍♂️"
+      }
     };
 
     // ---------- UI Element References ----------
@@ -309,24 +386,79 @@
       };
     }
 
+    // prevent weird iOS paste duplications / formatting in modal fields
+    function attachPlainPasteToModalFields(container) {
+      const fields = container.querySelectorAll('input[type="text"], input[type="url"], textarea');
+      fields.forEach(f => {
+        f.addEventListener('paste', (e) => {
+          if (!e.clipboardData && !window.clipboardData) return;
+          e.preventDefault();
+          const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+          // insert plain text without extra hidden stuff
+          if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+            document.execCommand('insertText', false, text);
+          } else {
+            const start = f.selectionStart;
+            const end = f.selectionEnd;
+            const value = f.value;
+            f.value = value.slice(0,start) + text + value.slice(end);
+            const cursorPos = start + text.length;
+            f.selectionStart = cursorPos;
+            f.selectionEnd = cursorPos;
+          }
+        }, { once: true }); // attach per render
+      });
+    }
+
+    // body scroll lock helpers (no background scroll while modal open)
+    function lockBodyScroll() {
+      if (modalOpenCount === 0) {
+        scrollPosition = window.scrollY || document.documentElement.scrollTop || 0;
+        document.body.dataset.scrollLock = scrollPosition;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollPosition}px`;
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+        document.body.classList.add('modal-locked');
+      }
+      modalOpenCount++;
+    }
+    function unlockBodyScroll() {
+      modalOpenCount = Math.max(0, modalOpenCount - 1);
+      if (modalOpenCount === 0) {
+        const y = parseInt(document.body.dataset.scrollLock || '0', 10);
+        document.body.classList.remove('modal-locked');
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        window.scrollTo(0, y);
+        delete document.body.dataset.scrollLock;
+      }
+    }
+
     function toggleSidebar() {
       sidebar.classList.toggle('translate-x-full');
       overlay.classList.toggle('hidden');
     }
-    
-    function showAlert(message, title = 'הודעה') {
-        const alertModal = document.getElementById('alert-modal');
-        document.getElementById('alert-modal-title').textContent = title;
-        document.getElementById('alert-modal-text').innerHTML = message;
-        alertModal.classList.remove('hidden');
-        alertModal.classList.add('flex');
 
-        const okBtn = document.getElementById('alert-modal-ok');
-        const closeFn = () => {
-            alertModal.classList.add('hidden');
-            alertModal.classList.remove('flex');
-        };
-        okBtn.addEventListener('click', closeFn, { once: true });
+    function showAlert(message, title = 'הודעה') {
+      const alertModal = document.getElementById('alert-modal');
+      document.getElementById('alert-modal-title').textContent = title;
+      document.getElementById('alert-modal-text').innerHTML = message;
+      alertModal.classList.remove('hidden');
+      alertModal.classList.add('flex');
+      lockBodyScroll();
+
+      const okBtn = document.getElementById('alert-modal-ok');
+      const closeFn = () => {
+        alertModal.classList.add('hidden');
+        alertModal.classList.remove('flex');
+        unlockBodyScroll();
+      };
+      okBtn.addEventListener('click', closeFn, { once: true });
     }
 
     function calculateDistanceInMeters(loc1, loc2) {
@@ -342,22 +474,22 @@
 
     async function handleGetLocation() {
       return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) { 
-          showAlert("דפדפן זה אינו תומך בשירותי מיקום."); 
-          return reject(); 
+        if (!navigator.geolocation) {
+          showAlert("דפדפן זה אינו תומך בשירותי מיקום.");
+          return reject();
         }
         getLocationBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> מאתר מיקום...`;
         getLocationBtn.disabled = true;
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            getLocationBtn.innerHTML = `<i class="fas fa-check-circle mr-2"></i> מיקום עודכן`;
+            getLocationBtn.innerHTML = `<i class=\"fas fa-check-circle mr-2\"></i> מיקום עודכן`;
             getLocationBtn.disabled = false;
             resolve(userLocation);
           },
           (err) => {
             console.error(err);
-            getLocationBtn.innerHTML = `<i class="fas fa-exclamation-triangle mr-2"></i> הפעלת מיקום נכשלה`;
+            getLocationBtn.innerHTML = `<i class=\"fas fa-exclamation-triangle mr-2\"></i> הפעלת מיקום נכשלה`;
             getLocationBtn.disabled = false;
             showAlert("לא ניתן היה לקבל את מיקומך. יש לוודא שהרשאות המיקום פעילות עבור האתר.");
             reject(err);
@@ -369,7 +501,7 @@
 
     function renderStars(rating) {
       if (!rating || typeof rating !== 'number' || rating <= 0) return '';
-      let starsHtml = `<div class="rating-stars flex items-center gap-1" title="דירוג: ${rating.toFixed(1)} מתוך 5">`;
+      let starsHtml = `<div class=\"rating-stars flex items-center gap-1\" title=\"דירוג: ${rating.toFixed(1)} מתוך 5\">`;
       const fullStars = Math.floor(rating);
       const halfStar = rating % 1 >= 0.4;
       const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
@@ -377,8 +509,8 @@
       for(let i = 0; i < fullStars; i++) starsHtml += '<i class="fas fa-star"></i>';
       if(halfStar) starsHtml += '<i class="fas fa-star-half-alt"></i>';
       for(let i = 0; i < emptyStars; i++) starsHtml += '<i class="far fa-star"></i>';
-      
-      starsHtml += `<span class="text-xs text-slate-500 font-semibold ml-1">(${rating.toFixed(1)})</span></div>`;
+
+      starsHtml += `<span class=\"text-xs text-slate-500 font-semibold ml-1\">(${rating.toFixed(1)})</span></div>`;
       return starsHtml;
     }
 
@@ -409,11 +541,9 @@
         });
         gmaps_addEditMarker.addListener('dragend', () => {
           const pos = gmaps_addEditMarker.getPosition();
-          // *** FIX: אל תיצור אובייקט ריק שיגרום למחיקת photos בשמירה ***
           if (selectedGooglePlaceDetails) {
             selectedGooglePlaceDetails.coords = { lat: pos.lat(), lng: pos.lng() };
           }
-          // בכל מקרה, בזמן השמירה נשתמש תמיד במיקום הנוכחי של הנעץ (ראה להלן)
         });
         if (!gmaps_autocompleteService) gmaps_autocompleteService = new google.maps.places.AutocompleteService();
         if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(gmaps_addEditMap);
@@ -435,7 +565,7 @@
         gmaps_detailsMarker.setPosition(coords);
       }
     }
-    
+
     function initGooglePlacesCustomAutocomplete(inputElement, onSelectCallback) {
       if (!gmapsApiLoaded || !inputElement) return;
 
@@ -448,7 +578,7 @@
         list.className = 'ac-list hidden';
         wrapper.appendChild(list);
       }
-      
+
       const handleSearch = debounce(async (query) => {
         if (query.length < 2) {
           list.innerHTML = '';
@@ -475,11 +605,10 @@
             item.addEventListener('click', () => {
               list.classList.add('hidden');
               inputElement.value = prediction.description;
-              
+
               const request = {
                 placeId: prediction.place_id,
-                // *** FIX: הוסף place_id לשדות כדי שנוכל לשחזר תמונות בעתיד ***
-                fields: ["place_id","name", "formatted_address", "geometry", "website", "opening_hours", "photos", "types", "rating"]
+                fields: ["place_id","name","formatted_address","geometry","website","opening_hours","photos","types","rating"]
               };
 
               gmaps_placesService.getDetails(request, (place, status) => {
@@ -508,7 +637,7 @@
       inputElement.addEventListener('input', () => {
         handleSearch(inputElement.value);
       });
-      
+
       document.addEventListener('click', (e) => {
         if (!wrapper.contains(e.target)) list.classList.add('hidden');
       });
@@ -585,7 +714,7 @@
       }
       const modalTitle = document.getElementById('modal-title');
       const finishButton = document.getElementById('modal-finish-btn');
-      
+
       if (editingItemId) {
         modalTitle.textContent = 'עריכת מקום';
         finishButton.textContent = 'שמור שינויים';
@@ -596,22 +725,24 @@
         finishButton.textContent = 'הוסף לדף';
         isRestaurant = false;
       }
-      
+
       currentModalStep = 1;
       updateModalView();
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      lockBodyScroll();
     }
 
     function closeModalHandler() {
       editingItemId = null;
-      modal.classList.add('hidden'); 
+      modal.classList.add('hidden');
       modal.classList.remove('flex');
       showModalError('');
       gmaps_addEditMap = null;
       gmaps_addEditMarker = null;
+      unlockBodyScroll();
     }
-    
+
     function updateModalView() {
       const itemTypeEl = document.getElementById('item-type');
       let currentType = '';
@@ -638,7 +769,7 @@
           generateStepContent(actualStep);
         }
         stepEl.classList.add('active');
-        
+
         if (actualStep === 4 && gmaps_addEditMap && gmaps_addEditMarker) {
           setTimeout(() => {
             google.maps.event.trigger(gmaps_addEditMap, "resize");
@@ -658,7 +789,7 @@
       const other = document.getElementById('item-type-other');
       const typeSelect = document.getElementById('item-type');
       if (other && typeSelect) {
-          other.classList.toggle('hidden', typeSelect.value !== 'אחר');
+        other.classList.toggle('hidden', typeSelect.value !== 'אחר');
       }
       document.querySelectorAll('.modal-step').forEach((el) => {
         const stepNum = parseInt(el.id.split('-')[1]);
@@ -671,7 +802,7 @@
       const other = document.getElementById('item-food-type-other');
       const foodTypeSelect = document.getElementById('item-food-type');
       if (other && foodTypeSelect) {
-          other.classList.toggle('hidden', foodTypeSelect.value !== 'אחר');
+        other.classList.toggle('hidden', foodTypeSelect.value !== 'אחר');
       }
     }
 
@@ -705,39 +836,39 @@
         </div>
       `;
     }
-    
+
     function generateStepContent(step) {
       const c = document.getElementById(`step-${step}`);
       if (!c) return;
-    
+
       const item = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
       const label = "flex items-center gap-3 text-lg font-bold text-slate-700 mb-3";
-    
+
       switch(step) {
         case 1:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-signature text-slate-400"></i>שם המקום <span class="text-red-500">*</span></label><input type="text" id="item-name" required class="form-input w-full p-3" placeholder="לדוגמה: Top of the Rock">`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-signature text-slate-400\"></i>שם המקום <span class=\"text-red-500\">*</span></label><input type=\"text\" id=\"item-name\" required class=\"form-input w-full p-3\" placeholder=\"לדוגמה: Top of the Rock\">`;
           if(item) document.getElementById('item-name').value = item.name || '';
           break;
         case 2:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-map-pin text-slate-400"></i>לאיזה יעד? <span class="text-red-500">*</span></label><select id="item-destination" required class="form-select w-full p-3">${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}</select>`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-map-pin text-slate-400\"></i>לאיזה יעד? <span class=\"text-red-500\">*</span></label><select id=\"item-destination\" required class=\"form-select w-full p-3\">${siteData.destinations.map(d=>`<option value=\"${d}\">📍 ${d}</option>`).join('')}</select>`;
           if(item) document.getElementById('item-destination').value = item.destination || '';
           break;
         case 3:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-shapes text-slate-400"></i>סוג המקום <span class="text-red-500">*</span></label><select id="item-type" required class="form-select w-full p-3">${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג חדש">`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-shapes text-slate-400\"></i>סוג המקום <span class=\"text-red-500\">*</span></label><select id=\"item-type\" required class=\"form-select w-full p-3\">${[...siteData.placeTypes,"אחר"].map(o=>`<option value=\"${o}\">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}</select><input type=\"text\" id=\"item-type-other\" class=\"form-input w-full p-3 mt-3 hidden\" placeholder=\"הגדר סוג חדש\">`;
           if(item) document.getElementById('item-type').value = item.type || '';
-          handleTypeChange(); // Call once to set initial view
+          handleTypeChange();
           break;
         case 4:
           c.innerHTML = createLocationHtml();
           const searchInput = c.querySelector('#item-location-search-google');
-          
+
           if (item) {
             searchInput.value = item.location || '';
             document.getElementById('item-location').value = item.location || '';
             document.getElementById('item-hours').value = item.hours || '';
             document.getElementById('item-link').value = item.link || '';
           }
-          
+
           gmaps_initAddEditMap(item?.coords);
 
           initGooglePlacesCustomAutocomplete(searchInput, (placeDetails) => {
@@ -755,23 +886,23 @@
           });
           break;
         case 5:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-calendar-check text-slate-400"></i>צריך להזמין מקום?</label><select id="item-reservation" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-calendar-check text-slate-400\"></i>צריך להזמין מקום?</label><select id=\"item-reservation\" class=\"form-select w-full p-3\"><option value=\"לא\">לא</option><option value=\"כן\">כן</option><option value=\"מומלץ\">מומלץ</option></select>`;
           if(item) document.getElementById('item-reservation').value = item.reservation || 'לא';
           break;
         case 6:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-quote-left text-slate-400"></i>פירוט קצר (אופציונלי)</label><textarea id="item-short-description" class="form-textarea w-full p-3" rows="2" placeholder="משפט או שניים..."></textarea>`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-quote-left text-slate-400\"></i>פירוט קצר (אופציונלי)</label><textarea id=\"item-short-description\" class=\"form-textarea w-full p-3\" rows=\"2\" placeholder=\"משפט או שניים...\"></textarea>`;
           if(item) document.getElementById('item-short-description').value = item.shortDescription || '';
           break;
         case 7:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-pen-to-square text-slate-400"></i>תיאור מלא (אופציונלי)</label><textarea id="item-description" class="form-textarea w-full p-3" rows="4" placeholder="פרטים נוספים, המלצות..."></textarea>`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-pen-to-square text-slate-400\"></i>תיאור מלא (אופציונלי)</label><textarea id=\"item-description\" class=\"form-textarea w-full p-3\" rows=\"4\" placeholder=\"פרטים נוספים, המלצות...\"></textarea>`;
           if(item) document.getElementById('item-description').value = item.description || '';
           break;
         case 8:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-star-of-david text-slate-400"></i>האם המסעדה כשרה?</label><select id="item-kosher" class="form-select w-full p-3"><option value="לא">לא</option><option value="כן">כן</option></select>`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-star-of-david text-slate-400\"></i>האם המסעדה כשרה?</label><select id=\"item-kosher\" class=\"form-select w-full p-3\"><option value=\"לא\">לא</option><option value=\"כן\">כן</option></select>`;
           if(item) document.getElementById('item-kosher').value = item.isKosher || 'לא';
           break;
         case 9:
-          c.innerHTML = `<label class="${label}"><i class="fa-solid fa-utensils text-slate-400"></i>סוג אוכל</label><select id="item-food-type" class="form-select w-full p-3">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value="${n}">${e} ${n}</option>`).join('')}</select><input type="text" id="item-food-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג אוכל">`;
+          c.innerHTML = `<label class="${label}"><i class=\"fa-solid fa-utensils text-slate-400\"></i>סוג אוכל</label><select id=\"item-food-type\" class=\"form-select w-full p-3\">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value=\"${n}\">${e} ${n}</option>`).join('')}</select><input type=\"text\" id=\"item-food-type-other\" class=\"form-input w-full p-3 mt-3 hidden\" placeholder=\"הגדר סוג אוכל\">`;
           if(item) {
             const foodSel = document.getElementById('item-food-type');
             const foodOther = document.getElementById('item-food-type-other');
@@ -785,21 +916,31 @@
           }
           break;
       }
-    }
 
+      // Patch paste behavior once per rendered step
+      attachPlainPasteToModalFields(c);
+    }
 
     // ---------- Item Rendering Logic ----------
     function renderAllItems() {
       if (!itemsContainer) return;
       if (allItems.length === 0 && !isInitialLoad) {
-        itemsContainer.innerHTML = `<div class="text-center p-16 bg-white/70 backdrop-blur-md rounded-2xl shadow-sm"><i class="fas fa-map-signs fa-4x text-slate-400 mb-6"></i><h3 class="text-2xl font-bold text-slate-700">עדיין אין המלצות...</h3><p class="text-slate-500 mt-2">לחץ על "הוספת מקום" כדי ליצור את הראשון.</p></div>`;
+        itemsContainer.innerHTML = `
+          <div class="text-center p-16 bg-white/70 backdrop-blur-md rounded-2xl shadow-sm">
+            <i class="fas fa-map-signs fa-4x text-slate-400 mb-6"></i>
+            <h3 class="text-2xl font-bold text-slate-700">עדיין אין המלצות...</h3>
+            <p class="text-slate-500 mt-2">לחץ על "הוספת מקום" כדי ליצור את הראשון.</p>
+          </div>`;
         loadingMessage.style.display = 'none';
         return;
       }
       const preserved = {};
-      document.querySelectorAll('#items-container details').forEach(d => { if (d.dataset.key) preserved[d.dataset.key]=d.open; });
+      document.querySelectorAll('#items-container details').forEach(d => {
+        if (d.dataset.key) preserved[d.dataset.key]=d.open;
+      });
 
-      itemsContainer.innerHTML = ''; loadingMessage.style.display='none';
+      itemsContainer.innerHTML = '';
+      loadingMessage.style.display='none';
 
       const groupedByDest = allItems.reduce((acc, item) => {
         const dest = item.destination || 'כללי';
@@ -809,29 +950,32 @@
 
       siteData.destinations.forEach(dest => {
         if (!groupedByDest[dest]) return;
-        
+
         const destSection = document.createElement('details');
         destSection.className = "bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden relative";
         destSection.open = preserved[dest] || false;
         destSection.dataset.key = dest;
-        destSection.innerHTML = `<summary class="text-2xl md:text-3xl font-bold text-slate-800 flex justify-between items-center p-5 hover:bg-white/30 transition"><span class="flex items-center gap-4">📍 ${dest}</span><i class="fa-solid fa-chevron-down chevron-icon"></i></summary>`;
+        destSection.innerHTML = `<summary class=\"text-2xl md:text-3xl font-bold text-slate-800 flex justify-between items-center p-5 hover:bg-white/30 transition\"><span class=\"flex items-center gap-4\">📍 ${dest}</span><i class=\"fa-solid fa-chevron-down chevron-icon\"></i></summary>`;
         const contentDiv = document.createElement('div');
         contentDiv.className = 'p-4 space-y-6 bg-slate-50/70';
 
-        const byType = groupedByDest[dest].reduce((acc, item)=>{ (acc[item.type||'כללי'] ||= []).push(item); return acc; }, {});
+        const byType = groupedByDest[dest].reduce((acc, item)=>{
+          (acc[item.type||'כללי'] ||= []).push(item);
+          return acc;
+        }, {});
         Object.keys(byType).sort().forEach(type => {
           if (!activeFilters[dest]) activeFilters[dest] = {};
           if (!activeFilters[dest][type]) {
             activeFilters[dest][type] = { kosher: false, foodType: '', sortBy: 'default', sortPoint: null, sortMeta: {} };
           }
           const filterState = activeFilters[dest][type];
-          
+
           const typeSection = document.createElement('details');
           typeSection.className = "bg-white/80 p-4 rounded-xl shadow-md";
           typeSection.open = preserved[`${dest}-${type}`] || false;
           typeSection.dataset.key = `${dest}-${type}`;
           const typeIcon = siteData.placeTypeEmojis[type] || '📌';
-          typeSection.innerHTML = `<summary class="text-lg md:text-xl font-semibold text-slate-700 flex justify-between items-center"><span>${typeIcon} ${type}</span><i class="fa-solid fa-chevron-down chevron-icon"></i></summary>`;
+          typeSection.innerHTML = `<summary class=\"text-lg md:text-xl font-semibold text-slate-700 flex justify-between items-center\"><span>${typeIcon} ${type}</span><i class=\"fa-solid fa-chevron-down chevron-icon\"></i></summary>`;
 
           const typeContent = document.createElement('div');
           typeContent.className = "mt-4 pt-4 border-t space-y-4";
@@ -839,42 +983,46 @@
           let itemsForType = [...byType[type]];
 
           const toolsId = `${dest.replace(/\s/g,'')}-${type.replace(/[\s/]/g,'')}`;
-          let filterHtml = `<div class="local-filters bg-slate-100 p-3 rounded-lg space-y-3">`;
-          
+          let filterHtml = `<div class=\"local-filters bg-slate-100 p-3 rounded-lg space-y-3\">`;
+
           if (type === 'מסעדה/אוכל') {
-            const allFood = [...new Set(groupedByDest[dest].filter(i=>i.type==='מסעדה/אוכל').map(i=>i.foodType).filter(Boolean))];
+            const allFood = [...new Set(groupedByDest[dest]
+              .filter(i=>i.type==='מסעדה/אוכל')
+              .map(i=>i.foodType)
+              .filter(Boolean)
+            )];
             filterHtml += `
-              <div class="flex items-center gap-4">
-                <span class="font-bold text-slate-600 text-sm">סינון:</span>
-                <div class="flex items-center gap-2">
-                  <input type="checkbox" id="kosher-filter-${toolsId}" data-destination="${dest}" data-type="${type}" class="local-filter-kosher h-4 w-4 rounded" ${filterState.kosher?'checked':''}>
-                  <label for="kosher-filter-${toolsId}" class="text-sm font-medium text-slate-600">כשר בלבד</label>
+              <div class=\"flex flex-wrap items-center gap-4\">
+                <span class=\"font-bold text-slate-600 text-sm\">סינון:</span>
+                <div class=\"flex items-center gap-2\">
+                  <input type=\"checkbox\" id=\"kosher-filter-${toolsId}\" data-destination=\"${dest}\" data-type=\"${type}\" class=\"local-filter-kosher h-4 w-4 rounded\" ${filterState.kosher?'checked':''}>
+                  <label for=\"kosher-filter-${toolsId}\" class=\"text-sm font-medium text-slate-600\">כשר בלבד</label>
                 </div>
-                <select data-destination="${dest}" data-type="${type}" class="local-filter-food-type form-select rounded-md text-sm py-1">
-                  <option value="">כל סוגי האוכל</option>
-                  ${allFood.sort().map(ft=>`<option value="${ft}" ${filterState.foodType===ft?'selected':''}>${siteData.foodTypes[ft]||'🍴'} ${ft||''}</option>`).join('')}
+                <select data-destination=\"${dest}\" data-type=\"${type}\" class=\"local-filter-food-type form-select rounded-md text-sm py-1\">
+                  <option value=\"\">כל סוגי האוכל</option>
+                  ${allFood.sort().map(ft=>`<option value=\"${ft}\" ${filterState.foodType===ft?'selected':''}>${siteData.foodTypes[ft]||'🍴'} ${ft||''}</option>`).join('')}
                 </select>
               </div>`;
           }
 
-          const hotelOptions = tripHotels.filter(h => h.coords).map(h => `<option value="${h.id}" ${filterState.sortMeta?.hotelId === h.id ? 'selected' : ''}>${h.name}</option>`).join('');
+          const hotelOptions = tripHotels.filter(h => h.coords).map(h => `<option value=\"${h.id}\" ${filterState.sortMeta?.hotelId === h.id ? 'selected' : ''}>${h.name}</option>`).join('');
           filterHtml += `
-            <div class="sort-controls pt-3 border-t border-slate-200">
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <label class="font-bold text-slate-600 text-sm whitespace-nowrap">מיון לפי מרחק:</label>
-                <select class="sort-by-select form-select rounded-md text-sm py-1 flex-grow" data-destination="${dest}" data-type="${type}">
-                  <option value="default" ${filterState.sortBy === 'default' ? 'selected' : ''}>ברירת מחדל</option>
-                  <option value="distance_user" ${filterState.sortBy === 'distance_user' ? 'selected' : ''}>מהמיקום שלי</option>
-                  ${tripHotels.length > 0 ? `<option value="distance_hotel" ${filterState.sortBy === 'distance_hotel' ? 'selected' : ''}>ממלון</option>` : ''}
+            <div class=\"sort-controls pt-3 border-t border-slate-200\">
+              <div class=\"flex flex-wrap items-center gap-x-4 gap-y-2\">
+                <label class=\"font-bold text-slate-600 text-sm whitespace-nowrap\">מיון לפי מרחק:</label>
+                <select class=\"sort-by-select form-select rounded-md text-sm py-1 flex-grow\" data-destination=\"${dest}\" data-type=\"${type}\">
+                  <option value=\"default\" ${filterState.sortBy === 'default' ? 'selected' : ''}>ברירת מחדל</option>
+                  <option value=\"distance_user\" ${filterState.sortBy === 'distance_user' ? 'selected' : ''}>מהמיקום שלי</option>
+                  ${tripHotels.length > 0 ? `<option value=\"distance_hotel\" ${filterState.sortBy === 'distance_hotel' ? 'selected' : ''}>ממלון</option>` : ''}
                 </select>
-                
-                <select class="hotel-sort-select form-select rounded-md text-sm py-1 flex-grow ${filterState.sortBy === 'distance_hotel' ? '' : 'hidden'}" data-destination="${dest}" data-type="${type}">
-                  <option value="">בחר מלון...</option>
+
+                <select class=\"hotel-sort-select form-select rounded-md text-sm py-1 flex-grow ${filterState.sortBy === 'distance_hotel' ? '' : 'hidden'}\" data-destination=\"${dest}\" data-type=\"${type}\">
+                  <option value=\"\">בחר מלון...</option>
                   ${hotelOptions}
                 </select>
               </div>
               ${ (filterState.sortBy.startsWith('distance_') && filterState.sortPoint) ? `
-              <div class="text-xs text-slate-500 mt-2 text-center bg-slate-200/70 p-1 rounded">
+              <div class=\"text-xs text-slate-500 mt-2 text-center bg-slate-200/70 p-1 rounded\">
                 ממיין מ: <b>${filterState.sortMeta?.hotelName || filterState.sortMeta?.address || 'המיקום שלי'}</b>
               </div>` : '' }
             </div>
@@ -892,13 +1040,13 @@
             });
             itemsForType.sort((a,b)=> (a.airDistanceKm??Infinity) - (b.airDistanceKm??Infinity));
           } else {
-              itemsForType.forEach(item => delete item.airDistanceKm);
+            itemsForType.forEach(item => delete item.airDistanceKm);
           }
 
           const grid = document.createElement('div');
           grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
           if (itemsForType.length === 0) {
-            grid.innerHTML = `<p class="text-slate-500 col-span-full text-center">אין מקומות התואמים לסינון.</p>`;
+            grid.innerHTML = `<p class=\"text-slate-500 col-span-full text-center\">אין מקומות התואמים לסינון.</p>`;
           } else {
             itemsForType.forEach((item, index) => {
               const card = document.createElement('div');
@@ -908,40 +1056,40 @@
               card.classList.add('item-card-anim');
 
               let tags = '';
-              if (item.isKosher==='כן') tags += `<span class="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">כשר</span>`;
-              if (item.foodType) tags += `<span class="text-xs font-bold text-sky-600 bg-sky-100 px-2 py-1 rounded-full">${siteData.foodTypes[item.foodType]||''} ${item.foodType}</span>`;
-              if (item.reservation && item.reservation!=='לא') tags += `<span class="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-full">הזמנה: ${item.reservation}</span>`;
+              if (item.isKosher==='כן') tags += `<span class=\"text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full\">כשר</span>`;
+              if (item.foodType) tags += `<span class=\"text-xs font-bold text-sky-600 bg-sky-100 px-2 py-1 rounded-full\">${siteData.foodTypes[item.foodType]||''} ${item.foodType}</span>`;
+              if (item.reservation && item.reservation!=='לא') tags += `<span class=\"text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-full\">הזמנה: ${item.reservation}</span>`;
 
               const distanceHtml = (filterState.sortBy.startsWith('distance_') && item.airDistanceKm!==undefined && item.airDistanceKm!==Infinity)
-                ? `<div class="air-distance-info flex items-center justify-center text-xs text-slate-600 mt-2 border-t pt-2 gap-2">
-                    <i class="fa-solid fa-plane-up fa-fw text-blue-500"></i>
+                ? `<div class=\"air-distance-info flex items-center justify-center text-xs text-slate-600 mt-2 border-t pt-2 gap-2\">
+                    <i class=\"fa-solid fa-plane-up fa-fw text-blue-500\"></i>
                     <span>מרחק אווירי: <b>${item.airDistanceKm.toFixed(1)} ק"מ</b></span>
                   </div>` : '';
 
               const hasCoords = !!item.coords;
               const navigateButton = `
-                <button data-id="${item.id}" class="navigate-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition ${!hasCoords ? 'opacity-50 cursor-not-allowed' : ''}" title="נווט למקום" ${!hasCoords ? 'disabled' : ''}>
-                  <i class="fa-solid fa-diamond-turn-right"></i>
+                <button data-id=\"${item.id}\" class=\"navigate-btn action-btn bg-blue-100 text-blue-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-200 transition ${!hasCoords ? 'opacity-50 cursor-not-allowed' : ''}\" title=\"נווט למקום\" ${!hasCoords ? 'disabled' : ''}>
+                  <i class=\"fa-solid fa-diamond-turn-right\"></i>
                 </button>`;
-              
+
               const ratingHtml = renderStars(item.rating);
 
               card.innerHTML = `
-                <div class="flex-grow">
-                  <h5 class="text-base md:text-lg font-bold text-slate-800 flex-1 mb-1">${item.name}</h5>
-                  ${ratingHtml ? `<div class="mb-2">${ratingHtml}</div>` : ''}
-                  <div class="flex flex-wrap gap-2 min-h-[26px] mb-3">${tags}</div>
-                  ${item.shortDescription ? `<p class="text-sm text-slate-600 mb-4">${item.shortDescription}</p>` : ''}
+                <div class=\"flex-grow\">
+                  <h5 class=\"text-base md:text-lg font-bold text-slate-800 flex-1 mb-1\">${item.name}</h5>
+                  ${ratingHtml ? `<div class=\"mb-2\">${ratingHtml}</div>` : ''}
+                  <div class=\"flex flex-wrap gap-2 min-h-[26px] mb-3\">${tags}</div>
+                  ${item.shortDescription ? `<p class=\"text-sm text-slate-600 mb-4\">${item.shortDescription}</p>` : ''}
                   ${distanceHtml}
                 </div>
-                <div class="mt-auto pt-3 border-t flex items-center justify-between gap-2">
-                  <div class="flex gap-2">
+                <div class=\"mt-auto pt-3 border-t flex items-center justify-between gap-2\">
+                  <div class=\"flex gap-2\">
                     ${navigateButton}
-                    ${item.link ? `<a href="${item.link}" target="_blank" class="action-btn bg-green-100 text-green-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-green-200 transition" title="אתר"><i class="fa-solid fa-link"></i></a>` : ''}
+                    ${item.link ? `<a href=\"${item.link}\" target=\"_blank\" class=\"action-btn bg-green-100 text-green-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-green-200 transition\" title=\"אתר\"><i class=\"fa-solid fa-link\"></i></a>` : ''}
                   </div>
-                  <div class="flex gap-2">
-                    <button class="edit-btn action-btn bg-slate-200 text-slate-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-300 transition" title="עריכה"><i class="fas fa-pencil"></i></button>
-                    <button class="delete-btn action-btn bg-slate-200 text-slate-600 w-9 h-9 flex items-center justify-center rounded-full hover:text-red-500 hover:bg-red-100 transition" title="מחיקה"><i class="fas fa-trash"></i></button>
+                  <div class=\"flex gap-2\">
+                    <button class=\"edit-btn action-btn bg-slate-200 text-slate-600 w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-300 transition\" title=\"עריכה\"><i class=\"fas fa-pencil\"></i></button>
+                    <button class=\"delete-btn action-btn bg-slate-200 text-slate-600 w-9 h-9 flex items-center justify-center rounded-full hover:text-red-500 hover:bg-red-100 transition\" title=\"מחיקה\"><i class=\"fas fa-trash\"></i></button>
                   </div>
                 </div>`;
               grid.appendChild(card);
@@ -955,7 +1103,7 @@
         destSection.appendChild(contentDiv);
         const loader = document.createElement('div');
         loader.className = 'section-loader hidden';
-        loader.innerHTML = `<i class="fas fa-sync-alt fa-2x fa-spin text-blue-500"></i>`;
+        loader.innerHTML = `<i class=\"fas fa-sync-alt fa-2x fa-spin text-blue-500\"></i>`;
         destSection.appendChild(loader);
         itemsContainer.appendChild(destSection);
       });
@@ -966,54 +1114,60 @@
       const item = allItems.find(i=>i.id===itemId);
       if (!item) return;
 
-      // *** NEW: נסה לרפא תמונות חסרות בזמן פתיחת מודאל ***
+      // auto-heal photos if missing
       ensurePhotosForItem(item);
 
       const wrap = document.getElementById('details-modal-content');
 
       let tags = '';
-      if (item.isKosher==='כן') tags += `<span class="text-sm font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">כשר</span>`;
-      if (item.foodType) tags += `<span class="text-sm font-bold text-sky-700 bg-sky-100 px-3 py-1 rounded-full">${siteData.foodTypes[item.foodType]||''} ${item.foodType}</span>`;
-      if (item.reservation && item.reservation!=='לא') tags += `<span class="text-sm font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full">הזמנה: ${item.reservation}</span>`;
-      
+      if (item.isKosher==='כן') tags += `<span class=\"text-sm font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full\">כשר</span>`;
+      if (item.foodType) tags += `<span class=\"text-sm font-bold text-sky-700 bg-sky-100 px-3 py-1 rounded-full\">${siteData.foodTypes[item.foodType]||''} ${item.foodType}</span>`;
+      if (item.reservation && item.reservation!=='לא') tags += `<span class=\"text-sm font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full\">הזמנה: ${item.reservation}</span>`;
+
       const ratingHtml = renderStars(item.rating);
 
       let photosHtml = '';
       if (item.photos && item.photos.length > 0) {
-        photosHtml = `<div class="grid grid-cols-3 gap-2">
-          ${item.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity" loading="lazy"></a>`).join('')}
+        photosHtml = `<div class=\"grid grid-cols-3 gap-2\">
+          ${item.photos.map(u=>`<a href=\"${u}\" target=\"_blank\"><img src=\"${u}\" class=\"w-full h-24 object-cover rounded-lg shadow-md hover:opacity-80 transition-opacity\" loading=\"lazy\"></a>`).join('')}
         </div>`;
       }
-      
-      const navigateButtonInModal = item.coords ? `<button data-id="${item.id}" class="navigate-btn flex-1 text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition"><i class="fa-solid fa-diamond-turn-right mr-2"></i>נווט</button>` : '';
+
+      const navigateButtonInModal = item.coords ? `<button data-id=\"${item.id}\" class=\"navigate-btn flex-1 text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition\"><i class=\"fa-solid fa-diamond-turn-right mr-2\"></i>נווט</button>` : '';
 
       wrap.innerHTML = `
-        <button id="details-modal-close" class="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors"><i class="fas fa-times"></i></button>
-        <div class="p-6 border-b">
-          <h3 class="text-3xl font-bold text-slate-800">${item.name}</h3>
-          <div class="flex justify-between items-center mt-2">
-            <p class="text-slate-500">${siteData.placeTypeEmojis[item.type]||'📌'} ${item.type}</p>
+        <button id=\"details-modal-close\" class=\"absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:text-red-500 hover:bg-red-100 z-10 transition-colors\"><i class=\"fas fa-times\"></i></button>
+        <div class=\"p-6 border-b\">
+          <h3 class=\"text-3xl font-bold text-slate-800\">${item.name}</h3>
+          <div class=\"flex justify-between items-center mt-2\">
+            <p class=\"text-slate-500\">${siteData.placeTypeEmojis[item.type]||'📌'} ${item.type}</p>
             ${ratingHtml}
           </div>
         </div>
-        <div class="p-6 flex-grow overflow-y-auto space-y-5 bg-slate-50">
-          ${tags ? `<div class="flex flex-wrap gap-3 items-center">${tags}</div>` : ''}
+        <div class=\"p-6 flex-grow overflow-y-auto space-y-5 bg-slate-50 rounded-b-2xl\">
+          ${tags ? `<div class=\"flex flex-wrap gap-3 items-center\">${tags}</div>` : ''}
           ${photosHtml}
-          ${item.shortDescription ? `<div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded"><p class="text-slate-700 font-semibold">${item.shortDescription}</p></div>` : ''}
-          ${item.description ? `<div class="bg-white p-4 rounded-lg shadow-inner"><p class="text-slate-700 whitespace-pre-wrap">${item.description}</p></div>` : ''}
-          ${item.location ? `<div class="flex items-start gap-4"><i class="fa-solid fa-location-dot fa-fw text-slate-400 mt-1"></i><p class="text-slate-700 font-semibold">${item.location}</p></div>` : ''}
-          ${item.hours ? `<div class="flex items-start gap-4"><i class="fa-regular fa-clock fa-fw text-slate-400 mt-1"></i><p class="text-slate-700 whitespace-pre-wrap">${item.hours}</p></div>` : ''}
-          ${item.coords ? `<div id="details-map" class="w-full h-48 rounded-lg shadow-md"></div>` : ''}
+          ${item.shortDescription ? `<div class=\"bg-blue-50 border-l-4 border-blue-400 p-4 rounded\"><p class=\"text-slate-700 font-semibold\">${item.shortDescription}</p></div>` : ''}
+          ${item.description ? `<div class=\"bg-white p-4 rounded-lg shadow-inner\"><p class=\"text-slate-700 whitespace-pre-wrap\">${item.description}</p></div>` : ''}
+          ${item.location ? `<div class=\"flex items-start gap-4\"><i class=\"fa-solid fa-location-dot fa-fw text-slate-400 mt-1\"></i><p class=\"text-slate-700 font-semibold\">${item.location}</p></div>` : ''}
+          ${item.hours ? `<div class=\"flex items-start gap-4\"><i class=\"fa-regular fa-clock fa-fw text-slate-400 mt-1\"></i><p class=\"text-slate-700 whitespace-pre-wrap\">${item.hours}</p></div>` : ''}
+          ${item.coords ? `<div id=\"details-map\" class=\"w-full h-48 rounded-lg shadow-md\"></div>` : ''}
         </div>
-        <div class="p-4 bg-slate-100 border-t flex flex-wrap justify-center gap-3">
+        <div class=\"p-4 bg-slate-100 border-t flex flex-wrap justify-center gap-3 rounded-b-2xl\">
           ${navigateButtonInModal}
-          ${item.link ? `<a href="${item.link}" target="_blank" class="flex-1 text-center bg-green-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-green-600 transition"><i class="fa-solid fa-link mr-2"></i>אתר</a>` : ''}
-          <button data-id="${item.id}" class="edit-btn-modal flex-1 text-center bg-slate-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-slate-700 transition"><i class="fas fa-pencil mr-2"></i>ערוך</button>
+          ${item.link ? `<a href=\"${item.link}\" target=\"_blank\" class=\"flex-1 text-center bg-green-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-green-600 transition\"><i class=\"fa-solid fa-link mr-2\"></i>אתר</a>` : ''}
+          <button data-id=\"${item.id}\" class=\"edit-btn-modal flex-1 text-center bg-slate-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-slate-700 transition\"><i class=\"fas fa-pencil mr-2\"></i>ערוך</button>
         </div>
       `;
-      detailsModal.classList.remove('hidden'); detailsModal.classList.add('flex');
-      document.getElementById('details-modal-close').addEventListener('click', closeDetailsModal);
-      document.querySelector('.edit-btn-modal').addEventListener('click', (e)=>{ closeDetailsModal(); openModalHandler(e.currentTarget.dataset.id); });
+      detailsModal.classList.remove('hidden');
+      detailsModal.classList.add('flex');
+      lockBodyScroll();
+
+      document.getElementById('details-modal-close').addEventListener('click', closeDetailsModal, { once:true });
+      document.querySelector('.edit-btn-modal').addEventListener('click', (e)=>{
+        closeDetailsModal();
+        openModalHandler(e.currentTarget.dataset.id);
+      }, { once:true });
       const navBtn = document.querySelector('#details-modal-content .navigate-btn');
       if (navBtn) {
         navBtn.addEventListener('click', (e) => {
@@ -1027,9 +1181,11 @@
     }
 
     function closeDetailsModal() {
-      detailsModal.classList.add('hidden'); 
+      detailsModal.classList.add('hidden');
       detailsModal.classList.remove('flex');
-      gmaps_detailsMap = null; gmaps_detailsMarker = null;
+      gmaps_detailsMap = null;
+      gmaps_detailsMarker = null;
+      unlockBodyScroll();
     }
 
     function openNavigationChoiceModal(item) {
@@ -1039,10 +1195,12 @@
       document.getElementById('nav-link-waze').href = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
       navigationModal.classList.remove('hidden');
       navigationModal.classList.add('flex');
+      lockBodyScroll();
     }
     function closeNavigationModal() {
       navigationModal.classList.add('hidden');
       navigationModal.classList.remove('flex');
+      unlockBodyScroll();
     }
 
     // ---------- Global Event Listeners Setup ----------
@@ -1061,22 +1219,23 @@
       openModalBtn.addEventListener('click', () => openModalHandler());
       closeModalBtn.addEventListener('click', closeModalHandler);
 
-      nextBtn.addEventListener('click', () => { 
-          if (currentModalStep < totalModalSteps) { 
-              currentModalStep++; 
-              updateModalView(); 
-          } 
+      nextBtn.addEventListener('click', () => {
+        if (currentModalStep < totalModalSteps) {
+          currentModalStep++;
+          updateModalView();
+        }
       });
-      backStepBtn.addEventListener('click', () => { 
-          if (currentModalStep > 1) { 
-              currentModalStep--; 
-              updateModalView(); 
-          } 
+      backStepBtn.addEventListener('click', () => {
+        if (currentModalStep > 1) {
+          currentModalStep--;
+          updateModalView();
+        }
       });
 
       getLocationBtn.addEventListener('click', handleGetLocation);
+
       detailsModal.addEventListener('click', (e)=>{ if (e.target.id==='details-modal') closeDetailsModal(); });
-      
+
       closeNavigationModalBtn.addEventListener('click', closeNavigationModal);
       navigationModal.addEventListener('click', (e) => { if (e.target.id === 'navigation-choice-modal') closeNavigationModal(); });
 
@@ -1087,35 +1246,49 @@
           else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
         }
       });
-      
-      // *** FIX: Event delegation for modal form changes ***
+
+      // single delegated listeners for change in modal form
       form.addEventListener('change', e => {
-          if (e.target.id === 'item-type') {
-              handleTypeChange();
-          }
-          if (e.target.id === 'item-food-type') {
-              handleFoodTypeChange();
-          }
+        if (e.target.id === 'item-type') {
+          handleTypeChange();
+        }
+        if (e.target.id === 'item-food-type') {
+          handleFoodTypeChange();
+        }
       });
 
       itemsContainer.addEventListener('click', (e) => {
-        const card = e.target.closest('.item-card'); if (!card) return;
+        const card = e.target.closest('.item-card');
+        if (!card) return;
         const actionBtn = e.target.closest('.action-btn');
         const id = card.dataset.id;
         const item = allItems.find(i=>i.id===id);
         if (actionBtn) {
           e.stopPropagation();
           if (actionBtn.matches('.delete-btn')) {
-            const confirmBtn = document.getElementById('delete-modal-confirm');
+            const confirmBtnElem = document.getElementById('delete-modal-confirm');
+            const cancelBtnElem = document.getElementById('delete-modal-cancel');
             const title = document.getElementById('delete-modal-title');
             title.textContent = `האם למחוק את "${item?.name||''}"?`;
-            const closeDelete = () => { deleteModal.classList.add('hidden'); deleteModal.classList.remove('flex'); };
-            const handler = async () => {
-              try { await deleteDoc(doc(db, 'trips', tripId, 'places', id)); } catch(e){ console.error(e); } finally { closeDelete(); }
+
+            const closeDelete = () => {
+              deleteModal.classList.add('hidden');
+              deleteModal.classList.remove('flex');
+              unlockBodyScroll();
             };
-            confirmBtn.addEventListener('click', handler, { once:true });
-            document.getElementById('delete-modal-cancel').addEventListener('click', closeDelete, { once:true });
-            deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex');
+            const confirmHandler = async () => {
+              try { await deleteDoc(doc(db, 'trips', tripId, 'places', id)); }
+              catch(e){ console.error(e); }
+              finally { closeDelete(); }
+            };
+            const cancelHandler = () => { closeDelete(); };
+
+            confirmBtnElem.addEventListener('click', confirmHandler, { once:true });
+            cancelBtnElem.addEventListener('click', cancelHandler, { once:true });
+
+            deleteModal.classList.remove('hidden');
+            deleteModal.classList.add('flex');
+            lockBodyScroll();
           } else if (actionBtn.matches('.edit-btn')) {
             openModalHandler(id);
           } else if (actionBtn.matches('.navigate-btn')) {
@@ -1141,11 +1314,11 @@
           filter.foodType = t.value;
           renderAllItems();
         }
-        
+
         if (t.matches('.sort-by-select')) {
           const newSortBy = t.value;
           filter.sortBy = newSortBy;
-          
+
           if (newSortBy === 'default') {
             filter.sortPoint = null;
             filter.sortMeta = {};
@@ -1163,9 +1336,9 @@
             renderAllItems();
           } else if (newSortBy === 'distance_hotel') {
             if (filter.sortMeta?.hotelId) {
-                const selectedHotel = tripHotels.find(h => h.id === filter.sortMeta.hotelId);
-                if (selectedHotel) filter.sortPoint = selectedHotel.coords;
-                else filter.sortPoint = null;
+              const selectedHotel = tripHotels.find(h => h.id === filter.sortMeta.hotelId);
+              if (selectedHotel) filter.sortPoint = selectedHotel.coords;
+              else filter.sortPoint = null;
             } else {
               filter.sortPoint = null;
             }
@@ -1196,7 +1369,7 @@
 
         const name = gv('item-name');
         if (!name || name.trim()==='') { showModalError('שם המקום הוא שדה חובה.'); return; }
-        
+
         const locationText = gv('item-location');
         if (!locationText || locationText.trim() === '') {
           showModalError('בחירת כתובת ומיקום על המפה היא שדה חובה.');
@@ -1221,16 +1394,15 @@
           }
         }
 
-        // ---------- FIXED BLOCK: שמירה עמידה ל-photos/rating/coords + placeId ----------
+        // ---------- PROTECTED BLOCK: coords/photos/rating/googlePlaceId ----------
         const existing = editingItemId ? allItems.find(i=>i.id === editingItemId) : null;
 
-        // התחל עם נתונים קיימים כדי לא לדרוס בטעות
+        // start with existing data so we don't wipe things
         let photos = Array.isArray(existing?.photos) ? [...existing.photos] : [];
         let rating = (typeof existing?.rating === 'number') ? existing.rating : null;
         let coords = existing?.coords || null;
         let googlePlaceId = existing?.googlePlaceId || null;
 
-        // עדכן מ-Google רק אם באמת הגיעו תמונות/דירוג חדשים (אל תדרוס עם ריק!)
         if (selectedGooglePlaceDetails) {
           if (Array.isArray(selectedGooglePlaceDetails.photos) && selectedGooglePlaceDetails.photos.length > 0) {
             photos = [...selectedGooglePlaceDetails.photos];
@@ -1241,23 +1413,20 @@
           if (selectedGooglePlaceDetails.placeId) {
             googlePlaceId = selectedGooglePlaceDetails.placeId;
           }
-          // coords יתעדכן בכל מקרה לפי מיקום הנעץ בהמשך
         }
 
-        // המיקום הסופי תמיד לפי הנעץ כדי לשקף Drag&Drop (אם קיים)
         if (gmaps_addEditMarker) {
           const markerPosition = gmaps_addEditMarker.getPosition();
           if (markerPosition) {
             coords = { lat: markerPosition.lat(), lng: markerPosition.lng() };
           }
         }
-        
-        // ולידציה של נקודת ציון
+
         if (!coords) {
           showModalError('יש למקם נעץ על המפה או לבחור מקום מהחיפוש.');
           return;
         }
-        // ---------- END FIXED BLOCK ----------
+        // ---------- END PROTECTED BLOCK ----------
 
         const data = {
           name: name,
@@ -1275,7 +1444,6 @@
           coords: coords,
           photos: photos,
           rating: rating,
-          // *** NEW: נשמור גם את ה-placeId לצורך ריפוי עתידי של תמונות ***
           googlePlaceId: googlePlaceId || null
         };
 
@@ -1296,12 +1464,11 @@
     // ---------- Photos Auto-Heal (Recovery) ----------
     async function ensurePhotosForItem(item) {
       try {
-        if (!gmapsApiLoaded) return; // אין מפות — אין מה לעשות עכשיו
-        if (!item || (Array.isArray(item.photos) && item.photos.length > 0)) return; // כבר יש תמונות
-        if (!item.googlePlaceId) return; // אין לנו מזהה מקום לשחזור
-        if (photosRepairInFlight.has(item.id)) return; // כבר בתהליך
+        if (!gmapsApiLoaded) return;
+        if (!item || (Array.isArray(item.photos) && item.photos.length > 0)) return;
+        if (!item.googlePlaceId) return;
+        if (photosRepairInFlight.has(item.id)) return;
 
-        // ודא שיש לנו שירות Places גם בלי מפה פעילה
         if (!gmaps_placesService) {
           const ghostDiv = document.createElement('div');
           gmaps_placesService = new google.maps.places.PlacesService(ghostDiv);
@@ -1342,7 +1509,6 @@
         allItems = newItems;
         renderAllItems();
 
-        // *** NEW: עבור כל פריט שחסרות לו תמונות — רפא אוטומטית פעם אחת ***
         allItems.forEach(it => ensurePhotosForItem(it));
 
         if (isInitialLoad) {
@@ -1356,14 +1522,14 @@
         loadingMessage.textContent = "שגיאה בטעינת המידע.";
       });
     }
-    
+
     async function loadTripHotels() {
       if (!tripId) return;
       try {
         const logisticsRef = collection(db, 'trips', tripId, 'logistics');
         const q = query(logisticsRef, where("type", "==", "hotel"));
         const snapshot = await getDocs(q);
-        tripHotels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        tripHotels = snapshot.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
       } catch (e) {
         console.error("Error loading hotels:", e);
         tripHotels = [];
@@ -1379,10 +1545,10 @@
         setTimeout(() => location.href = 'index.html', 3000);
         return;
       }
-      
+
       const smartRouteBtn = document.getElementById('smart-route-btn');
       if (smartRouteBtn) {
-          smartRouteBtn.href = `edit-trip?id=${tripId}`;
+        smartRouteBtn.href = `edit-trip?id=${tripId}`;
       }
 
       try {
@@ -1393,12 +1559,12 @@
       }
 
       attachEvents();
-      
+
       onAuthStateChanged(auth, async (user) => {
         if (!user) { location.replace('login.html'); return; }
         currentUser = user;
         const displayName = user.displayName || user.email.split('@')[0];
-        authContainer.innerHTML = `<span class="text-sm font-semibold text-slate-700 hidden sm:block">שלום, ${displayName} 👋</span><button id="sign-out-btn" title="התנתק" class="p-2 text-slate-600 hover:text-red-500"><i class="fas fa-right-from-bracket fa-lg"></i></button>`;
+        authContainer.innerHTML = `<span class=\"text-sm font-semibold text-slate-700 hidden sm:block\">שלום, ${displayName} 👋</span><button id=\"sign-out-btn\" title=\"התנתק\" class=\"p-2 text-slate-600 hover:text-red-500\"><i class=\"fas fa-right-from-bracket fa-lg\"></i></button>`;
         document.getElementById('sign-out-btn').addEventListener('click', ()=>signOut(auth));
 
         const tripRef = doc(db, 'trips', tripId);
