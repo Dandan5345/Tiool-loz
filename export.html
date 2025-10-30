@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
     <title>ייצוא סיכום טיול</title>
-    
+
+    <!-- UI -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -16,163 +17,77 @@
 
     <style>
         /* --- General PDF & Body Styles --- */
-        body { font-family: 'Assistant', sans-serif; }
-        .action-btn { transition: all 0.3s ease; }
-        .action-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        :root { --safe-pad: env(safe-area-inset-bottom, 0px); }
+        html, body { height: 100%; }
+        body { font-family: 'Assistant', sans-serif; background:#f1f5f9; }
+        .action-btn { transition: all 0.25s ease; }
+        .action-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.015); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #0ea5e9; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* Scroll lock for modal open (prevents background scroll, iOS-safe) */
+        .scroll-locked { position: fixed; overflow: hidden; width: 100%; top: var(--scroll-lock-top, 0px); }
+
         /* --- Force RTL on mixed content --- */
-        .rtl-force {
-            direction: rtl;
-            unicode-bidi: isolate;
-        }
+        .rtl-force { direction: rtl; unicode-bidi: isolate; }
 
         /* --- Preview container --- */
-        #preview-wrapper {
-            background-color: #e2e8f0; /* slate-200 */
-        }
+        #preview-wrapper { background-color: #e2e8f0; /* slate-200 */ }
 
         /* --- Report Design (used for both preview and PDF) --- */
         .report-page {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 15mm;
-            margin: 20px auto;
-            background: white;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1);
-            box-sizing: border-box;
-            color: #1e293b; /* slate-800 */
-            font-size: 11pt;
-            line-height: 1.5;
-            word-spacing: normal;
-            letter-spacing: normal;
+            width: 210mm; min-height: 297mm; padding: 15mm; margin: 20px auto; background: white;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1); box-sizing: border-box; color: #1e293b; font-size: 11pt; line-height: 1.5;
             text-rendering: geometricPrecision;
         }
         .report-page .page-break { page-break-before: always; }
-        
+
         /* --- Report Header & Section Titles --- */
-        .section-title {
-            font-size: 26pt;
-            font-weight: 800;
-            color: #0c4a6e; /* sky-900 */
-            border-bottom: 3px solid #0ea5e9; /* sky-500 */
-            padding-bottom: 8px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+        .section-title { font-size: 26pt; font-weight: 800; color: #0c4a6e; border-bottom: 3px solid #0ea5e9; padding-bottom: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
         .section-title i { font-size: 22pt; }
 
         /* --- Cover Page --- */
-        .cover-page {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            height: 250mm;
-        }
+        .cover-page { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 250mm; }
         .cover-page h1 { font-size: 42pt; font-weight: 800; color: #0c4a6e; margin: 0; }
         .cover-page h2 { font-size: 18pt; font-weight: 600; color: #334155; margin-top: 10px; margin-bottom: 40px; }
-        .destinations-summary {
-            border-top: 1px solid #cbd5e1;
-            padding-top: 20px;
-            width: 80%;
-        }
-        .dest-item {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14pt;
-            padding: 8px 0;
-            border-bottom: 1px solid #e2e8f0;
-        }
+        .destinations-summary { border-top: 1px solid #cbd5e1; padding-top: 20px; width: 80%; }
+        .dest-item { display: flex; justify-content: space-between; font-size: 14pt; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
         .dest-item .name { font-weight: 700; }
         .dest-item .dates { font-weight: 400; color: #475569; }
 
         /* --- Card Styles (for Flights, Hotels, etc.) --- */
-        .info-card {
-            background-color: #f8fafc; /* slate-50 */
-            border: 1px solid #e2e8f0; /* slate-200 */
-            border-right: 5px solid #0ea5e9; /* sky-500 - Default */
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-            break-inside: avoid;
-        }
-        .info-card h4 {
-            font-size: 14pt;
-            font-weight: 700;
-            color: #0c4a6e; /* Default color */
-            margin-top: 0;
-            margin-bottom: 12px;
-        }
-        .card-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px 20px;
-        }
-        .detail-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        }
-        .detail-item i {
-            color: #94a3b8; /* slate-400 */
-            margin-top: 4px;
-            width: 16px;
-            text-align: center;
-        }
+        .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-right: 5px solid #0ea5e9; border-radius: 10px; padding: 14px; margin-bottom: 14px; break-inside: avoid; }
+        .info-card h4 { font-size: 14pt; font-weight: 700; color: #0c4a6e; margin: 0 0 8px 0; }
+        .card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 16px; }
+        .detail-item { display: flex; align-items: flex-start; gap: 8px; }
+        .detail-item i { color: #94a3b8; margin-top: 3px; width: 16px; text-align: center; }
         .detail-item .value { font-weight: 600; }
         .detail-item.full-width { grid-column: 1 / -1; white-space: pre-wrap; }
-        
-        /* --- NEW: Custom Colors for Transport Cards --- */
-        /* Flight */
+
+        /* --- Transport Card Color accents --- */
         .transport-flight { border-right-color: #38bdf8; background-color: #f0f9ff; }
         .transport-flight h4 { color: #075985; }
-        /* Ride */
         .transport-ride { border-right-color: #34d399; background-color: #f0fdf4; }
         .transport-ride h4 { color: #065f46; }
-        /* Ferry */
         .transport-ferry { border-right-color: #60a5fa; background-color: #eff6ff; }
         .transport-ferry h4 { color: #1e40af; }
-        /* Train */
         .transport-train { border-right-color: #fb923c; background-color: #fff7ed; }
         .transport-train h4 { color: #9a3412; }
-        /* Car Rental */
         .transport-car_rental { border-right-color: #a78bfa; background-color: #f5f3ff; }
         .transport-car_rental h4 { color: #5b21b6; }
 
-
-        /* Flight Card Specifics */
-        .flight-card h4 {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .flight-path { display: flex; align-items: center; gap: 10px; font-size: 12pt; font-weight: 400; color: #475569;}
+        .flight-card h4 { display: flex; align-items: center; justify-content: space-between; }
+        .flight-path { display: flex; align-items: center; gap: 10px; font-size: 12pt; font-weight: 400; color: #475569; }
 
         /* --- Attractions --- */
-        .attraction-category {
-            font-size: 16pt;
-            font-weight: 700;
-            color: #1e3a8a;
-            margin-top: 25px;
-            margin-bottom: 10px;
-            padding-right: 10px;
-            border-right: 3px solid #60a5fa;
-        }
+        .attraction-category { font-size: 16pt; font-weight: 700; color: #1e3a8a; margin-top: 25px; margin-bottom: 10px; padding-right: 10px; border-right: 3px solid #60a5fa; }
 
         /* --- Checklists & Notes --- */
-        .checklist-container { break-inside: avoid; margin-bottom: 20px; }
-        .checklist-type-title { font-size: 18pt; font-weight: 700; color: #1e3a8a; background-color: #e0f2fe; padding: 10px; border-radius: 6px; margin-top: 15px; }
-        .checklist-dest-title { font-size: 15pt; font-weight: 600; color: #1e40af; margin-top: 15px; padding-right: 8px; border-right: 2px solid #93c5fd; }
-        .checklist-list-title { font-size: 13pt; font-weight: bold; color: #1d4ed8; margin-top: 12px; margin-bottom: 8px; }
-        .checklist-item {
-            display: flex; align-items: flex-start; gap: 10px; padding: 8px; margin-bottom: 4px;
-            border-right: 4px solid transparent; border-radius: 4px; background-color: #f8fafc;
-        }
+        .checklist-container { break-inside: avoid; margin-bottom: 18px; }
+        .checklist-type-title { font-size: 18pt; font-weight: 700; color: #1e3a8a; background-color: #e0f2fe; padding: 10px; border-radius: 8px; margin-top: 14px; }
+        .checklist-dest-title { font-size: 15pt; font-weight: 600; color: #1e40af; margin-top: 12px; padding-right: 8px; border-right: 2px solid #93c5fd; }
+        .checklist-list-title { font-size: 13pt; font-weight: bold; color: #1d4ed8; margin: 10px 0 8px; }
+        .checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; margin-bottom: 4px; border-right: 4px solid transparent; border-radius: 6px; background-color: #f8fafc; }
         .checklist-item .checkbox { font-size: 14pt; color: #333; line-height: 1.2; }
         .checklist-item .item-details { flex-grow: 1; }
         .checklist-item .item-text { font-weight: 600; }
@@ -183,165 +98,103 @@
         .priority-1 { border-right-color: #eab308; } /* Low */
 
         /* --- Daily Schedule --- */
-        .daily-schedule-header { margin-bottom: 15px; }
-        .daily-schedule-header .date { font-size: 14pt; font-weight: 400; color: #475569; }
-        .daily-schedule-header .title { font-size: 16pt; font-weight: 700; }
-        
-        .timeline-item {
-            display: flex; gap: 15px; margin-bottom: 15px;
-        }
-        .timeline-item .time {
-            font-weight: 700; font-size: 11pt; color: #0ea5e9;
-            flex-shrink: 0; width: 80px;
-        }
-        .timeline-item .content {
-            border-right: 2px solid #e2e8f0; padding-right: 15px;
-        }
-        .timeline-item h5 { font-size: 12pt; font-weight: 700; margin: 0 0 5px 0; }
+        .daily-schedule-header { margin-bottom: 12px; }
+        .daily-schedule-header .date { font-size: 13pt; font-weight: 500; color: #475569; }
+        .daily-schedule-header .title { font-size: 16pt; font-weight: 800; }
+        .timeline-item { display: flex; gap: 12px; margin-bottom: 12px; }
+        .timeline-item .time { font-weight: 800; font-size: 11pt; color: #0ea5e9; flex-shrink: 0; width: 76px; }
+        .timeline-item .content { border-right: 2px solid #e2e8f0; padding-right: 12px; }
+        .timeline-item h5 { font-size: 12pt; font-weight: 800; margin: 0 0 4px 0; }
         .timeline-item p { margin: 0; white-space: pre-wrap; }
         .ref-details { font-size: 9pt; color: #475569; background-color: #f1f5f9; padding: 5px 8px; border-radius: 4px; margin-top: 8px; }
 
-        .notes-section { margin-top: 30px; }
-        .notes-section h4 { font-size: 14pt; font-weight: 700; margin-bottom: 10px; }
-        /* Style for both daily and general notes */
-        .note-item {
-            padding: 10px 12px; margin-bottom: 8px;
-            border-radius: 4px; break-inside: avoid; border: 1px solid #e2e8f0;
-            border-right: 5px solid #94a3b8; /* Default color */
-        }
+        .notes-section { margin-top: 26px; }
+        .notes-section h4 { font-size: 14pt; font-weight: 800; margin-bottom: 8px; }
+        .note-item { padding: 10px 12px; margin-bottom: 8px; border-radius: 6px; break-inside: avoid; border: 1px solid #e2e8f0; border-right: 5px solid #94a3b8; }
         .note-item strong { display: block; margin-bottom: 4px; font-size: 11pt; }
         .note-item p { white-space: pre-wrap; font-size: 10pt; margin: 0; }
-        .note-color-red { border-right-color: #ef4444 !important; } .note-color-green { border-right-color: #22c55e !important; }
-        .note-color-blue { border-right-color: #3b82f6 !important; } .note-color-yellow { border-right-color: #eab308 !important; }
+        .note-color-red { border-right-color: #ef4444 !important; }
+        .note-color-green { border-right-color: #22c55e !important; }
+        .note-color-blue { border-right-color: #3b82f6 !important; }
+        .note-color-yellow { border-right-color: #eab308 !important; }
         .note-color-orange { border-right-color: #f97316 !important; }
 
         /* Map container styles */
-        .map-container {
-            height: 350px;
-            border-radius: 8px;
-            margin-top: 10px;
-            margin-bottom: 16px;
-            background-color: #f1f5f9;
-            z-index: 1;
-            break-inside: avoid;
-        }
-        .attraction-map-container, .logistics-map-container {
-             height: 250px;
-        }
+        .map-container { height: 340px; border-radius: 10px; margin: 10px 0 14px; background-color: #f1f5f9; z-index: 1; break-inside: avoid; }
+        .attraction-map-container, .logistics-map-container { height: 250px; }
         .leaflet-container { z-index: 1; }
 
-        /* --- Responsive styles for mobile screen preview --- */
+        /* --- Mobile-first optimizations --- */
         @media screen and (max-width: 768px) {
-            #preview-wrapper {
-                padding: 0;
-            }
-            .report-page {
-                width: 100%;
-                min-height: auto;
-                padding: 15px;
-                margin: 0;
-                box-shadow: none;
-                border: none;
-                font-size: 10pt; /* Slightly smaller font for mobile */
-            }
-            .cover-page {
-                height: auto;
-                min-height: 90vh;
-                padding: 20px 0;
-            }
-             .cover-page h1 { font-size: 28pt; }
-             .cover-page h2 { font-size: 16pt; }
-             .section-title { font-size: 20pt; }
+            #preview-wrapper { padding: 0; }
+            .report-page { width: 100%; min-height: auto; padding: 12px; margin: 0; box-shadow: none; border: none; font-size: 10.2pt; }
+            .cover-page { min-height: 85dvh; padding: 16px 0; }
+            .cover-page h1 { font-size: 28pt; }
+            .cover-page h2 { font-size: 15pt; }
+            .section-title { font-size: 20pt; }
+            .card-grid { grid-template-columns: 1fr; }
+            .map-container { height: 260px; }
         }
 
         /* --- STYLES FOR PRINTING --- */
         @media print {
-            body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-            body > *:not(#preview-wrapper) {
-                display: none !important;
-            }
-            #preview-wrapper, #preview-container {
-                display: block !important;
-                position: static !important;
-                background-color: transparent !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            .report-page {
-                margin: 0 auto !important;
-                box-shadow: none !important;
-                border: none !important;
-                width: 210mm !important; /* Revert to A4 for print */
-                min-height: 290mm;
-                padding: 10mm;
-                font-size: 11pt; /* Revert font size */
-            }
-            .page-break {
-                page-break-before: always;
-            }
-            
-            .map-container {
-                max-width: 170mm; /* Limit width to prevent stretching */
-                max-height: 120mm; /* Limit height */
-                margin-left: auto;
-                margin-right: auto;
-                page-break-inside: avoid !important;
-            }
-            .logistics-map-container, .attraction-map-container {
-                max-height: 80mm;
-            }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            /* Hide UI and only show preview content when printing */
+            body > *:not(#preview-wrapper) { display: none !important; }
+            #preview-wrapper, #preview-container { display: block !important; position: static !important; background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
+            .report-page { margin: 0 auto !important; box-shadow: none !important; border: none !important; width: 210mm !important; min-height: 290mm; padding: 10mm; font-size: 11pt; }
+            .page-break { page-break-before: always; }
+            .map-container { max-width: 170mm; max-height: 120mm; margin-left: auto; margin-right: auto; page-break-inside: avoid !important; }
+            .logistics-map-container, .attraction-map-container { max-height: 80mm; }
+            /* Force-hide modal on print to avoid any overlay glitches */
+            #print-modal { display: none !important; }
         }
     </style>
 </head>
 <body class="bg-slate-100">
-
     <div id="main-content">
-        <div class="fixed inset-0 z-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
-        <div class="fixed inset-0 z-0 bg-black/60"></div>
-        
-        <div class="relative z-10 min-h-screen flex flex-col">
-            <header class="bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
-                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex items-center justify-between h-16">
-                        <div class="flex items-center gap-4">
+        <div class="fixed inset-0 -z-10 bg-cover bg-center" style="background-image: url('https://i.imgur.com/IrS6mDW.jpeg');"></div>
+        <div class="fixed inset-0 -z-10 bg-black/60"></div>
+
+        <div class="relative min-h-screen flex flex-col">
+            <header class="bg-white/85 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+                <div class="px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between h-14">
+                        <div class="flex items-center gap-3">
                             <a id="back-to-trip-btn" href="#" class="p-2 text-slate-600 hover:text-blue-600" title="חזרה לדף הטיול">
                                 <i class="fas fa-arrow-left fa-lg"></i>
                             </a>
-                            <h1 id="page-title" class="text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
+                            <h1 id="page-title" class="text-lg sm:text-xl font-bold text-slate-800">ייצוא סיכום טיול</h1>
                         </div>
                     </div>
                 </div>
             </header>
-            
-            <main id="export-controls" class="flex-grow flex items-center justify-center p-4">
-                <div class="w-full max-w-2xl bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+
+            <main id="export-controls" class="flex-grow flex items-center justify-center p-4 pb-[calc(16px+var(--safe-pad))]">
+                <div class="w-full max-w-2xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-5 sm:p-8">
                     <div class="text-center">
-                        <i class="fas fa-file-export fa-3x text-sky-500 mb-4"></i>
-                        <h2 id="export-title" class="text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                        <p class="text-slate-600 mt-2 mb-8">בחר אילו חלקים לכלול בסיכום הטיול שלך.</p>
+                        <i class="fas fa-file-export fa-2x sm:fa-3x text-sky-500 mb-3"></i>
+                        <h2 id="export-title" class="text-2xl sm:text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
+                        <p class="text-slate-600 mt-2 mb-6 sm:mb-8">בחר אילו חלקים לכלול בסיכום הטיול שלך.</p>
                     </div>
 
-                    <!-- NEW: Export Options Grid -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                        <div class="flex items-center gap-3 bg-slate-100 p-4 rounded-lg border border-slate-200">
-                            <input type="checkbox" id="include-maps-checkbox" checked class="h-6 w-6 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <label for="include-maps-checkbox" class="font-semibold text-slate-700">🗺️ הכללת מפות</label>
-                        </div>
-                        <div class="flex items-center gap-3 bg-slate-100 p-4 rounded-lg border border-slate-200">
-                            <input type="checkbox" id="include-attractions-checkbox" checked class="h-6 w-6 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <label for="include-attractions-checkbox" class="font-semibold text-slate-700">🎢 אטרקציות ומסעדות</label>
-                        </div>
-                        <div class="flex items-center gap-3 bg-slate-100 p-4 rounded-lg border border-slate-200">
-                            <input type="checkbox" id="include-schedule-checkbox" checked class="h-6 w-6 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <label for="include-schedule-checkbox" class="font-semibold text-slate-700">🗓️ לו"ז יומי</label>
-                        </div>
-                        <div class="flex items-center gap-3 bg-slate-100 p-4 rounded-lg border border-slate-200">
-                            <input type="checkbox" id="include-checklists-checkbox" checked class="h-6 w-6 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <label for="include-checklists-checkbox" class="font-semibold text-slate-700">📝 צ'קליסטים וטיפים</label>
-                        </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                            <input type="checkbox" id="include-maps-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                            <span class="font-semibold text-slate-700">🗺️ הכללת מפות</span>
+                        </label>
+                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                            <input type="checkbox" id="include-attractions-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                            <span class="font-semibold text-slate-700">🎢 אטרקציות ומסעדות</span>
+                        </label>
+                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                            <input type="checkbox" id="include-schedule-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                            <span class="font-semibold text-slate-700">🗓️ לו"ז יומי</span>
+                        </label>
+                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                            <input type="checkbox" id="include-checklists-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                            <span class="font-semibold text-slate-700">📝 צ'קליסטים וטיפים</span>
+                        </label>
                     </div>
 
                     <div class="flex justify-center">
@@ -350,7 +203,7 @@
                         </button>
                     </div>
 
-                    <div id="status-container" class="mt-8 min-h-[60px] flex flex-col items-center justify-center">
+                    <div id="status-container" class="mt-6 sm:mt-8 min-h-[56px] flex flex-col items-center justify-center">
                         <div id="loader" class="loader hidden"></div>
                         <p id="status-message" class="text-slate-500 font-semibold"></p>
                     </div>
@@ -358,61 +211,61 @@
             </main>
         </div>
     </div>
-    
+
     <div id="preview-wrapper" class="hidden relative z-20">
-         <div id="preview-container"></div>
-         <button id="floating-action-btn" class="hidden action-btn fixed bottom-6 left-6 bg-red-500 hover:bg-red-600 text-white font-bold w-16 h-16 rounded-full shadow-lg z-50 flex items-center justify-center" title="הדפסה או שמירה כקובץ">
-             <i class="fas fa-print fa-xl"></i>
+        <div id="preview-container"></div>
+        <button id="floating-action-btn" class="hidden action-btn fixed bottom-[calc(16px+var(--safe-pad))] left-4 sm:left-6 bg-red-500 hover:bg-red-600 text-white font-bold w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg z-[80] flex items-center justify-center" title="הדפסה או שמירה כקובץ" aria-label="הדפסה או שמירה">
+            <i class="fas fa-print text-lg sm:text-xl"></i>
         </button>
     </div>
 
-    <div id="print-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md text-slate-800 p-6 flex flex-col">
+    <!-- Print / Save Modal -->
+    <div id="print-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="print-modal-title">
+        <div class="relative bg-white rounded-2xl shadow-2xl w-[min(92vw,480px)] max-w-md text-slate-800 p-5 sm:p-6 flex flex-col max-h-[85dvh]">
+            <!-- Close button -->
+            <button id="close-modal-btn" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600" aria-label="סגירת חלון">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+
             <!-- Container for content that will be hidden for the loader -->
-            <div id="modal-content-wrapper">
-                <div class="flex-shrink-0">
-                    <button id="close-modal-btn" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600">
-                        <i class="fas fa-times fa-lg"></i>
-                    </button>
-                    <div class="text-center">
-                        <i class="fas fa-file-pdf fa-3x text-red-500 mb-4"></i>
-                        <h3 class="text-2xl font-bold mb-2">שמירת סיכום הטיול</h3>
-                        <p class="text-slate-600 mb-4">כדי לקבל PDF מדויק, השתמש באפשרות ההדפסה של הדפדפן.</p>
-                    </div>
-                    <div class="mb-6 text-center">
-                        <button id="trigger-print-btn" class="action-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg">
-                            <i class="fas fa-file-import mr-2"></i> המשך להדפסה / שמירה
-                        </button>
-                    </div>
+            <div id="modal-content-wrapper" class="overflow-y-auto pr-1 -mr-1" style="-webkit-overflow-scrolling: touch;">
+                <div class="text-center">
+                    <i class="fas fa-file-pdf fa-3x text-red-500 mb-3"></i>
+                    <h3 id="print-modal-title" class="text-2xl font-bold mb-2">שמירת סיכום הטיול</h3>
+                    <p class="text-slate-600 mb-4">כדי לקבל PDF מדויק, השתמש באפשרות ההדפסה של הדפדפן.</p>
                 </div>
 
-                <div class="flex-grow overflow-y-auto max-h-[50vh] pr-2">
-                    <div class="space-y-4 text-right text-base">
-                        <p><strong>אפשרות 1: הדפסה רגילה</strong><br>אם ברצונך להדפיס את הסיכום, פשוט בחר את המדפסת שלך ולחץ "הדפס".</p>
-                        
-                        <p><strong>אפשרות 2: שמירה כקובץ PDF (במיוחד בנייד)</strong></p>
-                        <div class="bg-slate-100 p-4 rounded-md space-y-4">
-                            <div>
-                                <strong>שלב 1:</strong> לאחר לחיצה על כפתור ההמשך, יפתח מסך ההדפסה. לחץ על אייקון <strong>השיתוף</strong>.
-                                <img src="https://i.imgur.com/X2WJ6za.jpeg" alt="שלב 1: לחיצה על שיתוף" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
-                            </div>
-                            <div>
-                                <strong>שלב 2:</strong> מהתפריט שייפתח, בחר באפשרות <strong>"שמור בקבצים"</strong>.
-                                <img src="https://i.imgur.com/twkyQ7a.jpeg" alt="שלב 2: שמירה לקבצים" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
-                            </div>
+                <div class="mb-5 text-center">
+                    <button id="trigger-print-btn" class="action-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl">
+                        <i class="fas fa-file-import mr-2"></i> המשך להדפסה / שמירה
+                    </button>
+                </div>
+
+                <div class="space-y-4 text-right text-base">
+                    <p><strong>אפשרות 1: הדפסה רגילה</strong><br>אם ברצונך להדפיס את הסיכום, בחר מדפסת ולחץ "הדפס".</p>
+
+                    <p><strong>אפשרות 2: שמירה כקובץ PDF (במיוחד בנייד)</strong></p>
+                    <div class="bg-slate-100 p-4 rounded-lg space-y-4">
+                        <div>
+                            <strong>שלב 1:</strong> לאחר לחיצה על כפתור ההמשך, יפתח מסך ההדפסה. לחץ על אייקון <strong>השיתוף</strong>.
+                            <img src="https://i.imgur.com/X2WJ6za.jpeg" alt="שלב 1: לחיצה על שיתוף" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
+                        </div>
+                        <div>
+                            <strong>שלב 2:</strong> מהתפריט שייפתח, בחר באפשרות <strong>"שמור בקבצים"</strong>.
+                            <img src="https://i.imgur.com/twkyQ7a.jpeg" alt="שלב 2: שמירה לקבצים" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
                         </div>
                     </div>
                 </div>
             </div>
+
             <!-- Loader section, initially hidden -->
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
-                <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה, אנא המתן...</p>
-                <p class="mt-2 text-sm text-slate-500">פעולה זו עשויה לקחת מספר שניות.</p>
+                <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה…</p>
+                <p class="mt-2 text-sm text-slate-500">זה עשוי לקחת כמה שניות.</p>
             </div>
         </div>
     </div>
-
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -446,7 +299,6 @@
             printModal: document.getElementById('print-modal'),
             closeModalBtn: document.getElementById('close-modal-btn'),
             triggerPrintBtn: document.getElementById('trigger-print-btn'),
-            // NEW: Checkboxes
             includeMapsCheckbox: document.getElementById('include-maps-checkbox'),
             includeAttractionsCheckbox: document.getElementById('include-attractions-checkbox'),
             includeScheduleCheckbox: document.getElementById('include-schedule-checkbox'),
@@ -458,13 +310,23 @@
         let tripDataCache = null;
         let mapInstances = [];
 
+        /* ===== Scroll lock helpers (prevent background scroll under modal) ===== */
+        let _scrollY = 0;
+        function lockScroll() {
+            _scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+            document.documentElement.style.setProperty('--scroll-lock-top', `-${_scrollY}px`);
+            document.body.classList.add('scroll-locked');
+        }
+        function unlockScroll() {
+            document.body.classList.remove('scroll-locked');
+            document.documentElement.style.removeProperty('--scroll-lock-top');
+            window.scrollTo(0, _scrollY || 0);
+        }
+
         function initPage() {
             const urlParams = new URLSearchParams(window.location.search);
             tripId = urlParams.get('tripId');
-            if (!tripId) {
-                showErrorModal("שגיאה: לא נמצא מזהה טיול.");
-                return;
-            }
+            if (!tripId) { showErrorModal("שגיאה: לא נמצא מזהה טיול."); return; }
 
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
@@ -474,29 +336,19 @@
                     if (tripSnap.exists()) {
                         const tripData = tripSnap.data();
                         const canAccess = tripData.owner === user.uid || (tripData.editors && tripData.editors.includes(user.uid));
-                        if (!canAccess) {
-                            showErrorModal("אין לך הרשאה לצפות בטיול זה.", true);
-                            return;
-                        }
+                        if (!canAccess) { showErrorModal("אין לך הרשאה לצפות בטיול זה.", true); return; }
                         DOM.pageTitle.textContent += ` - ${tripData.name}`;
                         DOM.exportTitle.textContent += ` "${tripData.name}"`;
-                    } else {
-                        showErrorModal("הטיול לא נמצא.", true);
-                    }
-                } else {
-                    window.location.href = 'login.html';
-                }
+                    } else { showErrorModal("הטיול לא נמצא.", true); }
+                } else { window.location.href = 'login.html'; }
             });
         }
-        
-        function showErrorModal(message, redirect = false) {
-             alert(message);
-             if (redirect) window.location.href = 'index.html';
-        }
+
+        function showErrorModal(message, redirect = false) { alert(message); if (redirect) window.location.href = 'index.html'; }
 
         function setStatus(message, showLoader = false) {
             isGenerating = showLoader;
-            DOM.statusMessage.textContent = message;
+            DOM.statusMessage.textContent = message || '';
             DOM.loader.classList.toggle('hidden', !showLoader);
             DOM.startPreviewBtn.disabled = isGenerating;
             DOM.floatingActionBtn.disabled = isGenerating;
@@ -504,20 +356,16 @@
 
         async function fetchAllTripData() {
             if (tripDataCache) return tripDataCache;
-
             setStatus('טוען את כל נתוני הטיול...', true);
             const tripRef = doc(db, 'trips', tripId);
-            
             const collectionsToFetch = ['logistics', 'places', 'checklists', 'notes', 'schedules'];
 
             const [tripSnap, ...collectionsSnaps] = await Promise.all([
                 getDoc(tripRef),
                 ...collectionsToFetch.map(c => {
                     const collRef = collection(db, 'trips', tripId, c);
-                    const q = (c === 'schedules') 
-                        ? query(collRef)
-                        : query(collRef, orderBy('createdAt'));
-                    return getDocs(q);
+                    const qRef = (c === 'schedules') ? query(collRef) : query(collRef, orderBy('createdAt'));
+                    return getDocs(qRef);
                 })
             ]);
 
@@ -545,17 +393,15 @@
             tripDataCache = allData;
             return allData;
         }
-        
+
         const sanitize = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
         const formatISODate = (isoDate) => {
             if (!isoDate) return '';
             try {
                 const [year, month, day] = isoDate.split('-');
                 const dateObj = new Date(Date.UTC(year, month - 1, day));
-                 return `${dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' })}, ${day}/${month}/${year}`;
-            } catch(e) {
-                return isoDate;
-            }
+                return `${dateObj.toLocaleDateString('he-IL', { weekday: 'long', timeZone: 'UTC' })}, ${day}/${month}/${year}`;
+            } catch { return isoDate; }
         };
         const parseDDMMYYYY = (d) => { if (!d) return new Date(0); const [day, month, year] = d.split('/').map(Number); return new Date(year, month - 1, day); };
         const groupBy = (arr, key, fallback='כללי') => arr.reduce((r,v)=>{ const k=v[key]||fallback; (r[k]=r[k]||[]).push(v); return r; },{});
@@ -563,54 +409,36 @@
         function getStartDateTime(item) {
             let dateStr = item.dates || item.date;
             if (!dateStr || typeof dateStr !== 'string') return null;
-
-            if (dateStr.includes(' - ')) {
-                dateStr = dateStr.split(' - ')[0].trim();
-            }
-
-            const parts = dateStr.split('/');
-            if (parts.length !== 3) return null;
-            
+            if (dateStr.includes(' - ')) dateStr = dateStr.split(' - ')[0].trim();
+            const parts = dateStr.split('/'); if (parts.length !== 3) return null;
             const dateObj = new Date(Date.UTC(parts[2], parts[1] - 1, parts[0]));
-
             const timeStr = item.pickup_time || item.departure_time;
-            if (timeStr && typeof timeStr === 'string' && timeStr.includes(':')) {
-                const [hours, minutes] = timeStr.split(':').map(Number);
-                if (!isNaN(hours) && !isNaN(minutes)) {
-                    dateObj.setUTCHours(hours, minutes);
-                }
-            }
+            if (timeStr && timeStr.includes(':')) { const [h, m] = timeStr.split(':').map(Number); if (!isNaN(h) && !isNaN(m)) dateObj.setUTCHours(h, m); }
             return dateObj;
         }
 
-        // UPDATED FUNCTION SIGNATURE
         function renderReportHtml(data, includeMaps, includeAttractions, includeSchedule, includeChecklists) {
             let html = '<div class="report-page">';
             const { tripData, logistics, places, checklists, schedules, notes } = data;
-            
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
-            
+
             const sorter = (a, b) => {
-                const dateTimeA = getStartDateTime(a);
-                const dateTimeB = getStartDateTime(b);
-                if (!dateTimeA && !dateTimeB) return 0;
-                if (!dateTimeA) return 1;
-                if (!dateTimeB) return -1;
-                return dateTimeA - dateTimeB;
+                const A = getStartDateTime(a), B = getStartDateTime(b);
+                if (!A && !B) return 0; if (!A) return 1; if (!B) return -1; return A - B;
             };
 
             const hotels = logistics.filter(i => i.type === 'hotel').sort(sorter);
             const transports = logistics.filter(i => ['flight', 'car_rental', 'ferry', 'train', 'ride'].includes(i.type)).sort(sorter);
             const attractionsByType = groupBy(places, 'type');
-            
+
             const detailItem = (icon, label, value) => {
-                if (!value && typeof value !== 'number') return '';
+                if (value === undefined || value === null || value === '') return '';
                 return `<div class="detail-item"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value rtl-force">${sanitize(value)}</span></div></div>`;
             };
             const detailItemFull = (icon, label, value) => {
-                 if (!value && typeof value !== 'number') return '';
+                if (value === undefined || value === null || value === '') return '';
                 return `<div class="detail-item full-width"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value rtl-force">${sanitize(value)}</span></div></div>`;
-            }
+            };
 
             html += `<div class="cover-page"><h1>${sanitize(tripData.name)}</h1><h2>${sanitize(tripData.startDate)} - ${sanitize(tripData.endDate)}</h2><div class="destinations-summary">`;
             sortedDestinations.forEach(dest => { html += `<div class="dest-item"><span class="name">${sanitize(dest.nameHe)}</span><span class="dates">${sanitize(dest.dates)}</span></div>`; });
@@ -620,72 +448,113 @@
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> מפת המסע הכללית</h3>`;
                 html += `<div id="trip-route-map" class="map-container"></div>`;
             }
-            
+
             if (transports.length) {
-                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> תחבורה והתניידות</h3>`;
-                 transports.forEach(item => {
-                      // NEW: Added transport-${item.type} class for styling
-                      let cardHtml = `<div class="info-card transport-${item.type}">`;
-                      switch (item.type) {
-                          case 'flight':
-                               const from = item.from || {}; const to = item.to || {};
-                               const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
-                               cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline)} - ${sanitize(item.flight_number)}</span><span class="flight-path">${sanitize(from.destination)} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination)}</span></h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.dates)}${detailItem('fa-plane-departure', 'שעת המראה', item.departure_time)}${detailItem('fa-plane-arrival', 'שעת נחיתה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר לאדם', item.price_per_person ? `$${item.price_per_person.toLocaleString()}` : '')}${detailItem('fa-chair', 'מקומות ישיבה', item.seats?.join(', '))}${detailItem('fa-suitcase', 'כבודה', luggage)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
-                               if (includeMaps && from.coords && to.coords) {
-                                   cardHtml += `<div id="map-flight-${item.id}" class="map-container logistics-map-container"
-                                                   data-from-lat="${from.coords.lat}" data-from-lng="${from.coords.lng}" data-from-name="${sanitize(from.destination || 'Origin')}"
-                                                   data-to-lat="${to.coords.lat}" data-to-lng="${to.coords.lng}" data-to-name="${sanitize(to.destination || 'Destination')}"></div>`;
-                               }
-                               break;
-                          case 'ride':
-                               cardHtml += `<h4>הסעה: ${sanitize(item.from_address?.split(',')[0] || '')} ← ${sanitize(item.to_address?.split(',')[0] || '')}</h4><div class="card-grid">${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-user-tie', 'שם נהג', item.driver_name)}${detailItem('fa-phone', 'טלפון נהג', item.driver_phone)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '0')}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`;
-                                if (includeMaps && item.route_geometry) {
-                                     const geometryStr = typeof item.route_geometry === 'string' ? item.route_geometry : JSON.stringify(item.route_geometry);
-                                     cardHtml += `<div id="map-ride-${item.id}" class="map-container logistics-map-container"
-                                                      data-route-geometry='${sanitize(geometryStr)}'
-                                                      data-from-lat="${item.from_coords?.lat}" data-from-lng="${item.from_coords?.lon}" data-from-name="${sanitize(item.from_address)}"
-                                                      data-to-lat="${item.to_coords?.lat}" data-to-lng="${item.to_coords?.lon}" data-to-name="${sanitize(item.to_address)}"></div>`;
-                                }
-                               break;
-                          case 'car_rental':
-                               cardHtml += `<h4>רכב שכור ב${sanitize(item.destination)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-clock', 'שעת איסוף', item.pickup_time)}${detailItem('fa-clock', 'שעת החזרה', item.return_time)}${detailItem('fa-map-marker-alt', 'מיקום איסוף', item.pickup_location)}${detailItem('fa-car-side', 'סוג רכב', item.car_type)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}</div>`;
-                                if (includeMaps && item.coords) {
-                                     cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
-                                                      data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location || 'Pickup')}"></div>`;
-                                }
-                               break;
-                          case 'ferry':
-                          case 'train':
-                               const isFerry = item.type === 'ferry';
-                               const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
-                               cardHtml += `<h4>${title}</h4><div class="card-grid">${detailItem('fa-building', 'חברה', item.company)}${detailItem('fa-calendar-day', 'תאריך', item.date)}${detailItem('fa-clock', 'שעת יציאה', item.departure_time)}${detailItem('fa-clock', 'שעת הגעה', item.arrival_time)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}</div>`;
-                               if (includeMaps && item.from_coords && item.to_coords) {
-                                   const fromName = isFerry ? item.from_destination : item.from_station;
-                                   const toName = isFerry ? item.to_destination : item.to_station;
-                                   cardHtml += `<div id="map-transport-${item.id}" class="map-container logistics-map-container"
-                                                     data-from-lat="${item.from_coords.lat}" data-from-lng="${item.from_coords.lng}" data-from-name="${sanitize(fromName)}"
-                                                     data-to-lat="${item.to_coords.lat}" data-to-lng="${item.to_coords.lng}" data-to-name="${sanitize(toName)}"></div>`;
-                               }
-                               break;
-                     }
-                      cardHtml += `</div>`;
-                      html += cardHtml;
-                 });
+                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> תחבורה והתניידות</h3>`;
+                transports.forEach(item => {
+                    let cardHtml = `<div class="info-card transport-${item.type}">`;
+                    switch (item.type) {
+                        case 'flight': {
+                            const from = item.from || {}; const to = item.to || {};
+                            const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
+                            cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline||'טיסה')}</span><span class="flight-path">${sanitize(from.destination||'')} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination||'')}</span></h4>`;
+                            cardHtml += `<div class="card-grid">
+                                ${detailItem('fa-hashtag','מספר טיסה', item.flight_number)}
+                                ${detailItem('fa-calendar-day','תאריך', item.dates)}
+                                ${detailItem('fa-plane-departure','שעת המראה', item.departure_time)}
+                                ${detailItem('fa-plane-arrival','שעת נחיתה', item.arrival_time)}
+                                ${detailItem('fa-dollar-sign','מחיר לאדם', item.price_per_person ? `$${Number(item.price_per_person).toLocaleString()}` : '')}
+                                ${detailItem('fa-chair','מקומות ישיבה', Array.isArray(item.seats) ? item.seats.join(', ') : item.seats)}
+                                ${detailItem('fa-suitcase','כבודה', luggage)}
+                                ${detailItemFull('fa-info-circle','פרטים נוספים', item.additional_details)}
+                            </div>`;
+                            if (includeMaps && from.coords && to.coords) {
+                                cardHtml += `<div id="map-flight-${item.id}" class="map-container logistics-map-container"
+                                    data-from-lat="${from.coords.lat}" data-from-lng="${from.coords.lng}" data-from-name="${sanitize(from.destination||'יציאה')}"
+                                    data-to-lat="${to.coords.lat}" data-to-lng="${to.coords.lng}" data-to-name="${sanitize(to.destination||'הגעה')}"></div>`;
+                            }
+                            break;
+                        }
+                        case 'ride': {
+                            cardHtml += `<h4>הסעה: ${sanitize(item.from_address?.split(',')[0] || '')} ← ${sanitize(item.to_address?.split(',')[0] || '')}</h4>`;
+                            cardHtml += `<div class="card-grid">
+                                ${detailItem('fa-calendar-day','תאריך', item.date)}
+                                ${detailItem('fa-clock','שעת איסוף', item.pickup_time)}
+                                ${detailItem('fa-building','חברה', item.company)}
+                                ${detailItem('fa-user-tie','שם נהג', item.driver_name)}
+                                ${detailItem('fa-phone','טלפון נהג', item.driver_phone)}
+                                ${detailItem('fa-dollar-sign','מחיר', item.price ? `$${Number(item.price).toLocaleString()}` : '0')}
+                                ${detailItemFull('fa-info-circle','פרטים נוספים', item.additional_details)}
+                            </div>`;
+                            if (includeMaps && (item.route_geometry || (item.from_coords && item.to_coords))) {
+                                const geometryStr = typeof item.route_geometry === 'string' ? item.route_geometry : (item.route_geometry ? JSON.stringify(item.route_geometry) : '');
+                                cardHtml += `<div id="map-ride-${item.id}" class="map-container logistics-map-container"
+                                    data-route-geometry='${sanitize(geometryStr)}'
+                                    data-from-lat="${item.from_coords?.lat}" data-from-lng="${item.from_coords?.lon}" data-from-name="${sanitize(item.from_address||'') }"
+                                    data-to-lat="${item.to_coords?.lat}" data-to-lng="${item.to_coords?.lon}" data-to-name="${sanitize(item.to_address||'')}"></div>`;
+                            }
+                            break;
+                        }
+                        case 'car_rental': {
+                            cardHtml += `<h4>רכב שכור ב${sanitize(item.destination||'')}</h4>`;
+                            cardHtml += `<div class="card-grid">
+                                ${detailItem('fa-calendar-days','תאריכים', item.dates)}
+                                ${detailItem('fa-clock','שעת איסוף', item.pickup_time)}
+                                ${detailItem('fa-clock','שעת החזרה', item.return_time)}
+                                ${detailItem('fa-map-marker-alt','מיקום איסוף', item.pickup_location)}
+                                ${detailItem('fa-car-side','סוג רכב', item.car_type)}
+                                ${detailItem('fa-dollar-sign','מחיר', item.price ? `$${Number(item.price).toLocaleString()}` : '')}
+                                ${detailItem('fa-building-user','הוזמן דרך', item.booked_via)}
+                            </div>`;
+                            if (includeMaps && item.coords) {
+                                cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container" data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location||'Pickup')}"></div>`;
+                            }
+                            break;
+                        }
+                        case 'ferry':
+                        case 'train': {
+                            const isFerry = item.type === 'ferry';
+                            const title = isFerry ? `מעבורת: ${sanitize(item.from_destination)} ← ${sanitize(item.to_destination)}` : `רכבת: ${sanitize(item.from_station)} ← ${sanitize(item.to_station)}`;
+                            cardHtml += `<h4>${title}</h4>`;
+                            cardHtml += `<div class="card-grid">
+                                ${detailItem('fa-building','חברה', item.company)}
+                                ${detailItem('fa-calendar-day','תאריך', item.date)}
+                                ${detailItem('fa-clock','שעת יציאה', item.departure_time)}
+                                ${detailItem('fa-clock','שעת הגעה', item.arrival_time)}
+                                ${detailItem('fa-dollar-sign','מחיר', item.price ? `$${Number(item.price).toLocaleString()}` : '')}
+                            </div>`;
+                            if (includeMaps && item.from_coords && item.to_coords) {
+                                const fromName = isFerry ? item.from_destination : item.from_station;
+                                const toName = isFerry ? item.to_destination : item.to_station;
+                                cardHtml += `<div id="map-transport-${item.id}" class="map-container logistics-map-container"
+                                    data-from-lat="${item.from_coords.lat}" data-from-lng="${item.from_coords.lng}" data-from-name="${sanitize(fromName)}"
+                                    data-to-lat="${item.to_coords.lat}" data-to-lng="${item.to_coords.lng}" data-to-name="${sanitize(toName)}"></div>`;
+                            }
+                            break;
+                        }
+                    }
+                    cardHtml += `</div>`; html += cardHtml;
+                });
             }
 
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
-                hotels.forEach(item => { 
-                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">${detailItem('fa-calendar-days', 'תאריכים', item.dates)}${detailItem('fa-map-marker-alt', 'יעד', item.destination)}${detailItem('fa-location-dot', 'כתובת', item.address)}${detailItem('fa-dollar-sign', 'מחיר', item.price ? `$${item.price.toLocaleString()}` : '')}${detailItem('fa-building-user', 'הוזמן דרך', item.booked_via)}${detailItemFull('fa-info-circle', 'פרטים נוספים', item.additional_details)}</div>`; 
+                hotels.forEach(item => {
+                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">
+                        ${detailItem('fa-calendar-days','תאריכים', item.dates)}
+                        ${detailItem('fa-map-marker-alt','יעד', item.destination)}
+                        ${detailItem('fa-location-dot','כתובת', item.address)}
+                        ${detailItem('fa-dollar-sign','מחיר', item.price ? `$${Number(item.price).toLocaleString()}` : '')}
+                        ${detailItem('fa-building-user','הוזמן דרך', item.booked_via)}
+                        ${detailItemFull('fa-info-circle','פרטים נוספים', item.additional_details)}
+                    </div>`;
                     if (includeMaps && item.coords) {
-                         html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container"
-                                    data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
+                        html += `<div id="map-hotel-${item.id}" class="map-container logistics-map-container" data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.name)}"></div>`;
                     }
-                     html += `</div>`;
+                    html += `</div>`;
                 });
             }
 
-            // NEW: Conditional block for Checklists & Notes
             if (includeChecklists && (notes?.length > 0 || checklists?.length > 0)) {
                 if (notes && notes.length > 0) {
                     html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-lightbulb"></i> דגשים והערות</h3>`;
@@ -694,14 +563,11 @@
                         html += `<div class="checklist-type-title">${sanitize(type || 'כללי')}</div>`;
                         const notesInType = notesByType[type];
                         const notesByDest = groupBy(notesInType, 'destination');
-                         Object.keys(notesByDest).sort().forEach(dest => {
+                        Object.keys(notesByDest).sort().forEach(dest => {
                             if (dest !== 'כללי') html += `<div class="checklist-dest-title">יעד: ${sanitize(dest)}</div>`;
                             notesByDest[dest].forEach(note => {
                                 const colorClass = note.color && note.color !== 'default' ? `note-color-${note.color}` : '';
-                                html += `<div class="note-item ${colorClass}">
-                                    <strong class="rtl-force">${sanitize(note.title)}</strong>
-                                    <p class="rtl-force">${sanitize(note.content)}</p>
-                                </div>`;
+                                html += `<div class="note-item ${colorClass}"><strong class="rtl-force">${sanitize(note.title)}</strong><p class="rtl-force">${sanitize(note.content||'')}</p></div>`;
                             });
                         });
                     });
@@ -730,13 +596,21 @@
                 }
             }
 
-            // NEW: Conditional block for Attractions
             if (includeAttractions && places.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
                     attractionsByType[type].forEach(place => {
-                        html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">${detailItem('fa-map-marker-alt', 'יעד', place.destination)}${detailItem('fa-location-dot', 'כתובת', place.location)}${detailItem('fa-clock', 'שעות פתיחה', place.hours)}${detailItem('fa-calendar-check', 'הזמנה', place.reservation)}${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david', 'כשרות', place.isKosher) : ''}${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils', 'סוג אוכל', place.foodType) : ''}${detailItem('fa-link', 'קישור', place.link)}${detailItemFull('fa-align-left', 'תיאור', place.description)}</div>`;
+                        html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">
+                            ${detailItem('fa-map-marker-alt','יעד', place.destination)}
+                            ${detailItem('fa-location-dot','כתובת', place.location)}
+                            ${detailItem('fa-clock','שעות פתיחה', place.hours)}
+                            ${detailItem('fa-calendar-check','הזמנה', place.reservation)}
+                            ${place.type === 'מסעדה/אוכל' ? detailItem('fa-star-of-david','כשרות', place.isKosher) : ''}
+                            ${place.type === 'מסעדה/אוכל' ? detailItem('fa-utensils','סוג אוכל', place.foodType) : ''}
+                            ${detailItem('fa-link','קישור', place.link)}
+                            ${detailItemFull('fa-align-left','תיאור', place.description)}
+                        </div>`;
                         if (includeMaps && place.coords) {
                             html += `<div id="map-${place.id}" class="map-container attraction-map-container" data-lat="${place.coords.lat}" data-lng="${place.coords.lng}" data-name="${sanitize(place.name)}"></div>`;
                         }
@@ -745,28 +619,28 @@
                 });
             }
 
-            // NEW: Conditional block for Schedule
             if (includeSchedule && schedules.length) {
                 schedules.forEach(day => {
-                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-calendar-day"></i> לו"ז יומי</h3><div class="daily-schedule-header"><div class="date">${formatISODate(day.id)}</div>${day.title ? `<div class="title rtl-force">${sanitize(day.title)}</div>` : ''}</div>`;
+                    html += `<div class=\"page-break\"></div><h3 class=\"section-title\"><i class=\"fas fa-calendar-day\"></i> לו\"ז יומי</h3>`;
+                    html += `<div class=\"daily-schedule-header\"><div class=\"date\">${formatISODate(day.id)}</div>${day.title ? `<div class=\"title rtl-force\">${sanitize(day.title)}</div>` : ''}</div>`;
                     if (day.items?.length > 0) {
                         day.items.forEach(item => {
                             const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                            html += `<div class="timeline-item"><div class="time">${sanitize(time)}</div><div class="content"><h5 class="rtl-force">${sanitize(item.title)}</h5>`;
-                            if (item.summary) html += `<p class="rtl-force">${sanitize(item.summary)}</p>`;
+                            html += `<div class=\"timeline-item\"><div class=\"time\">${sanitize(time)}</div><div class=\"content\"><h5 class=\"rtl-force\">${sanitize(item.title)}</h5>`;
+                            if (item.summary) html += `<p class=\"rtl-force\">${sanitize(item.summary)}</p>`;
                             if (item.refs?.length > 0) {
                                 item.refs.forEach(ref => {
                                     const source = ref.type === 'logistics' ? logistics : places;
                                     const fullItem = source.find(s => s.id === ref.id);
-                                    if (fullItem) html += `<div class="ref-details rtl-force"><b>מקושר ל:</b> ${sanitize(fullItem.name)} (כתובת: ${sanitize(fullItem.address || fullItem.location)})</div>`;
+                                    if (fullItem) html += `<div class=\"ref-details rtl-force\"><b>מקושר ל:</b> ${sanitize(fullItem.name)} (כתובת: ${sanitize(fullItem.address || fullItem.location || '')})</div>`;
                                 });
                             }
                             html += `</div></div>`;
                         });
                     } else { html += `<p>אין פעילויות מתוכננות ליום זה.</p>`; }
                     if (day.notes?.length > 0) {
-                        html += `<div class="notes-section"><h4>📝 דגשים וטיפים ליום זה</h4>`;
-                        day.notes.forEach(note => { html += `<div class="note-item note-color-${note.color || 'yellow'}"><strong class="rtl-force">${sanitize(note.kind)}: ${sanitize(note.title)}</strong>${note.details ? `<p class="rtl-force">${sanitize(note.details)}</p>` : ''}</div>`; });
+                        html += `<div class=\"notes-section\"><h4>📝 דגשים וטיפים ליום זה</h4>`;
+                        day.notes.forEach(note => { html += `<div class=\"note-item note-color-${note.color || 'yellow'}\"><strong class=\"rtl-force\">${sanitize(note.kind || 'הערה')}: ${sanitize(note.title || '')}</strong>${note.details ? `<p class=\"rtl-force\">${sanitize(note.details)}</p>` : ''}</div>`; });
                         html += `</div>`;
                     }
                 });
@@ -777,8 +651,8 @@
         }
 
         function initializeMaps() {
-            mapInstances = []; 
-            
+            mapInstances = [];
+
             const tripMapContainer = document.getElementById('trip-route-map');
             if (tripMapContainer) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
@@ -788,13 +662,9 @@
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
                     if (dest.coords) L.marker([dest.coords.lat, dest.coords.lng]).addTo(tripMap).bindTooltip(dest.nameHe, {permanent: true, direction: 'top', offset: [0, -10]}).openTooltip();
                 });
-                if (points.length > 1) {
-                    L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
-                    tripMap.fitBounds(points, { padding: [50, 50] });
-                } else if (points.length === 1) {
-                    tripMap.setView(points[0], 8);
-                }
-                 setTimeout(() => tripMap.invalidateSize(), 100);
+                if (points.length > 1) { L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap); tripMap.fitBounds(points, { padding: [50, 50] }); }
+                else if (points.length === 1) { tripMap.setView(points[0], 8); }
+                setTimeout(() => tripMap.invalidateSize(), 120);
             }
 
             document.querySelectorAll('.attraction-map-container, .logistics-map-container[data-lat]').forEach(mapDiv => {
@@ -803,27 +673,37 @@
                     const map = L.map(mapDiv).setView([lat, lng], 15);
                     mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
-                    L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
-                    setTimeout(() => map.invalidateSize(), 100);
+                    L.marker([lat, lng]).addTo(map).bindPopup(name || '').openPopup();
+                    setTimeout(() => map.invalidateSize(), 120);
                 }
             });
-            
+
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
                 mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
-                
+
                 if (mapDiv.dataset.routeGeometry) { // Ride Map
-                     try {
-                        const geometry = JSON.parse(mapDiv.dataset.routeGeometry);
+                    try {
+                        const geometry = JSON.parse(mapDiv.dataset.routeGeometry || '[]');
                         const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                         const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                         if (geometry && geometry.length > 0) {
                             const latlngs = geometry.map(coord => L.latLng(coord[0], coord[1]));
                             const polyline = L.polyline(latlngs, { color: '#0ea5e9', weight: 5 }).addTo(map);
-                            if (!isNaN(fromLat)) L.marker([fromLat, fromLng]).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName}`);
-                            if (!isNaN(toLat)) L.marker([toLat, toLng]).addTo(map).bindPopup(`<b>הגעה:</b> ${toName}`);
+                            if (!isNaN(fromLat)) L.marker([fromLat, fromLng]).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
+                            if (!isNaN(toLat)) L.marker([toLat, toLng]).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
                             map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+                        } else {
+                            // Fallback to markers if geometry missing
+                            if (!isNaN(fromLat) && !isNaN(toLat)) {
+                                const fromPoint = [fromLat, fromLng], toPoint = [toLat, toLng];
+                                const bounds = L.latLngBounds([fromPoint, toPoint]);
+                                L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
+                                L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
+                                L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+                                map.fitBounds(bounds, { padding: [40, 40] });
+                            }
                         }
                     } catch (e) { console.error("Failed to render ride map", e); }
                 } else { // Flight, Ferry, Train Map
@@ -832,13 +712,20 @@
                     if (!isNaN(fromLat) && !isNaN(toLat)) {
                         const fromPoint = [fromLat, fromLng], toPoint = [toLat, toLng];
                         const bounds = L.latLngBounds([fromPoint, toPoint]);
-                        L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName}`);
-                        L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName}`);
+                        L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
+                        L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
                         L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
                         map.fitBounds(bounds, { padding: [40, 40] });
                     }
                 }
-                setTimeout(() => map.invalidateSize(), 100);
+                setTimeout(() => map.invalidateSize(), 120);
+            });
+
+            // Reflow maps on resize/orientation change
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => mapInstances.forEach(m => m.invalidateSize(true)), 150);
             });
         }
 
@@ -847,73 +734,62 @@
             try {
                 const allData = await fetchAllTripData();
                 setStatus('מעצב ומסדר את כל המידע...', true);
-                
-                // Get values from ALL checkboxes
+
                 const includeMaps = DOM.includeMapsCheckbox.checked;
                 const includeAttractions = DOM.includeAttractionsCheckbox.checked;
                 const includeSchedule = DOM.includeScheduleCheckbox.checked;
                 const includeChecklists = DOM.includeChecklistsCheckbox.checked;
 
-                // Pass them to the render function
                 DOM.previewContainer.innerHTML = renderReportHtml(allData, includeMaps, includeAttractions, includeSchedule, includeChecklists);
-                
+
                 setTimeout(() => {
                     DOM.mainContent.classList.add('hidden');
                     DOM.previewWrapper.classList.remove('hidden');
                     DOM.floatingActionBtn.classList.remove('hidden');
-                    
-                    if (includeMaps) {
-                        initializeMaps();
-                    }
+
+                    if (includeMaps) initializeMaps();
 
                     setStatus('התצוגה המקדימה מוכנה.', false);
                     window.scrollTo(0, 0);
-                }, 100);
+                }, 80);
             } catch (error) {
                 console.error("Error generating preview:", error);
                 setStatus(`שגיאה בהצגת התצוגה: ${error.message}`, false);
             }
         }
-        
-        function openPrintModal() { DOM.printModal.classList.remove('hidden'); }
-        
+
+        function openPrintModal() { DOM.printModal.classList.remove('hidden'); lockScroll(); }
         function closePrintModal() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
-            
             modalContent.classList.remove('hidden');
             modalLoader.classList.add('hidden');
-            
             DOM.printModal.classList.add('hidden');
+            unlockScroll();
         }
-        
+
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
-
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
+            // Force maps to finalize layout before print
             setTimeout(() => {
-                console.log(`Forcing redraw on ${mapInstances.length} maps...`);
-                mapInstances.forEach(map => {
-                    map.invalidateSize(true);
-                });
-
-                setTimeout(() => {
-                    window.print();
-                    closePrintModal();
-                }, 3000); 
-            }, 100); 
+                mapInstances.forEach(map => map.invalidateSize(true));
+                setTimeout(() => { window.print(); closePrintModal(); }, 900);
+            }, 120);
         }
+
+        // Close on overlay click (but not when clicking inside panel)
+        DOM.printModal.addEventListener('click', (e) => { if (e.target === DOM.printModal) closePrintModal(); });
+        // Close on ESC
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !DOM.printModal.classList.contains('hidden')) closePrintModal(); });
 
         DOM.startPreviewBtn.addEventListener('click', showPreview);
         DOM.floatingActionBtn.addEventListener('click', openPrintModal);
         DOM.closeModalBtn.addEventListener('click', closePrintModal);
         DOM.triggerPrintBtn.addEventListener('click', triggerPrint);
-        DOM.printModal.addEventListener('click', (e) => {
-            if (e.target === DOM.printModal) closePrintModal();
-        });
 
         initPage();
     </script>
