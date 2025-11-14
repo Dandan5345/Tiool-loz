@@ -28,8 +28,9 @@
         /* Scroll lock for modal open (prevents background scroll, iOS-safe) */
         .scroll-locked { position: fixed; overflow: hidden; width: 100%; top: var(--scroll-lock-top, 0px); }
 
-        /* --- Force RTL on mixed content --- */
+        /* --- Force RTL / LTR on mixed content --- */
         .rtl-force { direction: rtl; unicode-bidi: isolate; }
+        .ltr-force { direction: ltr; unicode-bidi: bidi-override; }
 
         /* --- Preview container --- */
         #preview-wrapper { background-color: #e2e8f0; /* slate-200 */ }
@@ -147,7 +148,7 @@
             .map-container { max-width: 170mm; max-height: 120mm; margin-left: auto; margin-right: auto; page-break-inside: avoid !important; }
             .logistics-map-container, .attraction-map-container { max-height: 80mm; }
             /* Force-hide modal on print to avoid any overlay glitches */
-            #print-modal, #error-modal { display: none !important; }
+            #print-modal { display: none !important; }
         }
     </style>
 </head>
@@ -247,17 +248,12 @@
                     <p><strong>אפשרות 2: שמירה כקובץ PDF (במיוחד בנייד)</strong></p>
                     <div class="bg-slate-100 p-4 rounded-lg space-y-4">
                         <div>
-                            <strong>באייפון (iOS):</strong><br>
                             <strong>שלב 1:</strong> לאחר לחיצה על כפתור ההמשך, יפתח מסך ההדפסה. לחץ על אייקון <strong>השיתוף</strong>.
                             <img src="https://i.imgur.com/X2WJ6za.jpeg" alt="שלב 1: לחיצה על שיתוף" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
                         </div>
                         <div>
                             <strong>שלב 2:</strong> מהתפריט שייפתח, בחר באפשרות <strong>"שמור בקבצים"</strong>.
                             <img src="https://i.imgur.com/twkyQ7a.jpeg" alt="שלב 2: שמירה לקבצים" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
-                        </div>
-                        <div>
-                            <strong>באנדרואיד:</strong><br>
-                            במסך ההדפסה שייפתח, בחר "שמור כ-PDF" (או "Save as PDF") מרשימת המדפסות, ולחץ על אייקון השמירה.
                         </div>
                     </div>
                 </div>
@@ -271,25 +267,12 @@
             </div>
         </div>
     </div>
-    
-    <!-- Error Modal -->
-    <div id="error-modal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="error-modal-title">
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm text-slate-800 p-6 text-center">
-            <i class="fas fa-exclamation-triangle fa-3x text-red-500 mb-4"></i>
-            <h3 id="error-modal-title" class="text-2xl font-bold mb-2">שגיאה</h3>
-            <p id="error-modal-message" class="text-slate-600 mb-6">אירעה שגיאה בלתי צפויה.</p>
-            <button id="error-modal-close-btn" class="action-btn w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl">
-                הבנתי
-            </button>
-        </div>
-    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // --- FIX: Firebase config should be hidden or managed securely. Using placeholder from original code. ---
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -321,10 +304,6 @@
             includeAttractionsCheckbox: document.getElementById('include-attractions-checkbox'),
             includeScheduleCheckbox: document.getElementById('include-schedule-checkbox'),
             includeChecklistsCheckbox: document.getElementById('include-checklists-checkbox'),
-            // --- FIX: Added error modal elements ---
-            errorModal: document.getElementById('error-modal'),
-            errorModalMessage: document.getElementById('error-modal-message'),
-            errorModalCloseBtn: document.getElementById('error-modal-close-btn'),
         };
 
         let tripId = null;
@@ -343,6 +322,10 @@
             document.body.classList.remove('scroll-locked');
             document.documentElement.style.removeProperty('--scroll-lock-top');
             window.scrollTo(0, _scrollY || 0);
+        }
+
+        function isStandaloneMode() {
+            return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
         }
 
         function initPage() {
@@ -365,27 +348,8 @@
                 } else { window.location.href = 'login.html'; }
             });
         }
-        
-        // --- FIX: Replaced alert() with a custom modal ---
-        function showErrorModal(message, redirect = false) {
-            DOM.errorModalMessage.textContent = message;
-            DOM.errorModal.classList.remove('hidden');
-            lockScroll(); // Reuse the scroll lock
 
-            const closeBtn = DOM.errorModalCloseBtn;
-            
-            const clickHandler = () => {
-                DOM.errorModal.classList.add('hidden');
-                unlockScroll();
-                closeBtn.removeEventListener('click', clickHandler);
-                if (redirect) {
-                    window.location.href = 'index.html';
-                }
-            };
-            // Remove old listener just in case, then add new one
-            closeBtn.removeEventListener('click', clickHandler);
-            closeBtn.addEventListener('click', clickHandler, { once: true });
-        }
+        function showErrorModal(message, redirect = false) { alert(message); if (redirect) window.location.href = 'index.html'; }
 
         function setStatus(message, showLoader = false) {
             isGenerating = showLoader;
@@ -405,7 +369,6 @@
                 getDoc(tripRef),
                 ...collectionsToFetch.map(c => {
                     const collRef = collection(db, 'trips', tripId, c);
-                    // --- FIX: schedules query doesn't need orderBy, it's sorted later by ID ---
                     const qRef = (c === 'schedules') ? query(collRef) : query(collRef, orderBy('createdAt'));
                     return getDocs(qRef);
                 })
@@ -431,7 +394,6 @@
                 dayData.notes = notesSnap.docs.map(d => d.data());
                 allData.schedules.push(dayData);
             }
-            // Sort schedules by date (ID)
             allData.schedules.sort((a,b) => a.id.localeCompare(b.id));
             tripDataCache = allData;
             return allData;
@@ -454,21 +416,10 @@
             if (!dateStr || typeof dateStr !== 'string') return null;
             if (dateStr.includes(' - ')) dateStr = dateStr.split(' - ')[0].trim();
             const parts = dateStr.split('/'); if (parts.length !== 3) return null;
-            // Handle YYYY-MM-DD format as well
-            if (parts[2].length === 4) {
-                const dateObj = new Date(Date.UTC(parts[2], parts[1] - 1, parts[0]));
-                const timeStr = item.pickup_time || item.departure_time;
-                if (timeStr && timeStr.includes(':')) { const [h, m] = timeStr.split(':').map(Number); if (!isNaN(h) && !isNaN(m)) dateObj.setUTCHours(h, m); }
-                return dateObj;
-            }
-            // Handle YYYY-MM-DD from schedule ID
-            if (parts[0].length === 4) {
-                const dateObj = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-                const timeStr = item.pickup_time || item.departure_time;
-                if (timeStr && timeStr.includes(':')) { const [h, m] = timeStr.split(':').map(Number); if (!isNaN(h) && !isNaN(m)) dateObj.setUTCHours(h, m); }
-                return dateObj;
-            }
-            return null;
+            const dateObj = new Date(Date.UTC(parts[2], parts[1] - 1, parts[0]));
+            const timeStr = item.pickup_time || item.departure_time;
+            if (timeStr && timeStr.includes(':')) { const [h, m] = timeStr.split(':').map(Number); if (!isNaN(h) && !isNaN(m)) dateObj.setUTCHours(h, m); }
+            return dateObj;
         }
 
         function renderReportHtml(data, includeMaps, includeAttractions, includeSchedule, includeChecklists) {
@@ -511,7 +462,7 @@
                         case 'flight': {
                             const from = item.from || {}; const to = item.to || {};
                             const luggage = `תיקי יד: ${item.hand_bag_count||0}, טרולי: ${item.trolley_count||0}, מזוודות: ${item.checked_bags_count||0}`;
-                            cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline||'טיסה')}</span><span class="flight-path">${sanitize(from.destination||'')} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination||'')}</span></h4>`;
+                            cardHtml += `<h4 class="flight-card"><span>${sanitize(item.airline||'טיסה')}</span><span class="flight-path ltr-force">${sanitize(from.destination||'')} <i class="fas fa-arrow-right"></i> ${sanitize(to.destination||'')}</span></h4>`;
                             cardHtml += `<div class="card-grid">
                                 ${detailItem('fa-hashtag','מספר טיסה', item.flight_number)}
                                 ${detailItem('fa-calendar-day','תאריך', item.dates)}
@@ -675,26 +626,26 @@
 
             if (includeSchedule && schedules.length) {
                 schedules.forEach(day => {
-                    html += `<div class=\"page-break\"></div><h3 class=\"section-title\"><i class=\"fas fa-calendar-day\"></i> לו\"ז יומי</h3>`;
-                    html += `<div class=\"daily-schedule-header\"><div class=\"date\">${formatISODate(day.id)}</div>${day.title ? `<div class=\"title rtl-force\">${sanitize(day.title)}</div>` : ''}</div>`;
+                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-calendar-day"></i> לו"ז יומי</h3>`;
+                    html += `<div class="daily-schedule-header"><div class="date">${formatISODate(day.id)}</div>${day.title ? `<div class="title rtl-force">${sanitize(day.title)}</div>` : ''}</div>`;
                     if (day.items?.length > 0) {
                         day.items.forEach(item => {
                             const time = `${item.startTime || ''}${item.endTime ? ' - ' + item.endTime : ''}`;
-                            html += `<div class=\"timeline-item\"><div class=\"time\">${sanitize(time)}</div><div class=\"content\"><h5 class=\"rtl-force\">${sanitize(item.title)}</h5>`;
-                            if (item.summary) html += `<p class=\"rtl-force\">${sanitize(item.summary)}</p>`;
+                            html += `<div class="timeline-item"><div class="time ltr-force">${sanitize(time)}</div><div class="content"><h5 class="rtl-force">${sanitize(item.title)}</h5>`;
+                            if (item.summary) html += `<p class="rtl-force">${sanitize(item.summary)}</p>`;
                             if (item.refs?.length > 0) {
                                 item.refs.forEach(ref => {
                                     const source = ref.type === 'logistics' ? logistics : places;
                                     const fullItem = source.find(s => s.id === ref.id);
-                                    if (fullItem) html += `<div class=\"ref-details rtl-force\"><b>מקושר ל:</b> ${sanitize(fullItem.name)} (כתובת: ${sanitize(fullItem.address || fullItem.location || '')})</div>`;
+                                    if (fullItem) html += `<div class="ref-details rtl-force"><b>מקושר ל:</b> ${sanitize(fullItem.name)} (כתובת: ${sanitize(fullItem.address || fullItem.location || '')})</div>`;
                                 });
                             }
                             html += `</div></div>`;
                         });
                     } else { html += `<p>אין פעילויות מתוכננות ליום זה.</p>`; }
                     if (day.notes?.length > 0) {
-                        html += `<div class=\"notes-section\"><h4>📝 דגשים וטיפים ליום זה</h4>`;
-                        day.notes.forEach(note => { html += `<div class=\"note-item note-color-${note.color || 'yellow'}\"><strong class=\"rtl-force\">${sanitize(note.kind || 'הערה')}: ${sanitize(note.title || '')}</strong>${note.details ? `<p class=\"rtl-force\">${sanitize(note.details)}</p>` : ''}</div>`; });
+                        html += `<div class="notes-section"><h4>📝 דגשים וטיפים ליום זה</h4>`;
+                        day.notes.forEach(note => { html += `<div class="note-item note-color-${note.color || 'yellow'}"><strong class="rtl-force">${sanitize(note.kind || 'הערה')}: ${sanitize(note.title || '')}</strong>${note.details ? `<p class="rtl-force">${sanitize(note.details)}</p>` : ''}</div>`; });
                         html += `</div>`;
                     }
                 });
@@ -707,38 +658,47 @@
         function initializeMaps() {
             mapInstances = [];
 
+            const arrowPattern = {
+                offset: '50%',
+                repeat: 0,
+                symbol: L.Symbol.arrowHead({
+                    pixelSize: 12,
+                    polygon: false,
+                    pathOptions: { color: '#0ea5e9', weight: 3, opacity: 0.9 }
+                })
+            };
+
             const tripMapContainer = document.getElementById('trip-route-map');
-            if (tripMapContainer) {
+            if (tripMapContainer && tripDataCache && tripDataCache.tripData) {
                 const tripMap = L.map(tripMapContainer).setView([38, -95], 3.5);
                 mapInstances.push(tripMap);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(tripMap);
-                const points = (tripDataCache.tripData.destinations || []).filter(d => d.coords).map(d => [d.coords.lat, d.coords.lng]);
+                const points = (tripDataCache.tripData.destinations || [])
+                    .filter(d => d.coords)
+                    .map(d => [d.coords.lat, d.coords.lng]);
+
                 (tripDataCache.tripData.destinations || []).forEach(dest => {
-                    if (dest.coords) L.marker([dest.coords.lat, dest.coords.lng]).addTo(tripMap).bindTooltip(dest.nameHe, {permanent: true, direction: 'top', offset: [0, -10]}).openTooltip();
+                    if (dest.coords) {
+                        L.marker([dest.coords.lat, dest.coords.lng])
+                            .addTo(tripMap)
+                            .bindTooltip(dest.nameHe, {permanent: true, direction: 'top', offset: [0, -10]})
+                            .openTooltip();
+                    }
                 });
-                if (points.length > 1) { 
-                    // --- FIX: Replaced dashed line with decorated arrow line ---
-                    const polyline = L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7 }).addTo(tripMap);
-                    L.polylineDecorator(polyline, {
-                        patterns: [
-                            {
-                                offset: 25, 
-                                repeat: '100px', 
-                                symbol: L.Symbol.arrowHead({
-                                    pixelSize: 12,
-                                    polygon: false,
-                                    pathOptions: { stroke: true, color: '#38bdf8', weight: 2, opacity: 1 }
-                                })
-                            }
-                        ]
-                    }).addTo(tripMap);
-                    tripMap.fitBounds(points, { padding: [50, 50] }); 
+
+                if (points.length > 1) {
+                    const routeLine = L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
+                    if (L.polylineDecorator) {
+                        L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(tripMap);
+                    }
+                    tripMap.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+                } else if (points.length === 1) {
+                    tripMap.setView(points[0], 8);
                 }
-                else if (points.length === 1) { tripMap.setView(points[0], 8); }
-                // --- FIX: Use whenReady instead of setTimeout for robust resizing ---
-                tripMap.whenReady(() => tripMap.invalidateSize());
+                setTimeout(() => tripMap.invalidateSize(), 120);
             }
 
+            // Single-point maps (מלונות / אטרקציות / רכב שכור)
             document.querySelectorAll('.attraction-map-container, .logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
@@ -746,24 +706,28 @@
                     mapInstances.push(map);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name || '').openPopup();
-                    // --- FIX: Use whenReady instead of setTimeout ---
-                    map.whenReady(() => map.invalidateSize());
+                    setTimeout(() => map.invalidateSize(), 120);
                 }
             });
 
+            // Maps with שני נקודות / מסלול
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
                 mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-                if (mapDiv.dataset.routeGeometry && mapDiv.dataset.routeGeometry !== '""') { // Ride Map
+                if (mapDiv.dataset.routeGeometry) { // Ride Map with full geometry
                     try {
                         const geometry = JSON.parse(mapDiv.dataset.routeGeometry || '[]');
                         const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                         const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                         if (geometry && geometry.length > 0) {
+                            // בהנחה שהפורמט הוא [lat, lng]
                             const latlngs = geometry.map(coord => L.latLng(coord[0], coord[1]));
                             const polyline = L.polyline(latlngs, { color: '#0ea5e9', weight: 5 }).addTo(map);
+                            if (L.polylineDecorator) {
+                                L.polylineDecorator(polyline, { patterns: [arrowPattern] }).addTo(map);
+                            }
                             if (!isNaN(fromLat)) L.marker([fromLat, fromLng]).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
                             if (!isNaN(toLat)) L.marker([toLat, toLng]).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
                             map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
@@ -774,19 +738,15 @@
                                 const bounds = L.latLngBounds([fromPoint, toPoint]);
                                 L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
                                 L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
-                                // --- FIX: Add decorator arrow ---
-                                const polyline = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8 }).addTo(map);
-                                L.polylineDecorator(polyline, {
-                                    patterns: [{
-                                        offset: '50%', repeat: 0,
-                                        symbol: L.Symbol.arrowHead({ pixelSize: 15, polygon: false, pathOptions: { stroke: true, color: '#0ea5e9', weight: 2, opacity: 1 } })
-                                    }]
-                                }).addTo(map);
+                                const routeLine = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+                                if (L.polylineDecorator) {
+                                    L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(map);
+                                }
                                 map.fitBounds(bounds, { padding: [40, 40] });
                             }
                         }
                     } catch (e) { console.error("Failed to render ride map", e); }
-                } else { // Flight, Ferry, Train Map
+                } else { // Flight, Ferry, Train Map (from / to)
                     const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                     const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                     if (!isNaN(fromLat) && !isNaN(toLat)) {
@@ -794,26 +754,14 @@
                         const bounds = L.latLngBounds([fromPoint, toPoint]);
                         L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
                         L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
-                        // --- FIX: Replaced dashed line with decorated arrow line ---
-                        const polyline = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8 }).addTo(map);
-                        L.polylineDecorator(polyline, {
-                            patterns: [
-                                {
-                                    offset: '50%', // Place arrow in the middle
-                                    repeat: 0,
-                                    symbol: L.Symbol.arrowHead({
-                                        pixelSize: 15,
-                                        polygon: false,
-                                        pathOptions: { stroke: true, color: '#0ea5e9', weight: 2, opacity: 1 }
-                                    })
-                                }
-                            ]
-                        }).addTo(map);
+                        const routeLine = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+                        if (L.polylineDecorator) {
+                            L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(map);
+                        }
                         map.fitBounds(bounds, { padding: [40, 40] });
                     }
                 }
-                // --- FIX: Use whenReady instead of setTimeout ---
-                map.whenReady(() => map.invalidateSize());
+                setTimeout(() => map.invalidateSize(), 120);
             });
 
             // Reflow maps on resize/orientation change
@@ -827,6 +775,14 @@
         async function showPreview() {
             if (isGenerating) return;
             try {
+                // ניקוי מפות קודמות אם יש (כדי למנוע באגים כשמריצים שוב תצוגה מקדימה)
+                if (mapInstances && mapInstances.length) {
+                    mapInstances.forEach(m => {
+                        try { m.remove(); } catch (e) {}
+                    });
+                    mapInstances = [];
+                }
+
                 const allData = await fetchAllTripData();
                 setStatus('מעצב ומסדר את כל המידע...', true);
 
@@ -850,7 +806,6 @@
             } catch (error) {
                 console.error("Error generating preview:", error);
                 setStatus(`שגיאה בהצגת התצוגה: ${error.message}`, false);
-                showErrorModal(`שגיאה בהצגת התצוגה: ${error.message}`);
             }
         }
 
@@ -864,52 +819,29 @@
             unlockScroll();
         }
 
-        // --- FIX: Rewritten triggerPrint for robust map loading ---
-        async function triggerPrint() {
+        function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
+
+            const standalone = isStandaloneMode();
+            const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+
+            // באפליקציית אינטרנט מותקנת ב-iOS – window.print לרוב לא פותח כלום
+            if (standalone && isIOS) {
+                modalLoader.classList.add('hidden');
+                modalContent.classList.remove('hidden');
+                alert('באפליקציה מותקנת על iOS אי אפשר לפתוח מסך הדפסה אוטומטי.\nכדי לשמור או להדפיס את הסיכום:\n1. לחץ על כפתור השיתוף.\n2. בחר "הדפס" או "שמור בקבצים".');
+                return;
+            }
+
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
-            // Force maps to finalize layout before print.
-            // We wait for all maps to fire their 'load' event after invalidating.
-            const mapReadyPromises = mapInstances.map(map => {
-                return new Promise((resolve) => {
-                    // Failsafe timeout in case 'load' event doesn't fire
-                    const failsafe = setTimeout(() => {
-                        console.warn('Map readiness timeout reached for one map.');
-                        resolve();
-                    }, 2500); // 2.5 second timeout per map
-
-                    map.once('load', () => {
-                        clearTimeout(failsafe);
-                        resolve();
-                    });
-                    
-                    // Trigger the resize and re-render
-                    map.invalidateSize(true);
-                });
-            });
-
-            try {
-                // Wait for all maps to report they are loaded, or timeout
-                await Promise.all(mapReadyPromises);
-            } catch (e) {
-                console.error("Error waiting for maps:", e);
-            }
-            
-            // Give a final, brief timeout for the browser to finish compositing
+            // Force maps to finalize layout before print
             setTimeout(() => {
-                try {
-                    window.print();
-                } catch (e) {
-                    console.error("Print failed:", e);
-                    // We can't show our modal here as print might be blocking.
-                    // The modal will close, and the user can try again.
-                }
-                // Close modal regardless of print success/failure
-                closePrintModal();
-            }, 500);
+                mapInstances.forEach(map => map.invalidateSize(true));
+                setTimeout(() => { window.print(); closePrintModal(); }, 900);
+            }, 120);
         }
 
         // Close on overlay click (but not when clicking inside panel)
@@ -926,4 +858,3 @@
     </script>
 </body>
 </html>
-
