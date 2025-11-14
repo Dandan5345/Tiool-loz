@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
     <title>ייצוא סיכום טיול</title>
 
     <!-- UI -->
@@ -219,7 +219,7 @@
         .attraction-map-container, .logistics-map-container { height: 250px; }
         .leaflet-container {
             z-index: 1;
-            background: #e5e7eb; /* אפור עדין רק כרקע, לא כחול */
+            background: #dbeafe; /* טיפה כחול כדי שלא ייראה אפור אם חסר טילי */
         }
 
         /* --- Mobile-first optimizations --- */
@@ -672,7 +672,7 @@
                                 ${detailItem('fa-building-user','הוזמן דרך', item.booked_via)}
                             </div>`;
                             if (includeMaps && item.coords) {
-                                cardHtml += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
+                                html += `<div id="map-car-${item.id}" class="map-container logistics-map-container"
                                     data-lat="${item.coords.lat}" data-lng="${item.coords.lng}" data-name="${sanitize(item.pickup_location||'Pickup')}"></div>`;
                             }
                             break;
@@ -871,12 +871,6 @@
             }
         }
 
-        function addBaseLayer(map) {
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-        }
-
         function initializeMaps() {
             mapInstances = [];
 
@@ -884,7 +878,9 @@
             if (tripMapContainer && tripDataCache?.tripData) {
                 const tripMap = L.map(tripMapContainer, { zoomControl: true }).setView([38, -95], 3.5);
                 mapInstances.push(tripMap);
-                addBaseLayer(tripMap);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+                    attribution: '© OpenStreetMap © CARTO'
+                }).addTo(tripMap);
 
                 const points = (tripDataCache.tripData.destinations || [])
                     .filter(d => d.coords)
@@ -922,7 +918,9 @@
                 if (!isNaN(lat) && !isNaN(lng)) {
                     const map = L.map(mapDiv, { zoomControl: true }).setView([lat, lng], 15);
                     mapInstances.push(map);
-                    addBaseLayer(map);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CARTO'
+                    }).addTo(map);
                     L.marker([lat, lng]).addTo(map).bindPopup(name || '').openPopup();
                     setTimeout(() => map.invalidateSize(true), 150);
                 }
@@ -932,7 +930,9 @@
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv, { zoomControl: true });
                 mapInstances.push(map);
-                addBaseLayer(map);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap &copy; CARTO'
+                }).addTo(map);
 
                 // נסיעה עם route_geometry (למשל מ־OSRM)
                 if (mapDiv.dataset.routeGeometry) {
@@ -997,7 +997,7 @@
                             opacity: 0.8,
                             dashArray: '5, 5'
                         }).addTo(map);
-                        // חשוב: [fromPoint, toPoint] כדי שהחץ יהיה מהיציאה ליעד
+                        // כאן חשוב: [fromPoint, toPoint] כדי שהחץ יהיה מהיציאה ליעד (לונדון ← ניו יורק בכיוון הנכון)
                         createArrowDecorator(line, map);
                         map.fitBounds(bounds, { padding: [40, 40] });
                     }
@@ -1056,6 +1056,9 @@
             unlockScroll();
         }
 
+        //
+        // --- !!! --- התיקון כאן --- !!! ---
+        //
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
@@ -1065,38 +1068,44 @@
             const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
             const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
 
-            // להכין את המפות לפני הדפסה
-            setTimeout(() => {
-                mapInstances.forEach(map => {
-                    try {
-                        map.invalidateSize(true);
-                        map.eachLayer(layer => {
-                            if (layer instanceof L.TileLayer) {
-                                layer.redraw(); // מונע מצבים של מפה חצי אפורה
-                            }
-                        });
-                    } catch (e) {
-                        console.warn('map prepare for print failed', e);
-                    }
-                });
-
-                // ב־iOS במצב אפליקציה מותקנת לפעמים חלון הדפסה נחסם – אי אפשר לעקוף את זה, רק להדריך
-                if (isIOS && isStandalone) {
-                    modalLoader.querySelector('.mt-4').textContent =
-                        'בגלל הגבלה של אפליקציות רשת באייפון, ייתכן שחיווי ההדפסה לא ייפתח ישירות. פתח את האתר בספארי (לא כאפליקציה) והשתמש שם בכפתור ההדפסה/שיתוף.';
-                    setTimeout(() => {
-                        closePrintModal();
-                    }, 3500);
-                    return;
+            // 1. הכן את כל המפות מיד
+            console.log("מכין מפות להדפסה...");
+            mapInstances.forEach(map => {
+                try {
+                    map.invalidateSize(true); // מכריח רענון גודל עבור פריסת הדפסה
+                    map.eachLayer(layer => {
+                        if (layer instanceof L.TileLayer) {
+                            layer.redraw(); // מכריח ציור מחדש של האריחים
+                        }
+                    });
+                } catch (e) {
+                    console.warn('הכנת מפה להדפסה נכשלה', e);
                 }
+            });
 
-                // הדפסה רגילה
+            // 2. טפל במקרה של iOS במצב אפליקציה (כמו קודם)
+            if (isIOS && isStandalone) {
+                modalLoader.querySelector('.mt-4').textContent =
+                    'בגלל הגבלה של אפליקציות רשת באייפון, ייתכן שחיווי ההדפסה לא ייפתח ישירות. פתח את האתר בספארי (לא כאפליקציה) והשתמש שם בכפתור ההדפסה/שיתוף.';
                 setTimeout(() => {
-                    window.print();
                     closePrintModal();
-                }, 700);
-            }, 150);
+                }, 3500);
+                return;
+            }
+
+            // 3. המתן זמן ארוך יותר (1.5 שניות) כדי לאפשר לאריחים להיטען לפני קריאה להדפסה
+            const printDelay = 1500; // הוגדל מ-700ms~ ל-1500ms
+            console.log(`ממתין ${printDelay}ms לטעינת אריחי המפה לפני הדפסה...`);
+
+            setTimeout(() => {
+                console.log("מפעיל window.print().");
+                window.print();
+                closePrintModal();
+            }, printDelay); // השתמש בהשהיה הארוכה החדשה
         }
+        //
+        // --- !!! --- סוף התיקון --- !!! ---
+        //
 
         // להכין מפות גם אם המשתמש פותח הדפסה דרך Ctrl+P וכד'
         if ('matchMedia' in window) {
@@ -1148,3 +1157,4 @@
     </script>
 </body>
 </html>
+
