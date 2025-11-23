@@ -39,34 +39,12 @@
     
     .modal { display: none; opacity: 0; transition: opacity .2s ease-out; }
     .modal.show { display: flex; opacity: 1; }
-    
     .modal-content {
         transform: scale(.95);
         opacity: 0;
         transition: transform .2s ease-out, opacity .2s ease-out;
-        max-height: 95vh;
     }
     .modal.show .modal-content { transform: scale(1); opacity: 1; }
-
-    /* Mobile specific modal adjustments */
-    @media (max-width: 640px) {
-        .modal { padding: 0 !important; align-items: flex-end; }
-        .modal-content {
-            width: 100%;
-            height: 100%;
-            max-height: 100dvh;
-            border-radius: 0;
-            display: flex;
-            flex-direction: column;
-        }
-        /* Make footer sticky at bottom on mobile */
-        .modal-content footer {
-            margin-top: auto;
-            background: white;
-            border-top: 1px solid #e2e8f0;
-            padding-bottom: max(1rem, env(safe-area-inset-bottom));
-        }
-    }
 
     .step { display: none; }
     .step.active { display: block; }
@@ -77,21 +55,19 @@
       box-shadow: 0 10px 25px rgba(0,0,0,.1); display: none;
     }
     .typeahead.open { display: block; }
-    .typeahead button { width: 100%; text-align: right; padding: .8rem 1rem; line-height: 1.35; white-space: normal; border-bottom: 1px solid #f1f5f9; }
+    .typeahead button { width: 100%; text-align: right; padding: .6rem .8rem; line-height: 1.35; white-space: normal; }
     .typeahead button:hover { background:#f8fafc; }
 
     .card { 
         transition: transform .15s ease, box-shadow .15s ease; 
         border-right: 4px solid #3b82f6;
+        /* מניעת בחירת טקסט בלחיצה ארוכה לגרירה חלקה */
         -webkit-user-select: none;
         user-select: none;
     }
-    .card:active { transform: scale(0.98); }
     .card:hover { 
+        transform: translateY(-3px); 
         box-shadow: 0 8px 25px rgba(2,6,23,.07); 
-    }
-    @media (min-width: 640px) {
-        .card:hover { transform: translateY(-3px); }
     }
     .card.needs-verify { 
         border-right-color: #ef4444;
@@ -100,10 +76,10 @@
     
     .chip {
       display: inline-flex; align-items: center; gap:.4rem;
-      padding:.35rem .65rem; border-radius: 999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
+      padding:.25rem .55rem; border-radius: 999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
       font-size:.85rem; font-weight: 600;
     }
-    .chip .x { cursor: pointer; color:#6366f1; padding: 2px; }
+    .chip .x { cursor: pointer; color:#6366f1; }
 
     .badge-verify {
       display:inline-flex; align-items:center; gap:.35rem;
@@ -117,11 +93,6 @@
 
     .input-with-btn { display:flex; gap:.5rem; }
     .input-with-btn input { flex:1 1 auto; }
-    
-    /* Bigger inputs for mobile */
-    input, select, textarea {
-        font-size: 16px !important; /* Prevents iOS zoom */
-    }
     
     .loader {
         width: 1.2rem; height: 1.2rem;
@@ -140,10 +111,8 @@
 
     ._safelist { color: #0000; background: linear-gradient(#fff,#fff); }
     
+    /* Better modal scrolling */
     .scroll-smooth { -webkit-overflow-scrolling: touch; }
-    
-    /* Touch target improvements */
-    button { touch-action: manipulation; }
   </style>
 </head>
 <body>
@@ -161,500 +130,460 @@
   <div class="fixed inset-0 -z-10 bg-fixed"></div>
 
   <!-- Header -->
-  <header class="bg-white/90 backdrop-blur-md sticky top-0 z-30 shadow-sm border-b border-slate-100">
+  <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-sm">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
       <div class="h-16 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <a id="back-to-day" href="#" class="p-3 -ml-2 text-slate-700 hover:text-blue-600 transition-colors" title="חזרה ללוז היומי">
-            <i class="fa-solid fa-arrow-right text-lg"></i>
+          <a id="back-to-day" href="#" class="p-2 text-slate-700 hover:text-blue-600 transition-colors" title="חזרה ללוז היומי">
+            <i class="fa-solid fa-arrow-right"></i>
           </a>
-          <h1 class="text-xl font-bold text-slate-800">יצירת לו״ז</h1>
+          <h1 class="text-xl font-bold text-slate-800">יצירת/עריכת לו״ז</h1>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <!-- Help Button -->
-          <button id="help-btn" class="w-10 h-10 flex items-center justify-center text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors border border-slate-200" title="עזרה">
+          <button id="help-btn" class="p-2 h-10 w-10 flex items-center justify-center text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-colors" title="עזרה">
             <i class="fa-solid fa-question"></i>
           </button>
-          <div id="auth-slot" class="hidden sm:block text-slate-700 text-xs sm:text-sm bg-slate-100 px-3 py-1 rounded-full"></div>
+          <div id="auth-slot" class="text-slate-700 text-xs sm:text-sm"></div>
         </div>
       </div>
     </div>
   </header>
 
-  <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-24">
+  <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
     <!-- בחירת תאריך/יעד + כותרת יום -->
-    <section class="sheet rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+    <section class="sheet rounded-2xl p-5 shadow-lg space-y-4">
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900">יום העבודה</h2>
-          <p class="text-slate-500 text-sm">בחר תאריך לעריכה</p>
+          <h2 class="text-2xl font-extrabold text-slate-900">בחר תאריך ליום העבודה</h2>
+          <p class="text-slate-600">ברירת המחדל — התאריך שממנו הגעת.</p>
         </div>
-        <div class="w-full md:w-[400px]">
-          <button id="date-toggle" class="w-full flex items-center justify-between bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm active:bg-slate-50 transition-colors">
+        <div class="w-full md:w-[460px]">
+          <button id="date-toggle" class="w-full flex items-center justify-between bg-white p-3 rounded-xl border shadow-sm hover:bg-slate-50 transition-colors">
             <span id="date-current" class="font-bold text-slate-700">טוען...</span>
-            <i class="fa-solid fa-chevron-down text-slate-400"></i>
+            <i class="fa-solid fa-chevron-down text-slate-500 transition-transform"></i>
           </button>
-          <div id="date-panel" class="submenu bg-white rounded-xl border shadow-xl mt-2 overflow-hidden z-20 relative">
+          <div id="date-panel" class="submenu bg-white rounded-xl border shadow-lg mt-2 overflow-hidden">
             <div id="date-list" class="max-h-80 overflow-y-auto divide-y"></div>
           </div>
         </div>
       </div>
-      <div class="flex items-center flex-wrap gap-2 text-slate-800 bg-slate-50 p-3 rounded-xl border border-slate-100">
-        <div id="badge-date" class="px-3 py-1 rounded-full bg-white text-sky-700 border border-sky-100 text-sm font-bold shadow-sm">—</div>
-        <div class="flex items-center gap-2 flex-1 min-w-0">
-          <span class="text-sm text-slate-500 shrink-0">כותרת:</span>
-          <strong id="day-title-inline" class="text-slate-800 font-bold truncate">...</strong>
-          <button id="edit-day-title-inline" class="hidden w-8 h-8 flex items-center justify-center text-slate-400 hover:text-blue-600 rounded-full hover:bg-white transition-colors" title="עריכת כותרת"><i class="fa-solid fa-pen"></i></button>
+      <div class="flex items-center flex-wrap gap-2 text-slate-800">
+        <div id="badge-date" class="px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-sm font-semibold">—</div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-500">כותרת היום:</span>
+          <strong id="day-title-inline" class="text-blue-700 font-semibold break-words">לא נקבעה</strong>
+          <button id="edit-day-title-inline" class="hidden text-slate-600 hover:text-blue-600" title="עריכת כותרת"><i class="fa-solid fa-pen"></i></button>
         </div>
       </div>
     </section>
 
     <!-- פריטים + כפתורים -->
-    <section class="sheet rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-            <h3 class="text-lg font-bold text-slate-900">לו״ז יומי</h3>
-            <button id="delete-all-btn" class="hidden text-red-500 hover:text-red-700 text-sm font-semibold px-2">
-                <i class="fa-solid fa-trash-can"></i> מחק הכל
-            </button>
-        </div>
-        
-        <div class="grid grid-cols-2 gap-3">
-          <button id="add-item-btn" class="flex flex-col items-center justify-center gap-2 p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100 rounded-xl transition-colors">
-            <div class="w-10 h-10 rounded-full bg-emerald-200 flex items-center justify-center text-emerald-700"><i class="fa-solid fa-plus text-lg"></i></div>
-            <span class="font-bold text-sm">הוסף ידני</span>
+    <section class="sheet rounded-2xl p-5 shadow-lg">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <h3 class="text-xl font-bold text-slate-900">פריטי לו״ז ליום זה</h3>
+        <div class="flex gap-2 flex-wrap">
+          <button id="add-item-btn" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors shadow-sm">
+            <i class="fa-solid fa-plus"></i> הוסף לוז
           </button>
-          <button id="ai-build-btn" class="flex flex-col items-center justify-center gap-2 p-4 bg-purple-50 text-purple-800 border border-purple-100 hover:bg-purple-100 rounded-xl transition-colors">
-            <div class="w-10 h-10 rounded-full bg-purple-200 flex items-center justify-center text-purple-700"><i class="fa-solid fa-wand-magic-sparkles text-lg"></i></div>
-            <span class="font-bold text-sm">הוסף עם AI</span>
+          <button id="ai-build-btn" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors shadow-sm">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> יצירת לוז עם AI
+          </button>
+          <button id="delete-all-btn" class="hidden inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors shadow-sm">
+            <i class="fa-solid fa-trash-can"></i> מחק הכל
           </button>
         </div>
       </div>
 
-      <div id="items-list" class="mt-6 space-y-3">
-        <div class="text-slate-400 py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            <i class="fa-regular fa-calendar text-2xl mb-2 opacity-50"></i>
-            <div>אין פריטים עדיין.</div>
-        </div>
+      <div id="items-list" class="mt-4 space-y-3">
+        <div class="text-slate-500 p-6 text-center">אין פריטים עדיין.</div>
       </div>
 
       <!-- הדגשים/טיפים -->
-      <div class="mt-8 border-t border-slate-100 pt-6">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="text-lg font-bold text-slate-800">דגשים וטיפים</h4>
-          <button id="add-note-btn" class="text-sm font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full hover:bg-amber-100 transition-colors">
-            <i class="fa-solid fa-plus"></i> הוסף
+      <div class="mt-8 border-t pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-lg font-bold text-slate-800">דגשים וטיפים ליום זה</h4>
+          <button id="add-note-btn" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors shadow-sm">
+            <i class="fa-solid fa-lightbulb"></i> הוספת דגש/טיפ
           </button>
         </div>
         <div id="notes-list" class="grid gap-3">
-          <div class="text-slate-400 text-sm">אין עדיין דגשים/טיפים.</div>
+          <div class="text-slate-500">אין עדיין דגשים/טיפים.</div>
         </div>
       </div>
     </section>
   </main>
 
   <!-- Help Modal -->
-  <div id="help-modal" class="modal fixed inset-0 z-[90] items-center justify-center sm:p-4 bg-black/60">
-    <div class="modal-content bg-white sm:rounded-2xl w-full max-w-2xl flex flex-col shadow-xl">
-      <header class="p-4 border-b flex items-center justify-between shrink-0">
+  <div id="help-modal" class="modal fixed inset-0 z-[90] items-center justify-center p-4 bg-black/60">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-xl">
+      <header class="p-4 border-b flex items-center justify-between">
         <h4 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> מרכז העזרה</h4>
-        <button id="help-close" class="p-2 -mr-2 text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button id="help-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="p-5 overflow-y-auto flex-1 help-content scroll-smooth">
-        <p class="mb-4 text-lg">ברוך הבא לעמוד יצירת ועריכת הלו"ז.</p>
-        <div class="space-y-6">
-            <div>
-                <h5><i class="fa-solid fa-calendar-day icon text-blue-500"></i> בחירת תאריך</h5>
-                <p>בחלק העליון, בחר את התאריך והיעד. תן כותרת יומית כדי לזכור את נושא היום.</p>
-            </div>
-            <div>
-                <h5><i class="fa-solid fa-plus icon text-emerald-500"></i> הוספת פריט</h5>
-                <p>השתמש בכפתור <strong>"הוסף ידני"</strong> כדי לפתוח אשף פשוט להוספת אטרקציה, מסעדה או פעילות.</p>
-            </div>
-            <div>
-                <h5><i class="fa-solid fa-wand-magic-sparkles icon text-purple-500"></i> עזרה מ-AI</h5>
-                <p>השתמש בכפתור <strong>"הוסף עם AI"</strong> כדי להדביק לו"ז שלם שיצרת מול הצ'אט בוט שלנו.</p>
-            </div>
-            <div>
-                <h5><i class="fa-solid fa-triangle-exclamation icon text-red-500"></i> אימות</h5>
-                <p>כרטיסיות עם פס אדום דורשות בדיקה (כתובת, שעות או קישורים). לחץ עליהן לאימות.</p>
-            </div>
-        </div>
+      <main class="p-4 sm:p-6 overflow-y-auto flex-1 help-content scroll-smooth">
+        <p class="mb-4">ברוך הבא לעמוד יצירת ועריכת הלו"ז. כאן תוכל לבנות את סדר היום שלך בצורה ידנית או בעזרת AI.</p>
+        <!-- Content trimmed for brevity -->
+        <h5><i class="fa-solid fa-calendar-day icon"></i> בחירת תאריך וכותרת</h5>
+        <p>בחלק העליון של הדף תוכל לבחור את התאריך שעבורו תרצה לערוך את הלו"ז. לאחר בחירת תאריך, תוכל להגדיר לו "כותרת יום".</p>
       </main>
-      <footer class="p-4 border-t bg-slate-50 sm:rounded-b-2xl">
-          <button class="w-full py-3 bg-slate-800 text-white rounded-xl font-bold" onclick="document.getElementById('help-modal').classList.remove('show')">הבנתי</button>
-      </footer>
     </div>
   </div>
 
   <!-- Generic Confirmation Modal -->
   <div id="confirm-modal" class="modal fixed inset-0 z-[100] items-center justify-center p-4 bg-black/70">
-    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden !h-auto !max-h-auto">
-      <div class="p-6 text-center">
-        <div id="confirm-icon" class="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl">
+      <div class="p-5 text-center">
+        <div id="confirm-icon" class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
           <i class="fa-solid fa-triangle-exclamation text-red-600 text-2xl"></i>
         </div>
-        <h4 id="confirm-title" class="text-xl font-bold text-slate-800">אישור פעולה</h4>
-        <p id="confirm-message" class="text-slate-600 mt-2 text-base">האם אתה בטוח?</p>
+        <h4 id="confirm-title" class="text-lg font-bold text-slate-800">אישור פעולה</h4>
+        <p id="confirm-message" class="text-slate-600 mt-2">האם אתה בטוח?</p>
       </div>
-      <div class="p-4 bg-slate-50 flex gap-3">
-        <button id="confirm-cancel" class="flex-1 py-3 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 hover:bg-slate-50">ביטול</button>
-        <button id="confirm-ok" class="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-md hover:bg-red-700">אישור</button>
+      <div class="p-4 bg-slate-50 flex justify-center gap-3 rounded-b-2xl">
+        <button id="confirm-cancel" class="px-6 py-2 rounded-lg hover:bg-slate-200 font-semibold">ביטול</button>
+        <button id="confirm-ok" class="px-6 py-2 bg-red-600 text-white rounded-lg font-semibold">אישור</button>
       </div>
     </div>
   </div>
 
   <!-- Hotel Select Modal -->
   <div id="hotel-select-modal" class="modal fixed inset-0 z-[85] items-center justify-center p-4 bg-black/60">
-    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl !h-auto">
-      <div class="p-4 border-b font-bold text-lg">בחירת מלון</div>
-      <div class="p-5 space-y-3">
-          <p class="text-slate-600">נמצאו מספר מלונות בתאריך זה. בחר את המלון הרצוי:</p>
-          <select id="hotel-select-dropdown" class="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-base"></select>
+    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl">
+      <div class="p-4 border-b font-bold">בחירת מלון</div>
+      <div class="p-4 space-y-2">
+          <p class="text-sm text-slate-600">נמצאו מספר מלונות בתאריך זה. בחר את המלון הרצוי:</p>
+          <select id="hotel-select-dropdown" class="w-full p-2 border rounded-lg"></select>
       </div>
-      <div class="p-4 border-t flex gap-3">
-        <button id="hotel-select-cancel" class="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-slate-700">ביטול</button>
-        <button id="hotel-select-save" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">בחירה</button>
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button id="hotel-select-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
+        <button id="hotel-select-save" class="px-4 py-2 bg-blue-600 text-white rounded-lg">בחירה</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL: יצירת/עריכת פריט -->
-  <div id="item-modal" class="modal fixed inset-0 z-50 items-center justify-center sm:p-4 bg-black/60">
-    <div class="modal-content bg-white sm:rounded-2xl w-full max-w-2xl flex flex-col shadow-xl">
-      <header class="p-4 border-b flex items-center justify-between shrink-0 bg-white z-10">
-        <h4 id="modal-title" class="text-lg font-bold">הוספת פריט</h4>
-        <button id="close-modal" class="p-2 -mr-2 text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+  <div id="item-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4 bg-black/60">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-2xl max-h-[95vh] flex flex-col shadow-xl">
+      <header class="p-4 border-b flex items-center justify-between">
+        <h4 id="modal-title" class="text-lg font-bold">הוספת פריט ליום</h4>
+        <button id="close-modal" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      
-      <main class="p-5 overflow-y-auto flex-1 space-y-6 scroll-smooth bg-white">
-        <div id="verify-banner" class="banner-warn hidden flex gap-3 items-start">
-          <i class="fa-solid fa-circle-exclamation mt-1"></i>
-          <div>לכרטיסיה זו דרוש אימות: ודא כתובת, מסלול או קישורים.</div>
+      <main class="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 scroll-smooth">
+        <div id="verify-banner" class="banner-warn hidden">
+          לכרטיסיה זו דרוש אימות: ודא כתובת/מסלול במפה ו/או קישור לאטרקציות/מעברים ואז שמור.
         </div>
-        
         <div id="step-A" class="step">
-          <label class="block font-bold mb-2 text-slate-700">כותרת יומית (נושא)</label>
-          <input id="input-day-title" type="text" class="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow" placeholder="למשל: יום עיר עתיקה ושוק">
-          <p class="text-sm text-slate-500 mt-2 bg-slate-50 p-2 rounded-lg">נועד לתת מסגרת ליום כולו. אם כבר יש כותרת, נדלג על זה.</p>
+          <label class="block font-bold mb-1">כותרת כללית ליום</label>
+          <input id="input-day-title" type="text" class="w-full p-2 border rounded-lg" placeholder="למשל: 'יום מוזיאונים ואוכל רחוב'">
+          <p class="text-xs text-slate-500 mt-2">שאלה זו תידלג אוטומטית לאחר שתשמר כותרת ליום.</p>
         </div>
-        
         <div id="step-B" class="step">
-          <label class="block font-bold mb-2 text-slate-700">שם הפעילות / המקום</label>
-          <input id="input-item-title" type="text" class="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="למשל: מוזיאון הלובר">
+          <label class="block font-bold mb-1">כותרת לפריט</label>
+          <input id="input-item-title" type="text" class="w-full p-2 border rounded-lg" placeholder="למשל: 'סיור במוזיאון ישראל'">
         </div>
-        
         <div id="step-C" class="step">
-          <div class="flex items-center justify-between mb-2">
-            <label class="block font-bold text-slate-700">זמנים</label>
-            <button id="add-back-to-hotel" class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg hover:bg-blue-100">+ חזרה למלון</button>
+          <div class="flex items-center justify-between">
+            <label class="block font-bold mb-2">שעות פעילות</label>
+            <button id="add-back-to-hotel" class="text-sm text-blue-700 hover:underline" title="יצור פריט 'חזרה למלון' בשעה שבחרת">+ חזרה למלון</button>
           </div>
-          <div class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div>
-              <label class="text-sm text-slate-500 block mb-1">שעת התחלה</label>
-              <input id="input-start" type="time" class="w-full p-3.5 border border-slate-300 rounded-xl bg-slate-50" />
+              <label class="text-sm text-slate-600">שעת התחלה</label>
+              <input id="input-start" type="time" class="w-full p-2 border rounded-lg" />
             </div>
-            
             <div id="end-wrap" class="hidden">
-              <label class="text-sm text-slate-500 block mb-1">שעת סיום (אופציונלי)</label>
-              <input id="input-end" type="time" class="w-full p-3.5 border border-slate-300 rounded-xl bg-slate-50" />
+              <label class="text-sm text-slate-600">שעת סיום</label>
+              <input id="input-end" type="time" class="w-full p-2 border rounded-lg" />
             </div>
-            
-            <button id="toggle-end" type="button" class="w-full p-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium">
-                <i class="fa-regular fa-clock"></i> הוסף/הסר שעת סיום
-            </button>
+            <button id="toggle-end" type="button" class="p-2 border rounded-lg hover:bg-slate-50">הוסף שעת סוף</button>
           </div>
         </div>
-        
         <div id="step-D" class="step">
-          <label class="block font-bold mb-2 text-slate-700">תיאור חופשי</label>
-          <textarea id="input-desc" rows="5" class="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="פירוט על הפעילות, מה עושים שם?"></textarea>
+          <label class="block font-bold mb-1">פירוט חופשי</label>
+          <textarea id="input-desc" rows="4" class="w-full p-2 border rounded-lg" placeholder="מה הולך להיות כאן?"></textarea>
         </div>
-        
         <div id="step-E" class="step space-y-4">
-          <h5 class="font-bold text-lg text-slate-800">מידע נוסף</h5>
+          <h5 class="font-bold">פרטים נוספים (לבחירה)</h5>
           <div class="flex flex-wrap gap-2">
-            <button data-open="#block-address" class="open-block px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium shadow-sm active:bg-slate-100">📍 כתובת</button>
-            <button data-open="#block-links"   class="open-block px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium shadow-sm active:bg-slate-100">🔗 קישורים</button>
-            <button data-open="#block-route"   class="open-block px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium shadow-sm active:bg-slate-100">🚗 דרכי הגעה</button>
-            <button data-open="#block-connect" class="open-block px-4 py-2 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 font-medium shadow-sm active:bg-purple-100">✨ אטרקציות ומלונות</button>
+            <button data-open="#block-address" class="open-block px-3 py-1.5 rounded-lg border hover:bg-slate-50">כתובת</button>
+            <button data-open="#block-links"   class="open-block px-3 py-1.5 rounded-lg border hover:bg-slate-50">קישור לאתר</button>
+            <button data-open="#block-book"    class="open-block px-3 py-1.5 rounded-lg border hover:bg-slate-50">קישור להזמנה</button>
+            <button data-open="#block-route"   class="open-block px-3 py-1.5 rounded-lg border hover:bg-slate-50">הליכה/נסיעה</button>
+            <button data-open="#block-connect" class="open-block px-3 py-1.5 rounded-lg border hover:bg-slate-50">קישור לאטרקציות/מלון/טיסות</button>
           </div>
-          
-          <div id="block-address" class="hidden border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-3">
-            <div class="flex items-center justify-between">
-              <label class="font-bold text-slate-700">כתובת</label>
-              <button id="use-hotel-address" class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-lg">השתמש בכתובת המלון</button>
+          <div id="block-address" class="hidden border rounded-xl p-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <label class="font-semibold">כתובת</label>
+              <button id="use-hotel-address" class="text-sm text-blue-700 hover:underline">השתמש בכתובת המלון</button>
             </div>
             <div class="relative input-with-btn">
-              <input id="addr-input" type="text" class="w-full p-3 border rounded-xl" placeholder="חפש כתובת...">
-              <button id="addr-search-btn" type="button" class="px-4 bg-white border rounded-xl shadow-sm text-slate-600">
-                <i class="fa-solid fa-magnifying-glass"></i>
+              <input id="addr-input" type="text" class="w-full p-2 border rounded-lg" placeholder="הקלד כתובת">
+              <button id="addr-search-btn" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50">
+                <i class="fa-solid fa-magnifying-glass"></i> חפש
               </button>
             </div>
-            <div id="addr-map" class="w-full h-56 rounded-xl border border-slate-200 bg-white z-0"></div>
+            <div id="addr-map" class="w-full h-52 rounded-lg"></div>
           </div>
-          
-          <div id="block-links" class="hidden border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-3">
-            <div>
-                <label class="block mb-1 font-bold text-sm text-slate-700">אתר אינטרנט</label>
-                <input id="link-general" type="url" class="w-full p-3 border rounded-xl bg-white" placeholder="https://...">
-            </div>
-            <div>
-                <label class="block mb-1 font-bold text-sm text-slate-700">הזמנת כרטיסים</label>
-                <input id="link-book" type="url" class="w-full p-3 border rounded-xl bg-white" placeholder="https://...">
-            </div>
+          <div id="block-links" class="hidden border rounded-xl p-3">
+            <label class="block mb-1 font-semibold">קישור לאתר</label>
+            <input id="link-general" type="url" class="w-full p-2 border rounded-lg" placeholder="https://...">
           </div>
-          
-          <div id="block-route" class="hidden border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-3">
-            <div class="grid gap-3">
+          <div id="block-book" class="hidden border rounded-xl p-3">
+            <label class="block mb-1 font-semibold">קישור להזמנת כרטיס</label>
+            <input id="link-book" type="url" class="w-full p-2 border rounded-lg" placeholder="https://...">
+          </div>
+          <div id="block-route" class="hidden border rounded-xl p-3 space-y-2">
+            <div class="grid sm:grid-cols-2 gap-2">
               <div class="relative">
-                <label class="text-xs font-bold text-slate-500 mb-1 block">מאיפה יוצאים?</label>
+                <label class="text-sm">מאיפה</label>
                 <div class="input-with-btn">
-                  <input id="route-from" class="w-full p-3 border rounded-xl bg-white" placeholder="מוצא">
-                  <button id="route-from-search" type="button" class="px-3 bg-white border rounded-xl"><i class="fa-solid fa-magnifying-glass"></i></button>
+                  <input id="route-from" class="w-full p-2 border rounded-lg" placeholder="כתובת יציאה">
+                  <button id="route-from-search" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50"><i class="fa-solid fa-magnifying-glass"></i></button>
                 </div>
               </div>
               <div class="relative">
-                <label class="text-xs font-bold text-slate-500 mb-1 block">לאן מגיעים?</label>
+                <label class="text-sm">לאן</label>
                 <div class="input-with-btn">
-                  <input id="route-to" class="w-full p-3 border rounded-xl bg-white" placeholder="יעד">
-                  <button id="route-to-search" type="button" class="px-3 bg-white border rounded-xl"><i class="fa-solid fa-magnifying-glass"></i></button>
+                  <input id="route-to" class="w-full p-2 border rounded-lg" placeholder="כתובת יעד">
+                  <button id="route-to-search" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50"><i class="fa-solid fa-magnifying-glass"></i></button>
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-2 mt-2 bg-white p-2 rounded-xl border">
-              <select id="route-mode" class="p-2 bg-transparent font-bold text-slate-700 outline-none">
-                <option value="foot">🚶 הליכה</option>
-                <option value="driving" selected>🚗 נהיגה</option>
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="text-sm">אופן נסיעה:</label>
+              <select id="route-mode" class="p-2 border rounded-lg">
+                <option value="foot">הליכה</option>
+                <option value="driving" selected>נהיגה</option>
               </select>
-              <div class="h-4 w-px bg-slate-300 mx-1"></div>
-              <button id="route-calc" class="text-blue-600 font-bold text-sm px-2">חישוב</button>
-              <div id="route-time" class="text-sm text-slate-700 mr-auto font-mono"></div>
+              <button id="route-calc" class="px-3 py-2 border rounded-lg hover:bg-slate-50">חשב מסלול</button>
+              <div id="route-time" class="text-sm text-slate-700"></div>
             </div>
-            <div id="route-map" class="w-full h-56 rounded-xl border border-slate-200 bg-white z-0"></div>
+            <div id="route-map" class="w-full h-56 rounded-lg"></div>
           </div>
-          
-          <div id="block-connect" class="hidden border border-slate-200 rounded-2xl p-4 bg-slate-50">
-            <div class="mb-3 p-3 bg-white rounded-xl border min-h-[50px]">
-              <div class="text-xs text-slate-400 mb-1">נבחרו:</div>
+          <div id="block-connect" class="hidden border rounded-xl p-3">
+            <div class="mb-2">
               <div id="selected-refs" class="flex flex-wrap gap-2"></div>
             </div>
-            <p class="text-sm text-slate-600 mb-3 px-1">סמן למטה מקומות שקשורים לפריט זה:</p>
+            <p class="text-sm text-slate-600 mb-3">בחר מקורות לקשר לכרטיס: אטרקציות/מסעדות, מלונות ומעברים (טיסות/רכבות/רכב).</p>
             <div id="connect-lists" class="grid gap-3"></div>
           </div>
         </div>
-        
         <div id="step-F" class="step">
-          <label class="block font-bold mb-2 text-slate-700">תקציר (מופיע בכרטיס)</label>
-          <input id="input-summary" type="text" class="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="למשל: סיור קצר של שעה">
+          <label class="block font-bold mb-1">תקציר קצר לכרטיסייה</label>
+          <input id="input-summary" type="text" class="w-full p-2 border rounded-lg" placeholder="מה יופיע בכותרת הכרטיס?">
         </div>
-        
         <div id="step-G" class="step">
-          <label class="block font-bold mb-2 text-slate-700">הערות ודגשים</label>
-          <textarea id="input-notes" rows="4" class="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-amber-50 border-amber-200 placeholder-amber-700/50 text-amber-900" placeholder="דברים שאסור לשכוח..."></textarea>
+          <label class="block font-bold mb-1">הערות חשובות</label>
+          <textarea id="input-notes" rows="3" class="w-full p-2 border rounded-lg" placeholder="אלרגיות, דגשים, תזכורות..."></textarea>
         </div>
       </main>
-      
-      <footer class="p-4 border-t shrink-0 flex items-center gap-3 bg-white z-10">
-        <button id="prev-step" class="px-5 py-3 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">אחורה</button>
-        <div class="text-xs text-slate-400 flex-1 text-center font-mono" id="step-indicator">1/7</div>
-        <button id="next-step" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 active:scale-95 transition-transform">המשך</button>
-        <button id="save-item" class="hidden flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700 active:scale-95 transition-transform">שמור סיום</button>
+      <footer class="p-4 border-t flex items-center justify-between">
+        <button id="prev-step" class="px-4 py-2 rounded-lg hover:bg-slate-100">אחורה</button>
+        <div class="text-sm text-slate-500" id="step-indicator"></div>
+        <div>
+          <button id="next-step" class="px-4 py-2 bg-blue-600 text-white rounded-lg">הבא</button>
+          <button id="save-item" class="hidden px-4 py-2 bg-emerald-600 text-white rounded-lg">שמור פריט</button>
+        </div>
       </footer>
     </div>
   </div>
 
   <!-- MODAL: עריכת כותרת יום -->
   <div id="title-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4 bg-black/60">
-    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl !h-auto">
-      <div class="p-4 border-b font-bold text-lg">עריכת כותרת</div>
-      <div class="p-5">
-        <input id="title-edit-input" class="w-full p-3.5 border border-slate-300 rounded-xl" placeholder="תן כותרת ליום זה">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-sm shadow-xl">
+      <div class="p-4 border-b font-bold">עריכת כותרת ליום</div>
+      <div class="p-4">
+        <input id="title-edit-input" class="w-full p-2 border rounded-lg" placeholder="כותרת היום">
       </div>
-      <div class="p-4 border-t flex gap-3">
-        <button id="title-cancel" class="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-slate-700">ביטול</button>
-        <button id="title-save" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">שמור</button>
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button id="title-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
+        <button id="title-save" class="px-4 py-2 bg-blue-600 text-white rounded-lg">שמירה</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL: צפייה מלאה בפריט -->
-  <div id="view-modal" class="modal fixed inset-0 z-[60] items-center justify-center sm:p-4 bg-black/60">
-    <div class="modal-content bg-white sm:rounded-2xl w-full max-w-2xl flex flex-col shadow-xl">
-      <header class="p-4 border-b flex items-center justify-between shrink-0 bg-white z-10">
-        <h4 id="view-title" class="text-lg font-bold break-words text-slate-800 pr-2 leading-tight">...</h4>
-        <button id="view-close" class="p-2 -mr-2 text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+  <div id="view-modal" class="modal fixed inset-0 z-[60] items-center justify-center p-4 bg-black/60">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-xl">
+      <header class="p-4 border-b flex items-center justify-between">
+        <h4 id="view-title" class="text-lg font-bold break-words">—</h4>
+        <button id="view-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="p-5 overflow-y-auto space-y-5 scroll-smooth bg-white flex-1">
-        <div id="view-time" class="text-slate-500 font-bold text-lg flex items-center gap-2"></div>
-        
-        <div id="view-summary" class="text-slate-800 font-medium break-words bg-slate-50 p-3 rounded-xl border border-slate-100"></div>
-        
-        <div id="view-desc" class="text-slate-600 whitespace-pre-line break-words leading-relaxed text-base"></div>
-        
-        <div id="view-address" class="text-blue-600 font-semibold flex items-start gap-2"></div>
-        
-        <div id="view-links" class="flex flex-wrap gap-2 py-2"></div>
-        
-        <div id="view-map" class="w-full h-64 rounded-2xl border border-slate-200 bg-slate-50 z-0"></div>
+      <main class="p-4 sm:p-6 overflow-y-auto space-y-4 scroll-smooth">
+        <div id="view-time" class="text-slate-600"></div>
+        <div id="view-summary" class="text-slate-800 break-words"></div>
+        <div id="view-desc" class="text-slate-700 whitespace-pre-line break-words"></div>
+        <div id="view-address" class="text-slate-700"></div>
+        <div id="view-links" class="flex flex-wrap gap-2"></div>
+        <div id="view-map" class="w-full h-60 rounded-xl"></div>
       </main>
-      <footer class="p-4 border-t shrink-0 flex flex-col gap-3 bg-white z-10 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
-        <div class="flex gap-3 w-full">
-          <a id="nav-waze"   target="_blank" class="flex-1 justify-center items-center gap-2 px-3 py-3 rounded-xl bg-[#33ccff] text-white font-bold shadow-sm hidden flex"><i class="fa-brands fa-waze text-xl"></i> Waze</a>
-          <a id="nav-gmaps"  target="_blank" class="flex-1 justify-center items-center gap-2 px-3 py-3 rounded-xl bg-[#4285F4] text-white font-bold shadow-sm hidden flex"><i class="fa-solid fa-location-dot"></i> Maps</a>
+      <footer class="p-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex gap-2 w-full sm:w-auto justify-center">
+          <a id="nav-waze"   target="_blank" class="flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-2 rounded-lg bg-[#33ccff] text-white hidden"><i class="fa-brands fa-waze"></i> נווט</a>
+          <a id="nav-gmaps"  target="_blank" class="flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-2 rounded-lg bg-[#4285F4] text-white hidden"><i class="fa-solid fa-location-dot"></i> מפות</a>
         </div>
-        <div class="flex gap-3 w-full border-t border-slate-100 pt-3">
-          <button id="view-verify" class="flex-1 justify-center items-center gap-2 px-3 py-3 rounded-xl bg-red-50 text-red-600 font-bold border border-red-100 hidden flex"><i class="fa-solid fa-check-double"></i> אמת</button>
-          <button id="view-edit"   class="flex-1 justify-center items-center gap-2 px-3 py-3 rounded-xl bg-amber-50 text-amber-700 font-bold border border-amber-100 flex"><i class="fa-solid fa-pen"></i> ערוך</button>
-          <button id="view-delete" class="px-4 py-3 rounded-xl bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 border border-slate-100 flex"><i class="fa-solid fa-trash"></i></button>
+        <div class="flex gap-2 w-full sm:w-auto justify-center">
+          <button id="view-verify" class="flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white hidden"><i class="fa-solid fa-triangle-exclamation"></i> אמת עכשיו</button>
+          <button id="view-edit"   class="flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-2 rounded-lg bg-amber-500 text-white"><i class="fa-solid fa-pen"></i> ערוך</button>
+          <button id="view-delete" class="flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white"><i class="fa-solid fa-trash"></i> מחק</button>
         </div>
       </footer>
     </div>
   </div>
 
   <!-- MODAL: AI הדבקה/פריסה/יצירה -->
-  <div id="ai-modal" class="modal fixed inset-0 z-[70] items-center justify-center sm:p-4 bg-black/60">
-    <div class="modal-content bg-white sm:rounded-2xl w-full max-w-3xl flex flex-col shadow-xl relative">
-      <div id="ai-loader-overlay" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4 rounded-2xl">
-          <div class="loader text-purple-600 w-10 h-10 border-4"></div>
-          <p class="font-bold text-slate-700 text-lg">AI בונה לך לו"ז...</p>
+  <div id="ai-modal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-black/60">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-xl relative">
+      <div id="ai-loader-overlay" class="hidden absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4 rounded-2xl">
+          <div class="loader text-purple-600"></div>
+          <p class="font-bold text-slate-700">יוצר לו"ז, נא להמתין...</p>
       </div>
-      <header class="p-4 border-b flex items-center justify-between shrink-0">
+      <header class="p-4 border-b flex items-center justify-between">
         <h4 class="text-lg font-bold"><i class="fa-solid fa-wand-magic-sparkles text-purple-600"></i> יצירת לוז עם AI</h4>
-        <button id="ai-close" class="p-2 -mr-2 text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button id="ai-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="p-5 overflow-y-auto space-y-6 scroll-smooth flex-1">
-        <div class="bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-xl p-4 text-sm text-slate-700 space-y-3 shadow-sm">
-            <h5 class="font-bold text-purple-900 text-base">איך זה עובד?</h5>
-            <ol class="list-decimal list-inside space-y-2 marker:text-purple-500">
-                <li>לחץ <strong>"דבר עם AI"</strong> כדי לקבל תוכנית.</li>
-                <li>העתק את הטקסט שקיבלת והדבק כאן.</li>
-                <li>לחץ <strong>"פרוס"</strong> לבדיקה ואז <strong>"צור לוז"</strong>.</li>
+      <main class="p-4 sm:p-6 overflow-y-auto space-y-4 scroll-smooth">
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700 space-y-2">
+            <h5 class="font-bold text-slate-800">איך זה עובד?</h5>
+            <ol class="list-decimal list-inside space-y-1">
+                <li>לחץ על <strong>"דבר עם AI"</strong> כדי לפתוח את העוזר בטאב חדש.</li>
+                <li>תאר לעוזר את הלו"ז הרצוי ליום מסוים.</li>
+                <li>העתק את כל הטקסט שקיבלת ממנו (עם הסימונים המיוחדים) והדבק כאן.</li>
+                <li>לחץ על <strong>"פרוס (Preview)"</strong> כדי לראות שזה מובן.</li>
+                <li>לחץ על <strong>"צור לוז"</strong> כדי לשמור את הכל ככרטיסיות ליום.</li>
             </ol>
-            <a href="https://chatgpt.com/g/g-6899d3d888d08191b96ce2ccbb43372b-h-vzr-hkhkm-lv-z-tyvl-bqlvt"
-               target="_blank"
-               class="inline-flex items-center gap-2 px-4 py-2 mt-2 rounded-xl bg-purple-600 text-white font-bold shadow-md hover:bg-purple-700 transition-colors w-full sm:w-auto justify-center">
-              <i class="fa-solid fa-robot"></i> דבר עם AI
-            </a>
         </div>
-        
+        <div class="flex flex-wrap gap-2 items-center">
+          <a href="https://chatgpt.com/g/g-6899d3d888d08191b96ce2ccbb43372b-h-vzr-hkhkm-lv-z-tyvl-bqlvt"
+             target="_blank"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 font-semibold transition-colors">
+            <i class="fa-solid fa-robot"></i> דבר עם AI
+          </a>
+        </div>
         <div class="space-y-2">
-          <label class="font-bold text-slate-700">הדבק כאן את הטקסט:</label>
-          <textarea id="ai-input" rows="8" class="w-full p-4 border border-slate-300 rounded-xl text-sm font-mono leading-relaxed focus:ring-2 focus:ring-purple-500 focus:outline-none" placeholder="הדבק כאן את הטקסט עם הסימונים ( ! ״ / \ ₪ : ׳ ׳₪ ? $ > < * • ~ )"></textarea>
+          <label class="font-bold">הדבק כאן את הפורמט המסומן מה-AI</label>
+          <textarea id="ai-input" rows="8" class="w-full p-3 border rounded-lg" placeholder="הדבק כאן את הטקסט עם הסימונים ( ! ״ / \ ₪ : ׳ ׳₪ ? $ > < * • ~ )"></textarea>
         </div>
-        
-        <div id="ai-preview" class="hidden bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <div class="font-bold mb-3 text-slate-800 border-b pb-2">תצוגה מקדימה:</div>
-          <div id="ai-preview-content" class="space-y-2 text-sm max-h-60 overflow-y-auto"></div>
-        </div>
-      </main>
-      <footer class="p-4 border-t flex gap-3 bg-white shrink-0">
-          <button id="ai-parse" class="flex-1 py-3 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50">פרוס (Preview)</button>
-          <button id="ai-create" class="flex-1 py-3 rounded-xl bg-purple-600 text-white font-bold shadow-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled>
-            <span class="loader hidden w-4 h-4 border-2"></span>
+        <div class="flex gap-2">
+          <button id="ai-parse" class="px-4 py-2 rounded-lg border hover:bg-slate-100 font-semibold transition-colors">פרוס (Preview)</button>
+          <button id="ai-create" class="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors" disabled>
+            <span class="loader hidden"></span>
             <span class="btn-text">צור לוז</span>
           </button>
-      </footer>
+        </div>
+        <div id="ai-preview" class="hidden">
+          <div class="font-bold mb-2">תצוגה מקדימה:</div>
+          <div id="ai-preview-content" class="space-y-2 text-sm"></div>
+        </div>
+      </main>
     </div>
   </div>
 
   <!-- MODAL: אימות כתובת/מסלול/קישורים -->
-  <div id="verify-modal" class="modal fixed inset-0 z-[75] items-center justify-center sm:p-4 bg-black/60">
-    <div class="modal-content bg-white sm:rounded-2xl w-full max-w-3xl flex flex-col shadow-xl">
-      <header class="p-4 border-b flex items-center justify-between shrink-0 bg-white">
-        <div class="min-w-0 pr-2">
-            <h4 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation text-red-600"></i> אימות</h4>
-            <div id="v-title" class="text-sm text-slate-500 truncate">...</div>
-        </div>
-        <button id="v-close" class="p-2 -mr-2 text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+  <div id="verify-modal" class="modal fixed inset-0 z-[75] items-center justify-center p-4 bg-black/60">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-xl">
+      <header class="p-4 border-b flex items-center justify-between">
+        <h4 class="text-lg font-bold break-words"><i class="fa-solid fa-triangle-exclamation text-red-600"></i> אימות פריט: <span id="v-title">—</span></h4>
+        <button id="v-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="p-5 overflow-y-auto space-y-6 scroll-smooth bg-white flex-1">
-        <div class="bg-orange-50 text-orange-800 p-3 rounded-xl text-sm border border-orange-100 font-medium">
-            השלם את הפרטים החסרים המסומנים באדום.
-        </div>
-        
-        <section id="v-block-address" class="hidden border border-red-200 rounded-2xl p-4 bg-red-50/30 space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="font-bold text-red-800">אימות כתובת</label>
-            <button id="v-use-hotel" class="text-xs font-bold text-blue-600 bg-white border px-2 py-1 rounded-lg">השתמש בכתובת המלון</button>
+      <main class="p-4 sm:p-6 overflow-y-auto space-y-5 scroll-smooth">
+        <div class="banner-warn">השלים/י את האימות לפי הסעיפים שסומנו אדום בכרטיסיה. לאחר שמירה, הסימון יוסר.</div>
+        <section id="v-block-address" class="hidden border rounded-xl p-3 space-y-2">
+          <div class="flex items-center gap-2">
+            <label class="font-semibold">כתובת</label>
+            <button id="v-use-hotel" class="text-sm text-blue-700 hover:underline">השתמש בכתובת המלון</button>
           </div>
           <div class="input-with-btn">
-            <input id="v-addr-input" type="text" class="w-full p-3 border rounded-xl" placeholder="הקלד כתובת">
-            <button id="v-addr-search" type="button" class="px-3 bg-white border rounded-xl"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <input id="v-addr-input" type="text" class="w-full p-2 border rounded-lg" placeholder="הקלד כתובת (או בחר למטה)">
+            <button id="v-addr-search" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50"><i class="fa-solid fa-magnifying-glass"></i> חפש</button>
           </div>
-          <div id="v-addr-map" class="w-full h-52 rounded-xl bg-white border z-0"></div>
+          <div id="v-addr-map" class="w-full h-52 rounded-lg"></div>
         </section>
-        
-        <section id="v-block-route" class="hidden border border-red-200 rounded-2xl p-4 bg-red-50/30 space-y-3">
-          <label class="font-bold text-red-800 block mb-2">אימות מסלול</label>
-          <div class="grid gap-3">
-            <input id="v-route-from" class="w-full p-3 border rounded-xl" placeholder="מוצא">
-            <input id="v-route-to" class="w-full p-3 border rounded-xl" placeholder="יעד">
+        <section id="v-block-route" class="hidden border rounded-xl p-3 space-y-2">
+          <div class="grid sm:grid-cols-2 gap-2">
+            <div>
+              <label class="text-sm">מאיפה</label>
+              <div class="input-with-btn">
+                <input id="v-route-from" class="w-full p-2 border rounded-lg" placeholder="כתובת יציאה">
+                <button id="v-route-from-search" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50"><i class="fa-solid fa-magnifying-glass"></i></button>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm">לאן</label>
+              <div class="input-with-btn">
+                <input id="v-route-to" class="w-full p-2 border rounded-lg" placeholder="כתובת יעד">
+                <button id="v-route-to-search" type="button" class="px-3 py-2 border rounded-lg hover:bg-slate-50"><i class="fa-solid fa-magnifying-glass"></i></button>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center gap-3 mt-2">
-            <select id="v-route-mode" class="p-2 border rounded-xl bg-white text-base">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="text-sm">אופן נסיעה:</label>
+            <select id="v-route-mode" class="p-2 border rounded-lg">
               <option value="foot">הליכה</option>
               <option value="driving" selected>נהיגה</option>
             </select>
-            <button id="v-route-calc" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-bold">חשב</button>
-            <div id="v-route-time" class="text-sm font-bold"></div>
+            <button id="v-route-calc" class="px-3 py-2 border rounded-lg hover:bg-slate-50">חשב מסלול</button>
+            <div id="v-route-time" class="text-sm text-slate-700"></div>
           </div>
-          <div id="v-route-map" class="w-full h-52 rounded-xl bg-white border z-0"></div>
+          <div id="v-route-map" class="w-full h-56 rounded-lg"></div>
         </section>
-        
-        <section id="v-block-refs" class="hidden border border-red-200 rounded-2xl p-4 bg-red-50/30 space-y-3">
-          <label class="font-bold text-red-800 block">אימות קישורים</label>
-          <div class="bg-white p-3 rounded-xl border">
-            <div id="v-selected-refs" class="flex flex-wrap gap-2 min-h-[30px]"></div>
+        <section id="v-block-refs" class="hidden border rounded-xl p-3 space-y-2">
+          <div class="mb-2">
+            <div id="v-selected-refs" class="flex flex-wrap gap-2"></div>
           </div>
+          <p class="text-sm text-slate-600 mb-3">בחר מקורות לקשר לכרטיס: אטרקציות/מסעדות, מלונות ומעברים (טיסות/רכבות/רכב).</p>
           <div id="v-connect-lists" class="grid gap-3"></div>
         </section>
       </main>
-      <footer class="p-4 border-t shrink-0 flex gap-3 bg-white z-10 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
-        <button id="v-cancel" class="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-slate-700">ביטול</button>
-        <button id="v-save" class="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700">שמור אימות</button>
+      <footer class="p-4 border-t flex items-center justify-between">
+        <div class="text-sm text-slate-500">לאחר אימות, לחץ/י "שמור אימות" להסרת האזהרה מהכרטיסיה.</div>
+        <div class="flex gap-2">
+          <button id="v-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
+          <button id="v-save" class="px-4 py-2 bg-emerald-600 text-white rounded-lg">שמור אימות</button>
+        </div>
       </footer>
     </div>
   </div>
 
   <!-- MODAL: דגש/טיפ -->
   <div id="note-modal" class="modal fixed inset-0 z-[80] items-center justify-center p-4 bg-black/60">
-    <div class="modal-content bg-white rounded-2xl w-full max-w-xl flex flex-col shadow-xl !h-auto">
-      <header class="p-4 border-b flex items-center justify-between shrink-0">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-xl">
+      <header class="p-4 border-b flex items-center justify-between">
         <h4 id="note-modal-title" class="text-lg font-bold">הוספת דגש/טיפ</h4>
-        <button id="note-close" class="p-2 -mr-2 text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button id="note-close" class="text-slate-500 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <main class="p-5 overflow-y-auto space-y-4">
+      <main class="p-4 sm:p-6 overflow-y-auto space-y-4 scroll-smooth">
         <div>
-          <label class="block font-bold mb-1 text-slate-700">כותרת</label>
-          <input id="note-title" type="text" class="w-full p-3.5 border border-slate-300 rounded-xl" placeholder="כותרת קצרה">
+          <label class="block font-semibold mb-1">כותרת</label>
+          <input id="note-title" type="text" class="w-full p-2 border rounded-lg" placeholder="כותרת קצרה">
         </div>
         <div>
-          <label class="block font-bold mb-1 text-slate-700">סוג</label>
-          <select id="note-kind" class="w-full p-3.5 border border-slate-300 rounded-xl bg-white">
+          <label class="block font-semibold mb-1">סוג</label>
+          <select id="note-kind" class="w-full p-2 border rounded-lg">
             <option value="דגש">דגש</option>
             <option value="טיפ">טיפ</option>
           </select>
         </div>
         <div>
-          <label class="block font-bold mb-1 text-slate-700">פירוט</label>
-          <textarea id="note-details" rows="4" class="w-full p-3.5 border border-slate-300 rounded-xl" placeholder="פירוט מפורט..."></textarea>
+          <label class="block font-semibold mb-1">פירוט</label>
+          <textarea id="note-details" rows="4" class="w-full p-2 border rounded-lg" placeholder="פירוט מפורט..."></textarea>
         </div>
         <div>
-          <label class="block font-bold mb-2 text-slate-700">צבע רקע</label>
-          <div class="grid grid-cols-5 gap-2">
-            <button data-color="red"    class="note-color aspect-square rounded-xl border border-red-200 bg-red-50 hover:bg-red-100"></button>
-            <button data-color="green"  class="note-color aspect-square rounded-xl border border-green-200 bg-green-50 hover:bg-green-100"></button>
-            <button data-color="blue"   class="note-color aspect-square rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100"></button>
-            <button data-color="yellow" class="note-color aspect-square rounded-xl border border-yellow-200 bg-yellow-50 hover:bg-yellow-100"></button>
-            <button data-color="orange" class="note-color aspect-square rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100"></button>
+          <label class="block font-semibold mb-1">צבע</label>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <button data-color="red"    class="note-color w-full p-2 rounded-lg border bg-red-50">אדום</button>
+            <button data-color="green"  class="note-color w-full p-2 rounded-lg border bg-green-50">ירוק</button>
+            <button data-color="blue"   class="note-color w-full p-2 rounded-lg border bg-blue-50">כחול</button>
+            <button data-color="yellow" class="note-color w-full p-2 rounded-lg border bg-yellow-50">צהוב</button>
+            <button data-color="orange" class="note-color w-full p-2 rounded-lg border bg-orange-50">כתום</button>
           </div>
           <input id="note-color" type="hidden" value="yellow">
         </div>
       </main>
-      <footer class="p-4 border-t flex gap-3">
-        <button id="note-cancel" class="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-slate-700">ביטול</button>
-        <button id="note-save" class="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold shadow-md">שמירה</button>
+      <footer class="p-4 border-t flex items-center justify-end gap-2">
+        <button id="note-cancel" class="px-4 py-2 rounded-lg hover:bg-slate-100">ביטול</button>
+        <button id="note-save" class="px-4 py-2 rounded-lg bg-amber-600 text-white">שמירה</button>
       </footer>
     </div>
   </div>
@@ -965,10 +894,7 @@
 
     function renderItems(){
       if (!items.length){
-        itemsList.innerHTML = `<div class="text-slate-400 py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            <i class="fa-regular fa-calendar text-2xl mb-2 opacity-50"></i>
-            <div>אין פריטים עדיין.</div>
-        </div>`;
+        itemsList.innerHTML = `<div class="text-slate-500 p-6 text-center">אין פריטים עדיין.</div>`;
         deleteAllBtn.classList.add('hidden');
         return;
       }
@@ -976,31 +902,24 @@
       itemsList.innerHTML = items.map(it=>{
         const time = `${it.startTime || ''}${it.endTime ? ' – ' + it.endTime : ''}`;
         const dist = (it.distanceFromPreviousMeters!=null)
-          ? `<span class="text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">📏 ${(it.distanceFromPreviousMeters/1000).toFixed(2)} ק״מ</span>` : '';
-        const addr = it.address?.label ? `<div class="text-sm text-slate-500 mt-2 flex items-start gap-1.5"><i class="fa-solid fa-location-dot mt-1 text-slate-400"></i> <span class="break-words">${it.address.label}</span></div>` : '';
+          ? `<span class="text-xs text-slate-500"> • מרחק קודם: ${(it.distanceFromPreviousMeters/1000).toFixed(2)} ק״מ</span>` : '';
+        const addr = it.address?.label ? `<div class="text-xs text-slate-500 mt-1"><i class="fa-solid fa-location-dot"></i> ${it.address.label}</div>` : '';
         const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs);
         const needsTxt = [
           it.needsVerifyAddress?'כתובת':null,
           it.needsVerifyRoute?'מסלול':null,
           it.needsVerifyRefs?'קישור':null
         ].filter(Boolean).join(' / ');
-        
-        return `<button class="card w-full text-right bg-white rounded-2xl border shadow-sm p-4 relative overflow-hidden ${needs?'needs-verify':''}" data-id="${it.id}">
-          <div class="flex flex-col gap-1">
-             <div class="flex justify-between items-start pl-1">
-                <span class="font-bold text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">${time || 'ללא שעה'}</span>
-                ${dist}
-             </div>
-             
-             <div class="font-extrabold text-lg text-slate-800 leading-snug break-words whitespace-normal mt-1 ${needs?'text-red-800':''}">${it.title || '(ללא כותרת)'}</div>
-             
-             ${it.summary ? `<div class="text-slate-600 text-sm leading-relaxed whitespace-normal break-words mt-1">${it.summary}</div>`:''}
-             ${addr}
+        return `<button class="card w-full text-right bg-white rounded-xl border shadow-sm p-4 ${needs?'needs-verify':''}" data-id="${it.id}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="font-bold whitespace-normal break-words ${needs?'text-red-800':'text-slate-800'}">${it.title || '(ללא כותרת)'}</div>
+            </div>
+            <div class="flex-shrink-0 ml-2 text-sm text-right font-semibold ${needs?'text-red-700':'text-slate-600'}">${time}${dist}</div>
           </div>
-          
-          ${needs?`<div class="mt-3 pt-3 border-t border-red-100">
-            <span class="badge-verify"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${needsTxt?': '+needsTxt:''}</span>
-          </div>`:''}
+          ${needs?`<div class="mt-1"><span class="badge-verify"><i class="fa-solid fa-circle-exclamation"></i> דרוש אימות${needsTxt?': '+needsTxt:''}</span></div>`:''}
+          ${it.summary ? `<div class="text-slate-700 mt-1 whitespace-normal break-words">${it.summary}</div>`:''}
+          ${addr}
         </button>`;
       }).join('');
 
@@ -1019,8 +938,8 @@
       if (!it) return;
       viewingItem = it;
       viewTitle.textContent = it.title || '(ללא כותרת)';
-      viewTime.innerHTML  = `<i class="fa-regular fa-clock"></i> ` + ([it.startTime, it.endTime?('— '+it.endTime):''].filter(Boolean).join(' ') || 'לא צוינה שעה');
-      viewSummary.textContent = it.summary || 'אין תקציר';
+      viewTime.textContent  = [it.startTime, it.endTime?('— '+it.endTime):''].filter(Boolean).join(' ');
+      viewSummary.textContent = it.summary || '';
       viewSummary.classList.toggle('hidden', !it.summary);
       viewDesc.textContent = it.description || '';
       viewDesc.classList.toggle('hidden', !it.description);
@@ -1031,25 +950,23 @@
           const page = r.page === 'places' ? 'attractions' : (r.page === 'summary' ? 'summary' : 'attractions');
           const openType = r.type === 'logistics' ? 'logistics' : 'place';
           const href = `${page}.html?id=${tripId}&open=${openType}&id=${r.id}`;
-          return `<a class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 hover:bg-indigo-100 transition-colors" target="_blank" href="${href}">${iconForRef(r)} ${r.label}</a>`;
+          return `<a class="px-3 py-2 rounded-lg bg-indigo-600 text-white" target="_blank" href="${href}">${iconForRef(r)} ${r.label}</a>`;
         }).join(' ');
       }
       viewLinks.innerHTML = [
-        it.links?.site ? `<a class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold border border-slate-200 hover:bg-slate-200 transition-colors" target="_blank" href="${it.links.site}"><i class="fa-solid fa-link"></i> אתר</a>` : '',
-        it.links?.booking ? `<a class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 hover:bg-emerald-100 transition-colors" target="_blank" href="${it.links.booking}"><i class="fa-solid fa-ticket"></i> הזמנה</a>` : '',
+        it.links?.site ? `<a class="px-3 py-2 rounded-lg bg-slate-800 text-white" target="_blank" href="${it.links.site}"><i class="fa-solid fa-link"></i> אתר</a>` : '',
+        it.links?.booking ? `<a class="px-3 py-2 rounded-lg bg-emerald-600 text-white" target="_blank" href="${it.links.booking}"><i class="fa-solid fa-ticket"></i> הזמנה</a>` : '',
         refsHtml
       ].filter(Boolean).join(' ');
 
       if (it.address?.label){
-        viewAddress.innerHTML = `<i class="fa-solid fa-location-dot mt-1 text-blue-500"></i> <span class="break-words text-slate-800 font-normal">${it.address.label}</span>`;
+        viewAddress.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${it.address.label}`;
         navWaze.href  = `https://waze.com/ul?q=${encodeURIComponent(it.address.label)}`;
         navGmaps.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.address.label)}`;
-        navWaze.classList.remove('hidden'); navWaze.classList.add('flex');
-        navGmaps.classList.remove('hidden'); navGmaps.classList.add('flex');
+        navWaze.classList.remove('hidden'); navGmaps.classList.remove('hidden');
       } else {
-        viewAddress.innerHTML = '<span class="text-slate-400 font-normal">לא צוינה כתובת</span>';
-        navWaze.classList.add('hidden'); navWaze.classList.remove('flex');
-        navGmaps.classList.add('hidden'); navGmaps.classList.remove('flex');
+        viewAddress.innerHTML = '';
+        navWaze.classList.add('hidden'); navGmaps.classList.add('hidden');
       }
 
       setTimeout(()=>{
@@ -1067,8 +984,6 @@
 
       const needs = (it.needsVerifyAddress || it.needsVerifyRoute || it.needsVerifyRefs);
       viewVerifyBtn.classList.toggle('hidden', !needs);
-      viewVerifyBtn.classList.toggle('flex', !!needs);
-      
       viewVerifyBtn.onclick = ()=>{ viewModal.classList.remove('show'); openVerifyModal(it); };
       viewEditBtn.onclick = ()=>{ viewModal.classList.remove('show'); openItemModal(it); };
       
@@ -1117,13 +1032,13 @@
       tripData.destinations?.forEach(dest=>{
         const dates = expandRange(dest.dates);
         const wrap = document.createElement('div');
-        wrap.className='p-3 bg-slate-50';
-        wrap.innerHTML=`<div class="font-bold text-slate-800 mb-2 px-2 text-sm uppercase tracking-wide opacity-70">${dest.nameHe}</div>`;
+        wrap.className='p-3';
+        wrap.innerHTML=`<div class="font-bold text-slate-800 mb-2">${dest.nameHe}</div>`;
         dates.forEach(d=>{
           const wd=weekdayHe(d);
           const btn=document.createElement('button');
-          btn.className='w-full text-right p-3 rounded-xl hover:bg-white border border-transparent hover:border-slate-200 transition-all mb-1 font-medium text-slate-700 flex justify-between items-center group';
-          btn.innerHTML=`<span>${wd} • ${toDisplayDotted(d)}</span> <i class="fa-solid fa-chevron-left text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all"></i>`;
+          btn.className='w-full text-right p-2 rounded hover:bg-slate-100';
+          btn.textContent=`${wd} – (${dest.nameHe}) • ${toDisplayDotted(d)}`;
           btn.addEventListener('click', async ()=>{
             await setWorkingDate(d, dest.nameHe);
             datePanel.classList.remove('open');
@@ -1163,7 +1078,7 @@
       dayDocId = `${iso}_${destName}`; 
       dayDocRef = doc(db, 'trips', tripId, 'schedules', dayDocId);
 
-      dateCurrent.innerHTML = `<div class="flex flex-col leading-tight"><span class="text-xs text-slate-400 font-normal">תאריך נבחר</span><span class="text-slate-800 text-lg">${toDisplayDotted(ddmmyyyy)}</span></div>`;
+      dateCurrent.textContent = `${weekdayHe(ddmmyyyy)} – (${destName}) • ${toDisplayDotted(ddmmyyyy)}`;
       badgeDate.textContent   = `${weekdayHe(ddmmyyyy)} • ${toDisplayDotted(ddmmyyyy)}`;
 
       const snap = await getDoc(dayDocRef);
@@ -1180,11 +1095,8 @@
     }
     
     function reflectDayTitleUI(){
-      dayTitleInline.textContent = dayTitle || '...';
-      dayTitleInline.className = dayTitle ? 'text-blue-700 font-bold break-words whitespace-normal' : 'text-slate-300 font-normal italic';
-      if (!dayTitle) dayTitleInline.textContent = 'לא הוגדרה כותרת';
-      
-      editDayTitleInline.classList.remove('hidden');
+      dayTitleInline.textContent = dayTitle || 'לא נקבעה';
+      editDayTitleInline.classList.toggle('hidden', !dayTitle);
     }
     
     function resubscribeDayStreams(){
@@ -1231,23 +1143,23 @@
 
     function renderNotes(){
       if (!notes.length){
-        notesList.innerHTML = `<div class="text-slate-400 text-sm italic p-2">אין עדיין דגשים/טיפים.</div>`;
+        notesList.innerHTML = `<div class="text-slate-500">אין עדיין דגשים/טיפים.</div>`;
         return;
       }
       notesList.innerHTML = notes.map(n=>{
         const cls = classesForColor(n.color);
         const titleSafe = (n.title || '—').replace(/"/g, '&quot;');
-        return `<div class="border rounded-2xl p-4 ${cls} relative group">
-          <div class="flex items-start justify-between gap-3">
+        return `<div class="border rounded-xl p-3 ${cls}">
+          <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
-                <div class="font-bold break-words whitespace-normal text-base mb-1">${n.kind}: ${n.title || '—'}</div>
-                <div class="text-sm whitespace-normal break-words leading-relaxed opacity-90">${(n.details||'').replace(/\n/g,'<br>')}</div>
+                <div class="font-bold break-words whitespace-normal">${n.kind}: ${n.title || '—'}</div>
             </div>
-            <div class="flex flex-col gap-2 shrink-0">
-               <button class="w-8 h-8 rounded-full bg-white/60 hover:bg-white flex items-center justify-center note-edit shadow-sm border border-transparent hover:border-black/10 transition-all" data-id="${n.id}"><i class="fa-solid fa-pen text-xs"></i></button>
-               <button class="w-8 h-8 rounded-full bg-white/60 hover:bg-white flex items-center justify-center note-del shadow-sm border border-transparent hover:border-red-200 text-red-500 hover:text-red-700 transition-all" data-id="${n.id}" data-title="${titleSafe}"><i class="fa-solid fa-trash text-xs"></i></button>
+            <div class="flex gap-2 flex-shrink-0 ml-2">
+              <button class="px-2 py-1 rounded bg-white/60 border text-sm note-edit" data-id="${n.id}"><i class="fa-solid fa-pen"></i> ערוך</button>
+              <button class="px-2 py-1 rounded bg-white/60 border text-sm note-del" data-id="${n.id}" data-title="${titleSafe}"><i class="fa-solid fa-trash"></i> מחק</button>
             </div>
           </div>
+          <div class="mt-2 text-sm whitespace-normal break-words">${(n.details||'').replace(/\n/g,'<br>')}</div>
         </div>`;
       }).join('');
 
@@ -1283,9 +1195,9 @@
 
       // סימון הצבע שנבחר (טבעות highlight)
       noteColorBtns.forEach(btn=>{
-        btn.classList.remove('ring-4','ring-offset-2','ring-slate-300');
+        btn.classList.remove('ring-2','ring-offset-2','ring-amber-500');
         if (btn.dataset.color === pickedNoteColor){
-          btn.classList.add('ring-4','ring-offset-2','ring-slate-300');
+          btn.classList.add('ring-2','ring-offset-2','ring-amber-500');
         }
       });
 
@@ -1297,8 +1209,8 @@
       btn.addEventListener('click', ()=>{
         pickedNoteColor = btn.dataset.color;
         noteColorHidden.value = pickedNoteColor;
-        noteColorBtns.forEach(b=>b.classList.remove('ring-4','ring-offset-2','ring-slate-300'));
-        btn.classList.add('ring-4','ring-offset-2','ring-slate-300');
+        noteColorBtns.forEach(b=>b.classList.remove('ring-2','ring-offset-2','ring-amber-500'));
+        btn.classList.add('ring-2','ring-offset-2','ring-amber-500');
       });
     });
 
@@ -1337,11 +1249,10 @@
       const idx = stepsOrder.indexOf(code);
       currentStepIndex = Math.max(0, idx);
       document.getElementById('step-'+code).classList.add('active');
-      stepIndicator.textContent = `${currentStepIndex+1} / ${stepsOrder.length}`;
+      stepIndicator.textContent = `שלב ${currentStepIndex+1} מתוך ${stepsOrder.length}`;
       saveBtn.classList.toggle('hidden', code!=='G');
       nextStepBtn.classList.toggle('hidden', code==='G');
       prevStepBtn.disabled = (code=== (dayTitle ? 'B' : 'A'));
-      if(prevStepBtn.disabled) prevStepBtn.classList.add('opacity-50'); else prevStepBtn.classList.remove('opacity-50');
     }
 
     nextStepBtn.addEventListener('click', async ()=>{
@@ -1542,7 +1453,7 @@
     function renderSelectedRefs(){
       selectedRefsWrap.innerHTML = selectedRefs.length ? selectedRefs.map((r,i)=>(
         `<span class="chip">${iconForRef(r)} ${r.label}<span class="x" data-i="${i}">&times;</span></span>`
-      )).join(' ') : `<span class="text-slate-400 text-sm italic">עדיין לא נבחרו קישורים.</span>`;
+      )).join(' ') : `<span class="text-slate-400 text-sm">לא נבחרו קישורים.</span>`;
       selectedRefsWrap.querySelectorAll('.x').forEach(x=>{
         x.addEventListener('click', ()=>{
           const idx=parseInt(x.dataset.i,10);
@@ -1568,7 +1479,7 @@
     }
     
     async function buildConnectLists(targetListsEl, selectedRefsArr){
-      targetListsEl.innerHTML='<div class="p-4 text-center text-slate-500"><span class="loader"></span> טוען...</div>';
+      targetListsEl.innerHTML='טוען...';
       
       // לוגיסטיקה
       const logSnap = await getDocs(collection(db,'trips',tripId,'logistics'));
@@ -1576,7 +1487,7 @@
 
       // אטרקציות/אוכל ביעד הפעיל
       if (!selectedDestName) {
-        targetListsEl.innerHTML = '<div class="text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">שגיאה: לא נבחר יעד. לא ניתן לטעון אטרקציות.</div>';
+        targetListsEl.innerHTML = '<div class="text-red-600">שגיאה: לא נבחר יעד. לא ניתן לטעון אטרקציות.</div>';
         return;
       }
       
@@ -1589,15 +1500,15 @@
 
       // Mobile-friendly card design with better wrapping and larger touch target
       const card = (title, sub, openHref, picked=false)=>`
-        <div class="relative p-3.5 rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all">
+        <div class="relative p-3 rounded-xl border bg-white shadow-sm hover:shadow-md transition-shadow">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
              <div class="flex-1 min-w-0">
-                <div class="font-bold text-slate-800 break-words whitespace-normal text-base leading-snug">${title}</div>
-                ${sub ? `<div class="text-sm text-slate-500 mt-1 break-words">${sub}</div>` : ''}
+                <div class="font-bold text-slate-800 break-words whitespace-normal text-base">${title}</div>
+                ${sub ? `<div class="text-xs text-slate-500 mt-1 break-words">${sub}</div>` : ''}
              </div>
-             <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
-                <a href="${openHref}" class="text-blue-600 hover:text-blue-800 text-sm font-bold px-3 py-2 bg-blue-50 rounded-lg" target="_blank">פתח</a>
-                <button class="flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition-all pick-btn ${picked ? 'bg-green-600 text-white shadow-md ring-2 ring-green-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}">
+             <div class="flex items-center gap-3 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end">
+                <a href="${openHref}" class="text-blue-600 hover:text-blue-800 text-sm font-medium px-2 py-1" target="_blank">פתח</a>
+                <button class="px-4 py-2 rounded-lg text-sm font-bold transition-all pick-btn ${picked ? 'bg-green-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}">
                    ${picked ? '<i class="fa-solid fa-check"></i> נבחר' : 'בחר'}
                 </button>
              </div>
@@ -1607,7 +1518,7 @@
       let html='';
 
       if (logistics.length){
-        html+=`<div><div class="font-bold mb-3 text-lg text-slate-800 flex items-center gap-2"><span class="w-1 h-6 bg-blue-500 rounded-full"></span> מעברים ומלונות</div><div class="grid gap-3">`;
+        html+=`<div><div class="font-bold mb-2 text-lg text-slate-800">מעברים ומלונות</div><div class="grid gap-3">`;
         html+= logistics.map(l=>{
           const label = (l.type==='hotel'?'מלון: ':'') + (l.name||l.destination||l.type);
           const sub   = l.dates || l.date || '';
@@ -1619,7 +1530,7 @@
       }
       
       if (places.length){
-        html+=`<div class="mt-8"><div class="font-bold mb-3 text-lg text-slate-800 flex items-center gap-2"><span class="w-1 h-6 bg-purple-500 rounded-full"></span> אטרקציות ומסעדות</div><div class="grid gap-3">`;
+        html+=`<div class="mt-6"><div class="font-bold mb-2 text-lg text-slate-800">אטרקציות ומסעדות (רק מ: ${selectedDestName})</div><div class="grid gap-3">`;
         html+= places.map(p=>{
           const label = p.name || 'פריט';
           const sub   = p.type || p.destination || '';
@@ -1630,7 +1541,7 @@
         html+=`</div></div>`;
       }
       
-      targetListsEl.innerHTML = html || '<div class="text-slate-500 py-6 text-center bg-slate-50 rounded-xl border border-dashed">לא נמצאו פריטים רלוונטיים.</div>';
+      targetListsEl.innerHTML = html || '<div class="text-slate-500 py-4 text-center bg-slate-50 rounded-lg">אין נתונים להצגה.</div>';
 
       targetListsEl.querySelectorAll('.pick-btn').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -1645,11 +1556,11 @@
           if (existed>-1){
             selectedRefsArr.splice(existed,1);
             btn.innerHTML='בחר';
-            btn.className = 'flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition-all pick-btn bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200';
+            btn.className = 'px-4 py-2 rounded-lg text-sm font-bold transition-all pick-btn bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200';
           } else {
             selectedRefsArr.push({type, id, label, page, subType});
             btn.innerHTML='<i class="fa-solid fa-check"></i> נבחר';
-            btn.className = 'flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition-all pick-btn bg-green-600 text-white shadow-md ring-2 ring-green-200';
+            btn.className = 'px-4 py-2 rounded-lg text-sm font-bold transition-all pick-btn bg-green-600 text-white shadow-md';
           }
           if (targetListsEl===connectLists) renderSelectedRefs();
           else renderVSelectedRefs();
