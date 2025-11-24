@@ -15,84 +15,162 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
+    /* הגדרות בסיס ואיפוסים למובייל */
     html, body { height: 100%; }
-    html { scrollbar-gutter: stable both-edges; }
+    html { 
+      scrollbar-gutter: stable; 
+      -webkit-tap-highlight-color: transparent; /* ביטול הבהוב אפור בלחיצה בנייד */
+    }
     body {
       font-family: 'Assistant', sans-serif;
       min-height: 100dvh;
-      overscroll-behavior-y: none;
-      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: none; /* מניעת "קפיצה" בגלילה מעבר לגבול */
       background-color: #f8fafc;
-      /* מניעת גלילה אופקית */
-      max-width: 100vw;
       overflow-x: hidden;
+      font-size: 16px; /* גודל פונט בסיסי קריא לנייד */
     }
+
+    /* עיצוב פס גלילה מודרני */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* רקע מודרני ועדין יותר */
     .bg-fixed {
       background:
-        radial-gradient(1200px 800px at 85% -10%, rgba(59,130,246,.2), transparent 70%),
-        radial-gradient(900px 700px at 10% 110%, rgba(16,185,129,.2), transparent 70%),
+        radial-gradient(circle at 0% 0%, rgba(59,130,246,0.08) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(16,185,129,0.08) 0%, transparent 50%),
         #f8fafc;
+      position: fixed; inset: 0; z-index: -10;
     }
-    .sheet { background: rgba(255,255,255,.95); backdrop-filter: blur(8px); border: 1px solid rgba(0,0,0,0.05); }
-    .submenu { max-height: 0; overflow: hidden; transition: max-height .4s ease; }
-    .submenu.open { max-height: 1000px; }
+
+    /* קונטיינרים "צפים" (Sheets) */
+    .sheet { 
+      background: rgba(255,255,255,0.95); 
+      backdrop-filter: blur(12px); 
+      border: 1px solid rgba(255,255,255,0.6);
+      box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+      border-radius: 1.25rem; /* פינות עגולות יותר */
+    }
+
+    /* שיפור שדות קלט למובייל */
+    input, select, textarea {
+      font-size: 16px !important; /* מניעת זום אוטומטי באייפון */
+      padding: 0.75rem 1rem !important;
+      border-radius: 0.75rem !important;
+      border: 1px solid #e2e8f0 !important;
+      background-color: #fff;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+    }
+
+    /* כפתורים ופריטים לחיצים */
+    button { cursor: pointer; touch-action: manipulation; }
+
+    /* תפריטים נפתחים */
+    .submenu { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .submenu.open { max-height: 500px; }
     
-    .modal { display: none; opacity: 0; transition: opacity .2s ease-out; }
+    /* מודאלים - התאמה לאפליקציה */
+    .modal { 
+      display: none; 
+      opacity: 0; 
+      transition: opacity 0.2s ease-out;
+      backdrop-filter: blur(4px);
+    }
     .modal.show { display: flex; opacity: 1; }
+    
     .modal-content {
-        transform: scale(.95);
-        opacity: 0;
-        transition: transform .2s ease-out, opacity .2s ease-out;
+      transform: scale(0.96) translateY(10px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
-    .modal.show .modal-content { transform: scale(1); opacity: 1; }
+    .modal.show .modal-content { transform: scale(1) translateY(0); opacity: 1; }
 
-    .step { display: none; }
+    /* במובייל - מודאלים נראים כמו Bottom Sheet */
+    @media (max-width: 640px) {
+      .modal { align-items: flex-end; padding: 0; }
+      .modal-content {
+        width: 100%;
+        max-width: 100%;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        max-height: 90vh;
+        margin-bottom: 0;
+      }
+    }
+
+    .step { display: none; animation: fadeIn 0.3s ease; }
     .step.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
+    /* השלמה אוטומטית */
     .typeahead {
-      position: fixed; z-index: 99999; background: #fff; border: 1px solid #e5e7eb;
-      border-radius: .75rem; max-height: 260px; overflow: auto;
-      box-shadow: 0 10px 25px rgba(0,0,0,.1); display: none;
+      position: fixed; z-index: 99999; 
+      background: #fff; border: 1px solid #e5e7eb;
+      border-radius: 0.75rem; max-height: 260px; overflow: auto;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.12); display: none;
     }
-    .typeahead.open { display: block; }
-    .typeahead button { width: 100%; text-align: right; padding: .6rem .8rem; line-height: 1.35; white-space: normal; }
-    .typeahead button:hover { background:#f8fafc; }
+    .typeahead.open { display: block; animation: slideDown 0.2s ease; }
+    .typeahead button { 
+      width: 100%; text-align: right; 
+      padding: 0.85rem 1rem; /* שטח לחיצה גדול יותר */
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.95rem;
+    }
+    .typeahead button:active { background:#f8fafc; }
 
+    /* כרטיסיות לו"ז */
     .card { 
-        transition: transform .15s ease, box-shadow .15s ease; 
-        border-right: 4px solid #3b82f6;
-        /* מניעת בחירת טקסט בלחיצה ארוכה לגרירה חלקה */
-        -webkit-user-select: none;
-        user-select: none;
+        position: relative;
+        transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease; 
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        border-right-width: 4px; /* לשמירת הסימון הצבעוני */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        margin-bottom: 0.75rem;
     }
+    .card:active { transform: scale(0.98); background-color: #fafafa; } /* אפקט לחיצה במובייל */
     .card:hover { 
-        transform: translateY(-3px); 
-        box-shadow: 0 8px 25px rgba(2,6,23,.07); 
+        transform: translateY(-2px); 
+        box-shadow: 0 10px 30px -5px rgba(0,0,0,0.08); 
     }
     .card.needs-verify { 
         border-right-color: #ef4444;
-        background: #fef2f2;
+        background: #fff5f5;
     }
     
+    /* אלמנטים קטנים */
     .chip {
-      display: inline-flex; align-items: center; gap:.4rem;
-      padding:.25rem .55rem; border-radius: 999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
-      font-size:.85rem; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.75rem; border-radius: 999px; 
+      background: #e0e7ff; color: #3730a3; border: 1px solid transparent;
+      font-size: 0.85rem; font-weight: 600;
+      transition: background 0.2s;
     }
-    .chip .x { cursor: pointer; color:#6366f1; }
+    .chip:active { background: #c7d2fe; }
+    .chip .x { padding: 4px; margin: -4px; color: #6366f1; } /* הגדלת שטח לחיצה ל-X */
 
     .badge-verify {
-      display:inline-flex; align-items:center; gap:.35rem;
-      background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;
-      font-size:.75rem; padding:.15rem .5rem; border-radius:999px; font-weight: 600;
+      display:inline-flex; align-items:center; gap:0.35rem;
+      background:#fee2e2; color:#991b1b; border:1px solid #fecaca;
+      font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; font-weight: 700;
     }
     .banner-warn {
-      background:#fffbeb; color:#b45309; border:1px solid #fde68a;
-      padding:.75rem 1rem; border-radius:.6rem; font-size:.9rem;
+      background:#fffbeb; color:#92400e; border:1px solid #fcd34d;
+      padding: 1rem; border-radius: 0.75rem; font-size: 0.95rem;
+      display: flex; align-items: start; gap: 0.5rem;
     }
 
-    .input-with-btn { display:flex; gap:.5rem; }
-    .input-with-btn input { flex:1 1 auto; }
+    .input-with-btn { display:flex; gap:0.5rem; align-items: stretch; }
+    .input-with-btn input { flex:1 1 auto; border-radius: 0.75rem; }
+    .input-with-btn button { flex-shrink: 0; }
     
     .loader {
         width: 1.2rem; height: 1.2rem;
@@ -100,19 +178,29 @@
         border-right-color: transparent;
         border-radius: 50%;
         display: inline-block;
-        animation: spin .7s linear infinite;
+        animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     
-    /* Help Modal Content Styling */
-    .help-content h5 { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-top: 1rem; margin-bottom: 0.5rem; }
-    .help-content p { color: #475569; line-height: 1.6; }
-    .help-content .icon { color: #64748b; }
-
-    ._safelist { color: #0000; background: linear-gradient(#fff,#fff); }
-    
-    /* Better modal scrolling */
+    /* תמיכה במפות ורכיבי גלילה בתוך מודאל */
+    .help-content h5 { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-top: 1.2rem; margin-bottom: 0.5rem; }
+    .help-content p { color: #475569; line-height: 1.6; margin-bottom: 0.5rem; }
     .scroll-smooth { -webkit-overflow-scrolling: touch; }
+    
+    /* כפתור פתיחת בלוקים */
+    .open-block {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      padding: 0.5rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    .open-block:active, .open-block:hover { border-color: #94a3b8; background: #f1f5f9; }
+    
+    /* Safelist - משמש את הסקריפט, לא לגעת */
+    ._safelist { color: transparent; background: transparent; height: 0; width: 0; overflow: hidden; position: absolute; }
   </style>
 </head>
 <body>
