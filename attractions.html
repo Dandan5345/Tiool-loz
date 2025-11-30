@@ -29,8 +29,8 @@
               primary: '#0ea5e9', // Sky 500
               dark: '#0284c7', // Sky 600
               accent: '#f59e0b', // Amber 500
-              surface: '#f8fafc', // Slate 50
-              glass: 'rgba(255, 255, 255, 0.85)',
+              surface: '#ffffff', 
+              glass: 'rgba(255, 255, 255, 0.9)',
             }
           },
           animation: {
@@ -90,7 +90,7 @@
       width: 100%;
       box-sizing: border-box;
       transition: all 0.2s ease-in-out;
-      border-radius: 1rem;
+      border-radius: 0.75rem;
       border: 1px solid #e2e8f0;
       background-color: #f8fafc;
       font-size: 16px; /* Prevents iOS zoom on focus */
@@ -113,9 +113,9 @@
 
     /* Maps */
     #map-preview, #details-map {
-      height: 220px;
+      height: 200px;
       width: 100%;
-      border-radius: 1rem;
+      border-radius: 0.75rem;
       overflow: hidden;
       background-color: #e2e8f0;
       touch-action: none; 
@@ -167,7 +167,7 @@
       margin-top: 0.5rem; max-height: 250px; overflow-y: auto;
       box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
     }
-    .ac-item { padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; }
+    .ac-item { padding: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; }
     .ac-item:last-child { border-bottom: none; }
     .ac-item:active { background: #e0f2fe; }
 
@@ -190,7 +190,7 @@
     body.modal-locked { overflow: hidden; }
     
     .glass-panel {
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.85);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.6);
@@ -200,13 +200,24 @@
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+
+    /* Card Styling Updates */
+    .item-card {
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+    .item-card:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-800 antialiased selection:bg-cyan-200 selection:text-cyan-900">
 
   <!-- Initial Loader -->
   <div id="initial-loader" class="fixed inset-0 z-[200] flex items-center justify-center transition-opacity duration-500 bg-slate-900">
-    <div class="fixed inset-0 z-0 bg-cover bg-center opacity-30" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+    <div class="fixed inset-0 z-0 opacity-30">
+        <img src="https://i.imgur.com/MjekTyd.jpeg" class="w-full h-full object-cover" alt="Loader BG">
+    </div>
     <div class="relative z-10 text-white text-center flex flex-col items-center">
       <div class="w-28 h-28 mb-8 relative flex items-center justify-center pulse-effect">
         <i class="fas fa-plane-departure fa-4x text-cyan-400 plane-spinner drop-shadow-lg"></i>
@@ -218,8 +229,11 @@
     </div>
   </div>
 
-  <!-- Background -->
-  <div class="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+  <!-- FIXED Background (Solves Jitter) -->
+  <div class="fixed inset-0 z-0">
+    <img src="https://i.imgur.com/MjekTyd.jpeg" class="w-full h-full object-cover" alt="Background">
+  </div>
+  <!-- Overlay Gradient -->
   <div class="fixed inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/40 to-slate-900/80 backdrop-blur-[2px]"></div>
 
   <!-- Sidebar -->
@@ -520,13 +534,21 @@
       };
     }
 
+    // FIX: Properly handle plain text paste without breaking lines
     function attachPlainPasteToModalFields(container) {
       const fields = container.querySelectorAll('input[type="text"], input[type="url"], textarea');
       fields.forEach(f => {
         f.addEventListener('paste', (e) => {
           e.preventDefault();
           const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-          document.execCommand('insertText', false, text);
+          
+          // Insert text at cursor position or replace selection
+          const start = f.selectionStart;
+          const end = f.selectionEnd;
+          const currentVal = f.value;
+          
+          f.value = currentVal.substring(0, start) + text + currentVal.substring(end);
+          f.selectionStart = f.selectionEnd = start + text.length;
         });
       });
     }
@@ -1183,18 +1205,19 @@
           } else {
             itemsForType.forEach((item, index) => {
               const card = document.createElement('div');
-              card.className = 'item-card group relative bg-white rounded-2xl shadow-sm hover:shadow-xl border border-slate-100 flex flex-col transition-all duration-300 overflow-hidden transform hover:-translate-y-1 item-card-anim transform-gpu';
+              // Updated card styling: smaller, cleaner, white bg
+              card.className = 'item-card group relative bg-white rounded-2xl overflow-hidden flex flex-col transition-all duration-300 transform item-card-anim transform-gpu';
               card.style.animationDelay = `${index * 50}ms`;
               card.dataset.id = item.id;
 
               // Image header
               let imgHeader = '';
               if (item.photos && item.photos.length > 0) {
-                  imgHeader = `<div class="h-32 w-full bg-cover bg-center" style="background-image:url('${item.photos[0]}');">
+                  imgHeader = `<div class="h-28 w-full bg-cover bg-center" style="background-image:url('${item.photos[0]}');">
                     <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                   </div>`;
               } else {
-                  imgHeader = `<div class="h-24 w-full bg-slate-100 flex items-center justify-center relative overflow-hidden">
+                  imgHeader = `<div class="h-24 w-full bg-slate-50 flex items-center justify-center relative overflow-hidden">
                     <i class="fas fa-map-marker-alt text-slate-200 text-5xl absolute -bottom-2 -right-2 transform rotate-12"></i>
                   </div>`;
               }
@@ -1209,27 +1232,28 @@
 
               const ratingHtml = renderStars(item.rating);
 
+              // Removed bg-slate-50, removed onclick handlers from HTML string
               card.innerHTML = `
                 ${imgHeader}
                 ${distInfo}
-                <div class="p-4 flex-grow flex flex-col">
+                <div class="p-3 flex-grow flex flex-col">
                   <div class="flex justify-between items-start mb-1">
-                    <h5 class="text-lg font-bold text-slate-800 leading-tight group-hover:text-cyan-600 transition line-clamp-2">${item.name}</h5>
+                    <h5 class="text-base font-bold text-slate-800 leading-tight group-hover:text-cyan-600 transition line-clamp-2">${item.name}</h5>
                     <div class="flex-shrink-0 ml-2">${ratingHtml}</div>
                   </div>
                   
                   <div class="flex flex-wrap gap-1.5 mb-2 min-h-[20px]">${badges}</div>
                   
-                  ${item.shortDescription ? `<p class="text-sm text-slate-500 line-clamp-2 mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100 italic">"${item.shortDescription}"</p>` : ''}
+                  ${item.shortDescription ? `<p class="text-xs text-slate-500 line-clamp-2 mb-3 italic">"${item.shortDescription}"</p>` : ''}
                   
                   <div class="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-3 relative z-10">
-                      <button data-id="${item.id}" onclick="event.stopPropagation()" class="navigate-btn bg-cyan-50 text-cyan-600 hover:bg-cyan-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex-1 transition flex items-center justify-center gap-2 ${!item.coords ? 'opacity-50 cursor-not-allowed' : ''}" ${!item.coords ? 'disabled' : ''}>
+                      <button class="navigate-btn bg-cyan-50 text-cyan-600 hover:bg-cyan-500 hover:text-white rounded-xl px-3 py-2 text-xs font-bold flex-1 transition flex items-center justify-center gap-2 ${!item.coords ? 'opacity-50 cursor-not-allowed' : ''}" ${!item.coords ? 'disabled' : ''}>
                         <i class="fas fa-diamond-turn-right"></i> ניווט
                       </button>
                       <div class="flex gap-2 relative z-20">
-                        ${item.link ? `<a href="${item.link}" target="_blank" onclick="event.stopPropagation()" class="action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-green-100 text-slate-500 hover:text-green-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="אתר"><i class="fas fa-link"></i></a>` : ''}
-                        <button class="edit-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="עריכה" onclick="event.stopPropagation()"><i class="fas fa-pencil-alt"></i></button>
-                        <button class="delete-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="מחיקה" onclick="event.stopPropagation()"><i class="fas fa-trash-alt"></i></button>
+                        ${item.link ? `<a href="${item.link}" target="_blank" onclick="event.stopPropagation()" class="action-btn w-8 h-8 rounded-full bg-slate-50 hover:bg-green-100 text-slate-500 hover:text-green-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="אתר"><i class="fas fa-link text-xs"></i></a>` : ''}
+                        <button class="edit-btn action-btn w-8 h-8 rounded-full bg-slate-50 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="עריכה"><i class="fas fa-pencil-alt text-xs"></i></button>
+                        <button class="delete-btn action-btn w-8 h-8 rounded-full bg-slate-50 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="מחיקה"><i class="fas fa-trash-alt text-xs"></i></button>
                       </div>
                   </div>
                 </div>`;
@@ -1373,34 +1397,40 @@
         if (e.target.id === 'item-food-type') handleFoodTypeChange();
       });
 
+      // FIX: Proper Event Delegation for Buttons
       itemsContainer.addEventListener('click', (e) => {
-        const card = e.target.closest('.item-card');
-        if (!card) return;
         const actionBtn = e.target.closest('.action-btn, .navigate-btn');
-        const id = card.dataset.id;
-        const item = allItems.find(i=>i.id===id);
+        const card = e.target.closest('.item-card');
         
         if (actionBtn) {
-          e.stopPropagation();
-          if (actionBtn.matches('.delete-btn')) {
-             document.getElementById('delete-modal-title').textContent = `למחוק את "${item?.name}"?`;
-             const confirmBtn = document.getElementById('delete-modal-confirm');
-             const cancelBtn = document.getElementById('delete-modal-cancel');
-             const close = () => { deleteModal.classList.add('hidden'); deleteModal.classList.remove('flex'); unlockBodyScroll(); };
-             
-             confirmBtn.onclick = async () => {
-               try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'places', id)); } catch(e){console.error(e);} finally { close(); }
-             };
-             cancelBtn.onclick = close;
-             deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex'); lockBodyScroll();
-          } else if (actionBtn.matches('.edit-btn')) {
-             openModalHandler(id);
-          } else if (actionBtn.matches('.navigate-btn')) {
-             if(item) openNavigationChoiceModal(item);
-          }
-          return;
+           e.stopPropagation(); // prevent bubbling to card
+           if (!card) return;
+           const id = card.dataset.id;
+           const item = allItems.find(i=>i.id===id);
+
+           if (actionBtn.matches('.delete-btn')) {
+               document.getElementById('delete-modal-title').textContent = `למחוק את "${item?.name}"?`;
+               const confirmBtn = document.getElementById('delete-modal-confirm');
+               const cancelBtn = document.getElementById('delete-modal-cancel');
+               const close = () => { deleteModal.classList.add('hidden'); deleteModal.classList.remove('flex'); unlockBodyScroll(); };
+               
+               confirmBtn.onclick = async () => {
+                 try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'places', id)); } catch(e){console.error(e);} finally { close(); }
+               };
+               cancelBtn.onclick = close;
+               deleteModal.classList.remove('hidden'); deleteModal.classList.add('flex'); lockBodyScroll();
+           } else if (actionBtn.matches('.edit-btn')) {
+               openModalHandler(id);
+           } else if (actionBtn.matches('.navigate-btn')) {
+               if(item) openNavigationChoiceModal(item);
+           }
+           return;
         }
-        openDetailsModal(id);
+
+        if (card) {
+           const id = card.dataset.id;
+           openDetailsModal(id);
+        }
       });
 
       itemsContainer.addEventListener('change', async e => {
