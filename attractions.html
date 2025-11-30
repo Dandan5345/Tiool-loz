@@ -222,8 +222,8 @@
     </div>
   </div>
 
-  <!-- Background -->
-  <div class="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat bg-fixed" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
+  <!-- Background (Fix: Removed bg-fixed class, relied on position: fixed) -->
+  <div class="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
   <div class="fixed inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/40 to-slate-900/80 backdrop-blur-[2px]"></div>
 
   <!-- Sidebar -->
@@ -469,6 +469,10 @@
     let editingItemId = null;
     let isRestaurant = false;
     let userLocation = null;
+    
+    // --- New Features State ---
+    let lastSelectedDestination = null; // Sticky destination
+    let draftData = {}; // Persist inputs across steps
     
     // --- Scroll Locking State ---
     let scrollPosition = 0;
@@ -835,6 +839,7 @@
     function openModalHandler(itemId = null) {
       editingItemId = itemId;
       selectedGooglePlaceDetails = null;
+      draftData = {}; // Reset draft data on new open
       form.reset();
       for (let i = 1; i <= 9; i++) {
         const c = document.getElementById(`step-${i}`);
@@ -981,7 +986,9 @@
                 <h4 class="text-xl font-bold text-slate-700">איך קוראים למקום?</h4>
             </div>
             <input type="text" id="item-name" required class="form-input w-full p-4 text-center text-xl font-bold" placeholder="למשל: מגדל אייפל" autofocus>`;
-          if(item) document.getElementById('item-name').value = item.name || '';
+          const nameInput = document.getElementById('item-name');
+          if(item) nameInput.value = item.name || '';
+          else if(draftData['item-name']) nameInput.value = draftData['item-name'];
           break;
         case 2:
           c.innerHTML = `
@@ -994,7 +1001,9 @@
             <select id="item-destination" required class="form-select w-full p-4 text-lg bg-white shadow-sm cursor-pointer">
                 ${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}
             </select>`;
-          if(item) document.getElementById('item-destination').value = item.destination || '';
+          const destInput = document.getElementById('item-destination');
+          if(item) destInput.value = item.destination || '';
+          else if(lastSelectedDestination) destInput.value = lastSelectedDestination; // STICKY DESTINATION
           break;
         case 3:
           c.innerHTML = `
@@ -1012,24 +1021,37 @@
         case 4:
           c.innerHTML = createLocationHtml();
           const searchInput = c.querySelector('#item-location-search-google');
+          
           if (item) {
             searchInput.value = item.location || '';
             document.getElementById('item-location').value = item.location || '';
             document.getElementById('item-hours').value = item.hours || '';
             document.getElementById('item-link').value = item.link || '';
           }
+          
           gmaps_initAddEditMap(item?.coords);
+          
           initGooglePlacesCustomAutocomplete(searchInput, (placeDetails) => {
             document.getElementById('item-location').value = placeDetails.location || '';
             document.getElementById('item-hours').value = placeDetails.hours || '';
             document.getElementById('item-link').value = placeDetails.website || '';
             const nameField = document.getElementById('item-name');
+            // Don't overwrite name if user already typed it and we just found location
             if (nameField && (!nameField.value || nameField.value.trim()==='')) nameField.value = placeDetails.name;
             gmaps_initAddEditMap(placeDetails.coords);
             selectedGooglePlaceDetails = placeDetails;
             const msg = document.getElementById('google-place-filled-msg');
             if (msg) msg.classList.remove('hidden');
           });
+
+          // AUTO FILL NAME SEARCH LOGIC
+          if (!item && !searchInput.value && draftData['item-name']) {
+             searchInput.value = draftData['item-name'];
+             // Trigger event to make sure autocomplete picks it up if needed
+             setTimeout(() => {
+                 searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+             }, 500);
+          }
           break;
         case 5:
           c.innerHTML = `<label class="${label}">צריך להזמין מקום מראש?</label>
@@ -1407,6 +1429,12 @@
           else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
         }
       });
+      
+      // Save Inputs to Draft Data
+      form.addEventListener('input', e => {
+         if(e.target.id) draftData[e.target.id] = e.target.value;
+      });
+
       form.addEventListener('change', e => {
         if (e.target.id === 'item-type') handleTypeChange();
         if (e.target.id === 'item-food-type') handleFoodTypeChange();
@@ -1486,6 +1514,10 @@
         const name = gv('item-name');
         if (!name || name.trim()==='') { showModalError('חסר שם למקום'); return; }
         
+        // Save Last Destination Sticky
+        const destVal = gv('item-destination');
+        if (destVal) lastSelectedDestination = destVal;
+
         // Coords Validation
         let coords = editingItemId ? allItems.find(i=>i.id===editingItemId)?.coords : null;
         let photos = editingItemId ? allItems.find(i=>i.id===editingItemId)?.photos || [] : [];
@@ -1523,7 +1555,7 @@
         }
 
         const data = {
-          name, destination: gv('item-destination'), type: finalType,
+          name, destination: destVal, type: finalType,
           shortDescription: gv('item-short-description'), description: gv('item-description'),
           isKosher: isRestaurant?gv('item-kosher'):null, foodType: finalFood,
           location: gv('item-location'), hours: gv('item-hours'), link: gv('item-link'),
