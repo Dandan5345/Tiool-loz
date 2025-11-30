@@ -231,6 +231,7 @@
                     <button id="organize-route-btn" class="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 border border-orange-100 flex items-center justify-center active:scale-90 transition-transform" title="סדר אוטומטי">
                         <i class="fas fa-sort-amount-down"></i>
                     </button>
+                    <!-- Mobile Map Toggle -->
                     <button id="toggle-map-view" class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center active:scale-90 transition-transform md:hidden">
                         <i class="fas fa-map"></i>
                     </button>
@@ -310,6 +311,7 @@
                     <!-- List Content -->
                 </div>
                 
+                <!-- Summary Map Container -->
                 <div id="summary-content-map" class="hidden absolute inset-x-0 bottom-0 top-[80px] bg-slate-100">
                      <div id="final-map" class="w-full h-full"></div>
                 </div>
@@ -392,11 +394,11 @@
         </div>
     </div>
 
-    <!-- Map Selection Modal (Full Screen) -->
+    <!-- Map Modal (Full Screen - Shared Container for Picker and Preview) -->
     <div id="map-selection-modal" class="fixed inset-0 z-[80] hidden flex-col bg-white animate-slide-up">
         <div class="p-3 bg-white border-b border-slate-100 flex items-center justify-between shadow-sm shrink-0 z-10 pt-[var(--sat)]">
-            <h3 class="text-lg font-bold text-slate-800 pr-2">בחירה מהמפה</h3>
-            <button onclick="closeModal('map-selection-modal'); toggleModal('add-place-modal', true);" class="bg-slate-100 px-4 py-2 rounded-full text-sm font-bold text-slate-700 hover:bg-slate-200">
+            <h3 id="map-modal-title" class="text-lg font-bold text-slate-800 pr-2">מפה</h3>
+            <button id="close-map-btn" class="bg-slate-100 px-4 py-2 rounded-full text-sm font-bold text-slate-700 hover:bg-slate-200">
                 <i class="fas fa-times ml-1"></i> סגור
             </button>
         </div>
@@ -404,7 +406,7 @@
              <div id="map-modal-container" class="absolute inset-0 w-full h-full"></div>
         </div>
         <!-- Helper pill on map -->
-        <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-[400] bg-slate-800/90 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg pointer-events-none">
+        <div id="map-helper-pill" class="hidden absolute bottom-8 left-1/2 -translate-x-1/2 z-[400] bg-slate-800/90 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg pointer-events-none">
             לחצו על סיכה להוספה
         </div>
     </div>
@@ -490,8 +492,11 @@
             hotels: [],
             availablePoints: [],
             draggedIndex: null,
-            maps: { builder: null, picker: null, summary: null },
-            mapMarkers: new Map()
+            maps: { 
+                modal: null, // Shared map for Selection AND Route Preview in Modal
+                summary: null // Final summary map
+            },
+            currentMapMode: null // 'PICKER' or 'VIEW'
         };
 
         const categoryConfig = {
@@ -737,9 +742,6 @@
                 
                 container.appendChild(el);
             });
-            
-            // Auto scroll to bottom if added
-            // container.parentElement.scrollTop = container.parentElement.scrollHeight;
         }
 
         // === Drag & Drop System (Unified Touch/Mouse) ===
@@ -753,7 +755,6 @@
                 state.draggedIndex = index;
                 el.classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
-                // Ghost image fix if needed
             });
             
             el.addEventListener('dragover', (e) => {
@@ -924,7 +925,6 @@
                 return;
             }
 
-            // Nearest Neighbor Algo
             const withCoords = state.route.steps.filter(s => s.coords);
             const others = state.route.steps.filter(s => !s.coords);
             
@@ -962,10 +962,9 @@
                 } else {
                     const ref = await addDoc(collection(db, 'trips', state.tripId, 'routes'), dataToSave);
                     state.route.id = ref.id;
-                    dataToSave.id = ref.id; // Ensure ID is in public record
+                    dataToSave.id = ref.id;
                 }
 
-                // Handle public route logic
                 if (state.route.isPublic) {
                     await setDoc(doc(db, 'publicRoutes', state.route.id), dataToSave);
                 } else {
@@ -982,7 +981,7 @@
             }
         }
 
-        // === Summary & Map ===
+        // === Summary & Map Logic ===
         function showSummary() {
             document.getElementById('building-state').classList.add('hidden');
             document.getElementById('summary-view').classList.remove('hidden');
@@ -1029,8 +1028,8 @@
                 tabMap.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all shadow-sm bg-white text-indigo-600";
                 tabList.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all text-slate-500 hover:bg-white/50";
                 
-                // Initialize map with delay to ensure container has size
-                setTimeout(() => initLeafletMap('final-map', state.route.steps, false), 100);
+                // Initialize Summary Map (Independent)
+                setTimeout(() => initLeafletMap('final-map', state.route.steps, 'SUMMARY'), 200);
             }
         };
 
@@ -1040,21 +1039,36 @@
              showToast("הועתק ללוח!");
         };
 
-        // === Leaflet Map Logic ===
-        function initLeafletMap(divId, points, isPicker) {
+        // === Unified Map Initialization ===
+        function initLeafletMap(divId, points, mode) {
+            // mode: 'PICKER' (All points), 'VIEW' (Route only), 'SUMMARY' (Final route static)
             const container = document.getElementById(divId);
             if (!container) return;
 
-            // Cleanup old map if exists in this container (using a global tracker for simplicity)
-            const mapKey = isPicker ? 'picker' : 'summary';
-            if (state.maps[mapKey]) {
-                state.maps[mapKey].remove();
-                state.maps[mapKey] = null;
+            // Strict cleanup based on container usage
+            if (divId === 'map-modal-container') {
+                if (state.maps.modal) {
+                    state.maps.modal.off();
+                    state.maps.modal.remove();
+                    state.maps.modal = null;
+                }
+            } else if (divId === 'final-map') {
+                if (state.maps.summary) {
+                    state.maps.summary.off();
+                    state.maps.summary.remove();
+                    state.maps.summary = null;
+                }
             }
+            
+            // Clean container HTML to be safe
+            container.innerHTML = '';
 
             const map = L.map(divId, { zoomControl: false }).setView([31.768, 35.213], 8);
-            state.maps[mapKey] = map;
             
+            // Store reference
+            if (divId === 'map-modal-container') state.maps.modal = map;
+            else if (divId === 'final-map') state.maps.summary = map;
+
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: ''
             }).addTo(map);
@@ -1062,9 +1076,7 @@
             const group = L.featureGroup();
             const latlngs = [];
 
-            const pointsToRender = isPicker ? state.availablePoints : points;
-
-            pointsToRender.forEach((p, i) => {
+            points.forEach((p, i) => {
                 if (!p.coords) return;
                 const config = categoryConfig[p.type] || categoryConfig.default;
                 latlngs.push([p.coords.lat, p.coords.lng]);
@@ -1081,7 +1093,7 @@
 
                 const marker = L.marker([p.coords.lat, p.coords.lng], { icon }).addTo(map);
                 
-                if (isPicker) {
+                if (mode === 'PICKER') {
                     marker.on('click', () => {
                         window.customConfirm(`הוספת ${p.name}`, `האם להוסיף את המקום למסלול?`, () => {
                             window.addStep(p.id);
@@ -1095,7 +1107,8 @@
                 group.addLayer(marker);
             });
 
-            if (!isPicker && latlngs.length > 1) {
+            // Draw lines for route views
+            if ((mode === 'VIEW' || mode === 'SUMMARY') && latlngs.length > 1) {
                 L.polyline(latlngs, { color: '#4f46e5', weight: 4, opacity: 0.8, dashArray: '10, 10', lineCap: 'round' }).addTo(map);
             }
 
@@ -1103,7 +1116,7 @@
                 map.fitBounds(group.getBounds(), { padding: [50, 50] });
             }
             
-            // Fix gray tiles
+            // Fix tile loading
             setTimeout(() => map.invalidateSize(), 200);
         }
 
@@ -1132,20 +1145,32 @@
             };
             document.getElementById('modal-search-input').oninput = () => renderModalPlaces();
 
-            // Map Selection
+            // Map Selection (PICKER MODE)
             document.getElementById('open-map-selection-btn').onclick = () => {
                 window.toggleModal('add-place-modal', false);
                 window.toggleModal('map-selection-modal', true);
-                setTimeout(() => initLeafletMap('map-modal-container', [], true), 300);
+                
+                document.getElementById('map-modal-title').textContent = "בחירת מקום";
+                document.getElementById('map-helper-pill').classList.remove('hidden');
+                document.getElementById('close-map-btn').onclick = () => {
+                    window.closeModal('map-selection-modal');
+                    window.toggleModal('add-place-modal', true); // Go back to drawer
+                };
+
+                // Pass ALL available points
+                setTimeout(() => initLeafletMap('map-modal-container', state.availablePoints, 'PICKER'), 300);
             };
             
-            // Toggle map view in builder (mobile)
+            // Route Preview Map (VIEW MODE)
             document.getElementById('toggle-map-view').onclick = () => {
                  window.toggleModal('map-selection-modal', true);
-                 // Hack: pass current route points but treat as picker false visually but true functionally? 
-                 // Actually better to just show current route on map modal in read-only mode or something.
-                 // For simplicity, let's just show the picker map again but maybe zoom to route?
-                 setTimeout(() => initLeafletMap('map-modal-container', state.route.steps, false), 300);
+                 
+                 document.getElementById('map-modal-title').textContent = "מפת המסלול";
+                 document.getElementById('map-helper-pill').classList.add('hidden');
+                 document.getElementById('close-map-btn').onclick = () => window.closeModal('map-selection-modal');
+
+                 // Pass ONLY route steps
+                 setTimeout(() => initLeafletMap('map-modal-container', state.route.steps, 'VIEW'), 300);
             };
 
             // Add Note
