@@ -222,7 +222,7 @@
     </div>
   </div>
 
-  <!-- Background (Fix: Removed bg-fixed class, relied on position: fixed) -->
+  <!-- Background (FIXED: Removed bg-fixed class which causes mobile jitter, relying on fixed position div) -->
   <div class="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat" style="background-image:url('https://i.imgur.com/MjekTyd.jpeg');"></div>
   <div class="fixed inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/40 to-slate-900/80 backdrop-blur-[2px]"></div>
 
@@ -469,10 +469,7 @@
     let editingItemId = null;
     let isRestaurant = false;
     let userLocation = null;
-    
-    // --- New Features State ---
-    let lastSelectedDestination = null; // Sticky destination
-    let draftData = {}; // Persist inputs across steps
+    let lastUsedDestination = null; // Stored for default selection
     
     // --- Scroll Locking State ---
     let scrollPosition = 0;
@@ -839,7 +836,6 @@
     function openModalHandler(itemId = null) {
       editingItemId = itemId;
       selectedGooglePlaceDetails = null;
-      draftData = {}; // Reset draft data on new open
       form.reset();
       for (let i = 1; i <= 9; i++) {
         const c = document.getElementById(`step-${i}`);
@@ -899,11 +895,11 @@
         stepEl.classList.add('active');
 
         if (actualStep === 4) {
-             // Defer map slightly to ensure container has size
-             setTimeout(() => {
+              // Defer map slightly to ensure container has size
+              setTimeout(() => {
                 if(gmaps_addEditMap) google.maps.event.trigger(gmaps_addEditMap, "resize");
                 if(gmaps_addEditMarker) gmaps_addEditMap.setCenter(gmaps_addEditMarker.getPosition());
-             }, 300);
+              }, 300);
         }
       }
 
@@ -986,9 +982,7 @@
                 <h4 class="text-xl font-bold text-slate-700">איך קוראים למקום?</h4>
             </div>
             <input type="text" id="item-name" required class="form-input w-full p-4 text-center text-xl font-bold" placeholder="למשל: מגדל אייפל" autofocus>`;
-          const nameInput = document.getElementById('item-name');
-          if(item) nameInput.value = item.name || '';
-          else if(draftData['item-name']) nameInput.value = draftData['item-name'];
+          if(item) document.getElementById('item-name').value = item.name || '';
           break;
         case 2:
           c.innerHTML = `
@@ -1001,9 +995,9 @@
             <select id="item-destination" required class="form-select w-full p-4 text-lg bg-white shadow-sm cursor-pointer">
                 ${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}
             </select>`;
-          const destInput = document.getElementById('item-destination');
-          if(item) destInput.value = item.destination || '';
-          else if(lastSelectedDestination) destInput.value = lastSelectedDestination; // STICKY DESTINATION
+          // FIX: Auto-select last used destination if new item
+          if(item) document.getElementById('item-destination').value = item.destination || '';
+          else if (lastUsedDestination) document.getElementById('item-destination').value = lastUsedDestination;
           break;
         case 3:
           c.innerHTML = `
@@ -1036,7 +1030,6 @@
             document.getElementById('item-hours').value = placeDetails.hours || '';
             document.getElementById('item-link').value = placeDetails.website || '';
             const nameField = document.getElementById('item-name');
-            // Don't overwrite name if user already typed it and we just found location
             if (nameField && (!nameField.value || nameField.value.trim()==='')) nameField.value = placeDetails.name;
             gmaps_initAddEditMap(placeDetails.coords);
             selectedGooglePlaceDetails = placeDetails;
@@ -1044,13 +1037,14 @@
             if (msg) msg.classList.remove('hidden');
           });
 
-          // AUTO FILL NAME SEARCH LOGIC
-          if (!item && !searchInput.value && draftData['item-name']) {
-             searchInput.value = draftData['item-name'];
-             // Trigger event to make sure autocomplete picks it up if needed
-             setTimeout(() => {
-                 searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-             }, 500);
+          // FIX: Auto-fill search with name from Step 1
+          if (!item) {
+            const nameVal = document.getElementById('item-name')?.value;
+            if (nameVal) {
+                searchInput.value = nameVal;
+                // Trigger autocomplete search
+                setTimeout(() => searchInput.dispatchEvent(new Event('input')), 500);
+            }
           }
           break;
         case 5:
@@ -1243,7 +1237,8 @@
           } else {
             itemsForType.forEach((item, index) => {
               const card = document.createElement('div');
-              card.className = 'item-card group relative bg-white rounded-2xl shadow-sm hover:shadow-xl border border-slate-100 flex flex-col transition-all duration-300 overflow-hidden transform hover:-translate-y-1 item-card-anim';
+              // Added transform-gpu to help with mobile rendering
+              card.className = 'item-card group relative bg-white rounded-2xl shadow-sm hover:shadow-xl border border-slate-100 flex flex-col transition-all duration-300 overflow-hidden transform hover:-translate-y-1 item-card-anim transform-gpu';
               card.style.animationDelay = `${index * 50}ms`;
               card.dataset.id = item.id;
 
@@ -1270,6 +1265,7 @@
 
               const ratingHtml = renderStars(item.rating);
 
+              // FIX: Added explicit Z-index to action buttons wrapper and stopPropagation
               card.innerHTML = `
                 ${imgHeader}
                 ${distInfo}
@@ -1283,14 +1279,14 @@
                   
                   ${item.shortDescription ? `<p class="text-sm text-slate-500 line-clamp-2 mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100 italic">"${item.shortDescription}"</p>` : ''}
                   
-                  <div class="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                      <button data-id="${item.id}" class="navigate-btn bg-cyan-50 text-cyan-600 hover:bg-cyan-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex-1 transition flex items-center justify-center gap-2 ${!item.coords ? 'opacity-50 cursor-not-allowed' : ''}" ${!item.coords ? 'disabled' : ''}>
+                  <div class="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-3 relative z-10">
+                      <button data-id="${item.id}" onclick="event.stopPropagation()" class="navigate-btn bg-cyan-50 text-cyan-600 hover:bg-cyan-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex-1 transition flex items-center justify-center gap-2 ${!item.coords ? 'opacity-50 cursor-not-allowed' : ''}" ${!item.coords ? 'disabled' : ''}>
                         <i class="fas fa-diamond-turn-right"></i> ניווט
                       </button>
-                      <div class="flex gap-2">
-                        ${item.link ? `<a href="${item.link}" target="_blank" class="action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-green-100 text-slate-500 hover:text-green-600 flex items-center justify-center transition" title="אתר" onclick="event.stopPropagation()"><i class="fas fa-link"></i></a>` : ''}
-                        <button class="edit-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition" title="עריכה"><i class="fas fa-pencil-alt"></i></button>
-                        <button class="delete-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center transition" title="מחיקה"><i class="fas fa-trash-alt"></i></button>
+                      <div class="flex gap-2 relative z-20">
+                        ${item.link ? `<a href="${item.link}" target="_blank" onclick="event.stopPropagation()" class="action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-green-100 text-slate-500 hover:text-green-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="אתר"><i class="fas fa-link"></i></a>` : ''}
+                        <button class="edit-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="עריכה" onclick="event.stopPropagation()"><i class="fas fa-pencil-alt"></i></button>
+                        <button class="delete-btn action-btn w-9 h-9 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center transition shadow-sm border border-slate-200" title="מחיקה" onclick="event.stopPropagation()"><i class="fas fa-trash-alt"></i></button>
                       </div>
                   </div>
                 </div>`;
@@ -1429,12 +1425,6 @@
           else if (!finishBtn.classList.contains('hidden')) finishBtn.click();
         }
       });
-      
-      // Save Inputs to Draft Data
-      form.addEventListener('input', e => {
-         if(e.target.id) draftData[e.target.id] = e.target.value;
-      });
-
       form.addEventListener('change', e => {
         if (e.target.id === 'item-type') handleTypeChange();
         if (e.target.id === 'item-food-type') handleFoodTypeChange();
@@ -1514,10 +1504,6 @@
         const name = gv('item-name');
         if (!name || name.trim()==='') { showModalError('חסר שם למקום'); return; }
         
-        // Save Last Destination Sticky
-        const destVal = gv('item-destination');
-        if (destVal) lastSelectedDestination = destVal;
-
         // Coords Validation
         let coords = editingItemId ? allItems.find(i=>i.id===editingItemId)?.coords : null;
         let photos = editingItemId ? allItems.find(i=>i.id===editingItemId)?.photos || [] : [];
@@ -1553,9 +1539,13 @@
              siteData.customFoodTypes[finalFood]='🍴';
            }
         }
+        
+        // FIX: Save last used destination
+        const destValue = gv('item-destination');
+        lastUsedDestination = destValue;
 
         const data = {
-          name, destination: destVal, type: finalType,
+          name, destination: destValue, type: finalType,
           shortDescription: gv('item-short-description'), description: gv('item-description'),
           isKosher: isRestaurant?gv('item-kosher'):null, foodType: finalFood,
           location: gv('item-location'), hours: gv('item-hours'), link: gv('item-link'),
