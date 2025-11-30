@@ -6,36 +6,56 @@
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>תכנון מסלול חכם</title>
+    <title>בניית מסלול חכם</title>
 
+    <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Leaflet (Map) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet" />
 
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        primary: { DEFAULT: '#4f46e5', hover: '#4338ca', light: '#eef2ff' },
-                        secondary: { DEFAULT: '#10b981', hover: '#059669' },
-                        surface: '#f8fafc'
+                        primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' },
+                        surface: '#f8fafc',
                     },
                     fontFamily: {
-                        sans: ['Assistant', 'sans-serif'],
+                        sans: ['Rubik', 'Assistant', 'sans-serif'],
                     },
                     boxShadow: {
-                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-                        'up': '0 -4px 25px -5px rgba(0, 0, 0, 0.08)',
-                        'glow': '0 0 15px rgba(79, 70, 229, 0.3)'
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+                        'up': '0 -4px 20px -2px rgba(0, 0, 0, 0.05)',
                     },
                     animation: {
-                        'bounce-slow': 'bounce 3s infinite',
+                        'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'fade-in': 'fadeIn 0.2s ease-out forwards',
+                        'bounce-soft': 'bounceSoft 2s infinite',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(100%)' },
+                            '100%': { transform: 'translateY(0)' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' },
+                        },
+                        bounceSoft: {
+                            '0%, 100%': { transform: 'translateY(-5%)' },
+                            '50%': { transform: 'translateY(0)' },
+                        }
                     }
                 }
             }
@@ -53,11 +73,11 @@
             width: 100%;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
+            background-color: #f8fafc;
         }
 
         body {
-            font-family: 'Assistant', sans-serif;
-            background-color: #f8fafc;
+            font-family: 'Rubik', sans-serif;
             color: #1e293b;
             -webkit-user-select: none;
             user-select: none;
@@ -70,36 +90,35 @@
             font-size: 16px !important; /* Prevent iOS zoom */
         }
 
-        /* Scrollbar */
+        /* Utilities */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* Animations */
-        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .slide-up { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
-        .scale-in { animation: scaleIn 0.2s ease-out forwards; }
-        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
 
         /* Timeline */
         .timeline-line {
             position: absolute;
             top: 3.5rem;
-            bottom: -1.5rem;
+            bottom: -1rem;
             right: 1.65rem; /* Center with icon */
             width: 2px;
-            background: linear-gradient(to bottom, #cbd5e1 50%, transparent 100%);
+            background: linear-gradient(to bottom, #cbd5e1 50%, transparent 50%);
             background-size: 2px 10px;
-            background-repeat: repeat-y; 
             z-index: 0;
         }
         .route-step:last-child .timeline-line { display: none; }
-        
-        /* Dragging Styles */
-        .route-step { transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s; }
+
+        /* Drag & Drop Styling */
+        .route-step {
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s;
+            touch-action: pan-y; /* Allow vertical scroll unless dragging */
+        }
         .route-step.dragging {
             opacity: 0.9;
             transform: scale(1.02);
@@ -109,257 +128,345 @@
             border: 2px solid #6366f1;
         }
         .drag-over-item {
-            border-top: 3px solid #6366f1;
-            margin-top: 8px;
+            transform: translateY(10px);
+            border-top: 2px solid #6366f1;
         }
 
-        /* Map Marker */
+        /* Map Markers */
         .custom-marker {
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
-            border: 2px solid white;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+            border: 3px solid white;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
             transition: transform 0.2s;
         }
         .custom-marker:active { transform: scale(0.9); }
 
-        /* Bottom Sheet Adjustments */
-        .modal-sheet {
-            max-height: 92dvh;
-            border-top-left-radius: 24px;
-            border-top-right-radius: 24px;
+        /* Modal Styles */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        /* Mobile specific modal adjustments */
+        @media (max-width: 640px) {
+            .modal-content-bottom {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+                max-height: 92dvh;
+            }
         }
     </style>
 </head>
-<body class="flex flex-col h-full bg-slate-50">
+<body class="flex flex-col h-full bg-surface text-slate-800">
 
-    <div id="loading-overlay" class="fixed inset-0 bg-white/95 backdrop-blur-sm z-[100] flex flex-col items-center justify-center gap-6 transition-opacity duration-500">
-        <div class="relative">
-            <div class="w-20 h-20 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-            <div class="absolute inset-0 flex items-center justify-center">
-                <i class="fas fa-map-location-dot text-indigo-600 text-2xl animate-pulse"></i>
-            </div>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center gap-6 transition-opacity duration-500">
+        <div class="relative w-20 h-20">
+            <div class="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+            <i class="fas fa-map-location-dot absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600 text-2xl animate-pulse"></i>
         </div>
-        <p class="text-lg font-bold text-slate-600">טוען את הטיול שלך...</p>
+        <p class="text-lg font-medium text-slate-600 animate-bounce-soft">טוען את המסלול...</p>
     </div>
 
-    <header class="bg-white/90 backdrop-blur-md border-b border-slate-200/60 z-40 shrink-0 pt-[env(safe-area-inset-top)] sticky top-0 transition-all duration-300" id="main-header">
+    <!-- Header -->
+    <header class="glass sticky top-0 z-40 pt-[var(--sat)] shadow-sm">
         <div class="container mx-auto px-4 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div onclick="window.history.back()" class="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 cursor-pointer hover:bg-slate-200 transition-colors">
-                    <i class="fas fa-chevron-right"></i>
-                </div>
+                <button id="back-to-trip-btn" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-95 transition-all">
+                    <i class="fas fa-chevron-right text-lg"></i>
+                </button>
                 <div>
-                    <h1 class="text-lg font-extrabold text-slate-800 leading-none">בניית מסלול</h1>
-                    <div id="auth-container" class="text-xs text-indigo-600 font-bold mt-0.5">אורח</div>
+                    <h1 class="text-base font-bold leading-tight">בניית מסלול</h1>
+                    <div id="auth-container" class="text-xs text-slate-500">אורח</div>
                 </div>
             </div>
             
-            <div class="flex items-center gap-2">
-                <button id="header-action-btn" class="hidden text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
-                    שמור
+            <div class="flex gap-2">
+                <button id="btn-show-summary" class="hidden btn-secondary w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center active:scale-95 transition-all">
+                    <i class="fas fa-list-check"></i>
                 </button>
             </div>
         </div>
     </header>
 
-    <main id="main-content" class="flex-grow overflow-hidden relative flex flex-col hidden">
+    <!-- Main Content Area -->
+    <main id="main-content" class="flex-grow flex flex-col relative overflow-hidden hidden">
         
-        <div id="initial-state" class="flex-grow flex flex-col items-center justify-center p-8 text-center animate-fade-in pb-20">
-            <div class="relative mb-8">
-                <div class="absolute inset-0 bg-indigo-100 rounded-full blur-xl opacity-50"></div>
-                <div class="bg-white w-28 h-28 rounded-full flex items-center justify-center relative shadow-soft border border-indigo-50">
-                    <i class="fas fa-map-marked-alt text-5xl text-indigo-500 transform -rotate-6"></i>
-                </div>
+        <!-- Welcome / Empty State -->
+        <div id="initial-state" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center animate-fade-in z-10 bg-surface">
+            <div class="w-32 h-32 bg-gradient-to-tr from-indigo-100 to-white rounded-full flex items-center justify-center mb-6 shadow-lg shadow-indigo-100">
+                <i class="fas fa-wand-magic-sparkles text-5xl text-indigo-500"></i>
             </div>
-            <h2 class="text-2xl font-bold text-slate-800 mb-3">לאן מטיילים היום?</h2>
-            <p class="text-slate-500 max-w-[260px] mx-auto mb-10 leading-relaxed">בנה את המסלול המושלם בקלות, הוסף אטרקציות וסדר אותן בלחיצה.</p>
-            
-            <button id="create-route-btn" class="w-full max-w-xs bg-indigo-600 text-white p-4 rounded-2xl text-lg font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-3 group">
-                <span class="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center group-hover:scale-110 transition-transform"><i class="fas fa-plus text-sm"></i></span>
+            <h2 class="text-2xl font-bold mb-2 text-slate-800">מתכננים את הטיול</h2>
+            <p class="text-slate-500 mb-8 max-w-[280px] leading-relaxed">בואו ניצור את סדר היום המושלם. בחרו מקומות, סדרו אותם וצאו לדרך.</p>
+            <button id="create-route-btn" class="w-full max-w-xs bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+                <i class="fas fa-plus"></i>
                 יצירת מסלול חדש
             </button>
         </div>
 
-        <div id="building-state" class="hidden flex flex-col h-full">
+        <!-- Builder Interface -->
+        <div id="building-state" class="hidden flex flex-col h-full w-full absolute inset-0 bg-surface">
             
-            <div class="bg-white px-5 py-3 border-b border-slate-100 shrink-0 flex items-center justify-between shadow-sm z-10 relative">
-                <div class="overflow-hidden">
-                    <h2 id="route-title" class="text-xl font-bold text-slate-800 truncate"></h2>
-                    <div class="flex items-center text-xs font-medium text-slate-500 mt-0.5">
-                        <i class="fas fa-location-dot ml-1 text-indigo-500"></i>
-                        <span id="route-destination"></span>
+            <!-- Route Info Bar -->
+            <div class="bg-white px-4 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 shadow-sm z-20">
+                <div class="min-w-0 flex-1 pr-2">
+                    <h2 id="route-title" class="text-lg font-bold text-slate-800 truncate"></h2>
+                    <div class="flex items-center text-xs text-slate-500 gap-1">
+                        <i class="fas fa-location-dot text-indigo-500"></i>
+                        <span id="route-destination" class="truncate"></span>
                     </div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button id="organize-route-btn" class="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 flex items-center justify-center shadow-sm active:scale-95 transition-all" title="סדר אוטומטי">
-                        <i class="fas fa-wand-magic-sparkles"></i>
+                    <button id="organize-route-btn" class="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 border border-orange-100 flex items-center justify-center active:scale-90 transition-transform" title="סדר אוטומטי">
+                        <i class="fas fa-sort-amount-down"></i>
                     </button>
-                     <button id="toggle-map-view" class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 flex items-center justify-center shadow-sm active:scale-95 transition-all md:hidden">
+                    <button id="toggle-map-view" class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center active:scale-90 transition-transform md:hidden">
                         <i class="fas fa-map"></i>
                     </button>
                 </div>
             </div>
 
-            <div class="flex-grow overflow-y-auto overflow-x-hidden p-4 bg-slate-50 relative no-scrollbar pb-32" id="steps-scroll-area">
+            <!-- Steps List -->
+            <div id="steps-scroll-area" class="flex-grow overflow-y-auto overflow-x-hidden p-4 pb-32 relative">
                 <div id="route-steps-container" class="space-y-0 relative min-h-[50vh]">
-                    </div>
+                    <!-- Steps Injected Here -->
+                </div>
                 
-                <div id="start-prompt" class="absolute inset-0 flex flex-col items-center justify-start pt-20 text-slate-400 pointer-events-none">
-                    <i class="fas fa-route text-6xl mb-4 opacity-10"></i>
-                    <p class="font-medium opacity-50">המסלול ריק, לחץ על + להוספה</p>
+                <!-- Empty Route Helper -->
+                <div id="start-prompt" class="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none mt-10">
+                    <i class="fas fa-route text-5xl mb-3 opacity-30"></i>
+                    <p class="font-medium">המסלול ריק עדיין</p>
+                    <p class="text-xs mt-1">לחצו על "הוסף מקום" למטה</p>
                 </div>
             </div>
 
-            <div class="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-slate-100 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-up z-30 rounded-t-2xl">
-                <div class="flex gap-3 mb-4">
-                    <button id="open-add-place-modal-btn" class="flex-[2] bg-indigo-600 text-white h-12 rounded-xl shadow-lg shadow-indigo-200 font-bold active:scale-95 transition-all flex items-center justify-center gap-2">
+            <!-- Sticky Footer Actions -->
+            <div class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-3 pb-[calc(var(--sab)+0.75rem)] shadow-up z-30">
+                <div class="flex gap-3 mb-3">
+                    <button id="open-add-place-modal-btn" class="flex-1 bg-indigo-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2">
                         <i class="fas fa-plus"></i> הוסף מקום
                     </button>
-                    <button id="save-route-btn" class="flex-1 bg-slate-800 text-white h-12 rounded-xl shadow-lg shadow-slate-200 font-bold active:scale-95 transition-all flex items-center justify-center gap-2">
-                        <i class="fas fa-save"></i> שמור
+                    <button id="save-route-btn" class="flex-1 bg-slate-800 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-save"></i> שמירה
                     </button>
                 </div>
-                <div class="flex justify-between items-center px-1">
-                     <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
-                        <input type="checkbox" id="is-public-toggle" class="accent-indigo-600 w-4 h-4" checked>
-                        <label for="is-public-toggle" class="text-xs font-bold text-slate-600">שתף כציבורי</label>
+                <div class="flex justify-between items-center px-2">
+                     <div class="flex items-center gap-2" onclick="document.getElementById('is-public-toggle').click()">
+                        <div class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="is-public-toggle" class="sr-only peer" checked>
+                            <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </div>
+                        <span class="text-xs font-medium text-slate-600">שתף בקהילה</span>
                     </div>
-                    <button id="open-add-other-btn" class="text-xs font-bold text-indigo-600 py-2 px-2">הוסף הערה חופשית</button>
+                    <button id="open-add-other-btn" class="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors py-1 px-2">
+                        <i class="fas fa-pen ml-1"></i>הערה חופשית
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div id="summary-view" class="hidden flex flex-col h-full bg-white animate-fade-in">
-             </div>
+        <!-- Summary / Print View -->
+        <div id="summary-view" class="hidden absolute inset-0 z-50 bg-white flex flex-col h-full">
+            <div class="bg-indigo-600 text-white p-6 pt-[calc(var(--sat)+1.5rem)] pb-12 rounded-b-[2.5rem] shadow-xl shrink-0">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="text-2xl font-bold" id="summary-title">סיכום מסלול</h2>
+                    <button onclick="closeSummary()" class="bg-white/20 hover:bg-white/30 p-2 rounded-xl backdrop-blur-md transition-colors">
+                        <i class="fas fa-pencil"></i> עריכה
+                    </button>
+                </div>
+                <div class="flex gap-4 text-indigo-100 text-sm">
+                    <span id="summary-details">...</span>
+                </div>
+                
+                <div class="flex gap-3 mt-6">
+                    <button onclick="copyLink()" class="flex-1 bg-white text-indigo-700 py-3 rounded-xl shadow-lg font-bold active:scale-95 transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-share-nodes"></i> שתף
+                    </button>
+                    <button onclick="window.print()" class="flex-1 bg-indigo-800 text-white py-3 rounded-xl shadow-lg font-bold active:scale-95 transition-all flex items-center justify-center gap-2 border border-indigo-700">
+                        <i class="fas fa-print"></i> הדפס
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-grow flex flex-col pt-6 overflow-hidden bg-slate-50 relative">
+                <!-- Tab Switcher -->
+                <div class="bg-white/50 backdrop-blur mx-6 p-1 rounded-xl flex shadow-sm mb-4 shrink-0">
+                    <button onclick="switchTab('list')" id="tab-list" class="flex-1 py-2 rounded-lg text-sm font-bold transition-all shadow-sm bg-white text-indigo-600">רשימה</button>
+                    <button onclick="switchTab('map')" id="tab-map" class="flex-1 py-2 rounded-lg text-sm font-bold transition-all text-slate-500 hover:bg-white/50">מפה</button>
+                </div>
+
+                <div id="summary-content-list" class="flex-grow overflow-y-auto px-6 pb-10 space-y-4">
+                    <!-- List Content -->
+                </div>
+                
+                <div id="summary-content-map" class="hidden absolute inset-x-0 bottom-0 top-[80px] bg-slate-100">
+                     <div id="final-map" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
 
     </main>
 
-    <div id="create-route-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex-col items-center justify-end sm:justify-center">
-        <div class="bg-white w-full sm:w-[400px] p-6 modal-sheet rounded-t-[32px] sm:rounded-3xl shadow-2xl slide-up relative overflow-hidden">
-            <div class="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50 rounded-full blur-2xl pointer-events-none"></div>
-            
+    <!-- === Modals === -->
+
+    <!-- Create Route Modal -->
+    <div id="create-route-modal" class="fixed inset-0 z-[60] hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm modal-overlay" onclick="closeModal('create-route-modal')"></div>
+        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl modal-content modal-content-bottom animate-slide-up">
             <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
+            <h3 class="text-xl font-bold text-slate-800 mb-1">מסלול חדש</h3>
+            <p class="text-slate-500 mb-6 text-sm">בחרו שם ויעד כדי להתחיל לארגן.</p>
             
-            <h3 class="text-2xl font-extrabold text-slate-800 mb-2 relative z-10">יצירת מסלול</h3>
-            <p class="text-slate-500 text-sm mb-6">תן שם למסלול ובחר את היעד כדי להתחיל.</p>
-            
-            <form id="create-route-form" class="space-y-4 relative z-10">
-                <div class="space-y-1.5">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">שם המסלול</label>
-                    <input type="text" id="new-route-name" required class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-semibold" placeholder="לדוגמה: יום כיף בתל אביב" />
+            <form id="create-route-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1.5">שם המסלול</label>
+                    <input type="text" id="new-route-name" required class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" placeholder="למשל: יום כיף בתל אביב" />
                 </div>
-                <div class="space-y-1.5">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">יעד</label>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1.5">יעד</label>
                     <div class="relative">
-                        <select id="destination-select" required class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-700">
-                            <option value="" disabled selected>בחר יעד...</option>
+                        <select id="destination-select" required class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="" disabled selected>בחירת יעד...</option>
                         </select>
-                        <i class="fas fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-xs"></i>
+                        <i class="fas fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
                     </div>
                 </div>
                 <div class="pt-4 flex gap-3">
-                    <button type="button" id="cancel-create-route" class="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-xl font-bold active:scale-95 transition-transform">ביטול</button>
-                    <button type="submit" class="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform">התחל לתכנן</button>
+                    <button type="button" onclick="closeModal('create-route-modal')" class="flex-1 bg-slate-100 text-slate-700 py-3.5 rounded-xl font-bold">ביטול</button>
+                    <button type="submit" class="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-200">התחל</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div id="add-place-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden flex-col items-center justify-end sm:justify-center">
-        <div class="bg-white w-full sm:max-w-xl h-[85dvh] sm:h-[650px] modal-sheet rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col slide-up overflow-hidden">
+    <!-- Add Place Modal (Drawer Style) -->
+    <div id="add-place-modal" class="fixed inset-0 z-[70] hidden flex-col justify-end sm:justify-center items-center">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm modal-overlay" onclick="closeModal('add-place-modal')"></div>
+        <div class="relative w-full sm:max-w-2xl bg-white h-[90dvh] sm:h-[650px] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col animate-slide-up modal-content">
             
-            <div class="w-full flex justify-center pt-3 pb-1 sm:hidden shrink-0 cursor-grab">
-                <div class="w-12 h-1.5 bg-slate-200 rounded-full"></div>
+            <!-- Handle & Header -->
+            <div class="p-4 pb-2 border-b border-slate-100 shrink-0">
+                <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 sm:hidden"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">הוספת מקום</h3>
+                        <p class="text-xs text-slate-500">בחרו מהרשימה או חפשו</p>
+                    </div>
+                    <button onclick="closeModal('add-place-modal')" class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
 
-            <div class="px-5 pt-2 pb-4 flex items-center justify-between shrink-0">
-                <div>
-                    <h3 class="text-xl font-extrabold text-slate-800">הוספת מקום</h3>
-                    <p class="text-xs text-slate-500 font-medium">בחר אטרקציה מהרשימה או מהמפה</p>
+            <!-- Search Bar -->
+            <div class="p-3 bg-white flex gap-2 shrink-0">
+                <div class="relative flex-grow">
+                    <i class="fas fa-search absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="search" id="modal-search-input" class="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="חיפוש מקום..." />
                 </div>
-                <button id="close-add-place-modal-btn" class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
-                    <i class="fas fa-xmark"></i>
+                <button id="open-map-selection-btn" class="bg-indigo-50 text-indigo-600 px-4 rounded-xl text-sm font-bold border border-indigo-100 whitespace-nowrap active:scale-95 transition-transform">
+                    <i class="fas fa-map-location-dot ml-1"></i> מפה
                 </button>
             </div>
-
-            <div class="px-5 pb-3 shrink-0">
-                <div class="relative shadow-sm">
-                    <i class="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="search" id="modal-search-input" class="w-full pr-10 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="חפש מקום, מסעדה, מלון..." />
-                </div>
+            
+            <!-- Filter Chips -->
+            <div class="px-3 pb-2 flex gap-2 overflow-x-auto no-scrollbar shrink-0" id="filter-chips-container">
+                <!-- Chips injected via JS -->
             </div>
 
-            <div class="px-5 pb-2 flex gap-2 overflow-x-auto no-scrollbar shrink-0">
-                <button id="open-map-selection-btn" class="bg-indigo-50 text-indigo-700 border border-indigo-100 px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap flex items-center gap-1.5">
-                    <i class="fas fa-map-marked-alt"></i> מפה
-                </button>
-                <div class="h-8 w-px bg-slate-200 mx-1"></div>
-                <div id="category-filters-container" class="flex gap-2"></div>
+            <!-- Results List -->
+            <div id="modal-places-list-container" class="flex-grow overflow-y-auto p-3 space-y-2 bg-slate-50">
+                <!-- Items injected via JS -->
             </div>
-
-            <div id="modal-places-list-container" class="flex-grow overflow-y-auto p-4 space-y-2.5 bg-slate-50/50 pb-[env(safe-area-inset-bottom)]">
-                </div>
         </div>
     </div>
-    
-    <div id="map-selection-modal" class="fixed inset-0 bg-white z-[70] hidden flex-col slide-up">
-         <div class="absolute top-4 left-4 z-[80] flex gap-2">
-            <button id="close-map-modal-btn" class="bg-white text-slate-800 px-4 py-2.5 rounded-full shadow-lg font-bold text-sm border border-slate-100 flex items-center gap-2">
-                <i class="fas fa-arrow-right"></i> חזרה
+
+    <!-- Map Selection Modal (Full Screen) -->
+    <div id="map-selection-modal" class="fixed inset-0 z-[80] hidden flex-col bg-white animate-slide-up">
+        <div class="p-3 bg-white border-b border-slate-100 flex items-center justify-between shadow-sm shrink-0 z-10 pt-[var(--sat)]">
+            <h3 class="text-lg font-bold text-slate-800 pr-2">בחירה מהמפה</h3>
+            <button onclick="closeModal('map-selection-modal'); toggleModal('add-place-modal', true);" class="bg-slate-100 px-4 py-2 rounded-full text-sm font-bold text-slate-700 hover:bg-slate-200">
+                <i class="fas fa-times ml-1"></i> סגור
             </button>
         </div>
-        <div id="map-modal-container" class="flex-grow w-full h-full bg-slate-100"></div>
-        <div class="absolute bottom-6 left-0 right-0 z-[80] flex justify-center pointer-events-none">
-            <div class="bg-white/90 backdrop-blur px-6 py-3 rounded-full shadow-lg border border-white/50">
-                <p class="text-sm font-bold text-slate-700"><i class="fas fa-hand-pointer mr-2 text-indigo-500"></i>לחץ על סמן כדי להוסיף</p>
-            </div>
+        <div class="flex-grow relative bg-slate-100">
+             <div id="map-modal-container" class="absolute inset-0 w-full h-full"></div>
+        </div>
+        <!-- Helper pill on map -->
+        <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-[400] bg-slate-800/90 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg pointer-events-none">
+            לחצו על סיכה להוספה
         </div>
     </div>
 
-    <div id="add-other-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[65] hidden flex-col items-center justify-end sm:justify-center">
-        <div class="bg-white w-full sm:max-w-md p-6 modal-sheet rounded-t-[32px] sm:rounded-3xl shadow-2xl slide-up">
-            <h3 class="text-xl font-bold text-slate-800 mb-4">הערה / משימה</h3>
-            <form id="add-other-form" class="space-y-4">
-                <input type="text" id="other-name" required class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-indigo-500 outline-none font-bold" placeholder="כותרת (למשל: הפסקת צהריים)" />
-                <textarea id="other-description" class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-indigo-500 outline-none resize-none" rows="3" placeholder="פירוט נוסף..."></textarea>
+    <!-- Add Note Modal -->
+    <div id="add-other-modal" class="fixed inset-0 z-[65] hidden" role="dialog">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm modal-overlay" onclick="closeModal('add-other-modal')"></div>
+        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl modal-content animate-slide-up">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">הוספת הערה / משימה</h3>
+            <form id="add-other-form" class="space-y-3">
+                <input type="text" id="other-name" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-indigo-500 outline-none" placeholder="כותרת (למשל: הפסקת צהריים)" />
+                <textarea id="other-description" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-indigo-500 outline-none" rows="3" placeholder="פרטים נוספים..."></textarea>
                 <div class="flex gap-3 pt-2">
-                     <button type="button" id="cancel-add-other" class="flex-1 bg-slate-100 text-slate-700 py-3.5 rounded-xl font-bold">ביטול</button>
-                    <button type="submit" class="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-200">הוסף למסלול</button>
+                    <button type="button" onclick="closeModal('add-other-modal')" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold">ביטול</button>
+                    <button type="submit" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">הוסף</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[90] hidden items-center justify-center p-4 transition-opacity duration-200 opacity-0 pointer-events-none">
-        <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 transform scale-95 transition-transform duration-200" id="confirm-box">
-            <div class="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-4 mx-auto text-indigo-600 text-xl">
-                <i class="fas fa-question" id="confirm-icon"></i>
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"></div>
+        <div class="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl animate-slide-up sm:animate-fade-in text-center">
+            <div class="w-14 h-14 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-question text-2xl"></i>
             </div>
-            <h3 class="text-xl font-extrabold text-slate-800 text-center mb-2" id="confirm-title">בטוח?</h3>
-            <p class="text-slate-500 text-center text-sm mb-6 leading-relaxed" id="confirm-text">פעולה זו לא ניתנת לביטול.</p>
+            <h3 id="confirm-title" class="text-xl font-bold text-slate-800 mb-2"></h3>
+            <p id="confirm-message" class="text-slate-500 mb-6 text-sm"></p>
             <div class="flex gap-3">
-                <button id="confirm-cancel-btn" class="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">ביטול</button>
-                <button id="confirm-ok-btn" class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">אישור</button>
+                <button id="confirm-cancel-btn" class="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50">ביטול</button>
+                <button id="confirm-ok-btn" class="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold shadow-lg shadow-red-200 hover:bg-red-600">אישור</button>
             </div>
         </div>
     </div>
 
-    <div id="toast" class="fixed top-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 bg-slate-800 text-white py-3.5 px-6 rounded-2xl shadow-xl shadow-slate-300/50 transition-all duration-300 -translate-y-24 opacity-0 z-[100] flex items-center gap-3 w-auto min-w-min justify-center">
-        <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 shrink-0">
-            <i class="fas fa-check text-xs"></i>
+    <!-- Alert Modal (Custom) -->
+    <div id="alert-modal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal('alert-modal')"></div>
+        <div class="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl animate-slide-up text-center">
+             <div class="w-14 h-14 bg-indigo-100 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-info text-2xl"></i>
+            </div>
+            <h3 id="alert-title" class="text-xl font-bold text-slate-800 mb-2">שים לב</h3>
+            <p id="alert-message" class="text-slate-500 mb-6 text-sm"></p>
+            <button onclick="closeModal('alert-modal')" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold">הבנתי</button>
         </div>
-        <span id="toast-message" class="font-medium text-sm">הפעולה בוצעה בהצלחה</span>
     </div>
 
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-6 right-1/2 translate-x-1/2 bg-slate-800/95 backdrop-blur text-white py-3 px-6 rounded-full shadow-2xl transition-all duration-300 -translate-y-24 opacity-0 z-[110] flex items-center gap-3 min-w-max border border-slate-700/50">
+        <i class="fas fa-check-circle text-green-400 text-lg"></i>
+        <span id="toast-message" class="font-medium text-sm"></span>
+    </div>
+
+    <!-- Scripts -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, getDoc, collection, query, where, getDocs, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // --- Config ---
+        // === Config ===
         const firebaseConfig = {
             apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
             authDomain: "tiool-loz.firebaseapp.com",
@@ -373,157 +480,149 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // --- State ---
-        let currentUser, tripId, tripData;
-        let allPlaces = [], allHotels = [], availablePoints = [];
-        let currentRoute = { id: null, name: '', destination: '', steps: [], isPublic: true, createdBy: null, tripId: null };
-        let map, mapMarkers = new Map();
-        
-        // Drag State
-        let draggedItemIndex = null;
-        let longPressTimer = null;
-        let isTouchDragging = false;
-        let touchStartY = 0;
-
-        // Visual Config
-        const categoryConfig = {
-            "מסעדה/אוכל": { icon: "fa-utensils", color: "#f97316", bg: "#ffedd5" }, 
-            "מלון": { icon: "fa-bed", color: "#8b5cf6", bg: "#f3e8ff" }, 
-            "מוזיאון": { icon: "fa-landmark", color: "#64748b", bg: "#f1f5f9" }, 
-            "קניון/מרכז קניות": { icon: "fa-bag-shopping", color: "#ec4899", bg: "#fce7f3" }, 
-            "אטרקציה": { icon: "fa-star", color: "#eab308", bg: "#fef9c3" }, 
-            "חוף": { icon: "fa-umbrella-beach", color: "#06b6d4", bg: "#cffafe" }, 
-            "סיור": { icon: "fa-person-hiking", color: "#10b981", bg: "#d1fae5" }, 
-            "סופר": { icon: "fa-cart-shopping", color: "#6366f1", bg: "#e0e7ff" }, 
-            "other": { icon: "fa-note-sticky", color: "#94a3b8", bg: "#f8fafc" },
-            "default": { icon: "fa-location-dot", color: "#ef4444", bg: "#fee2e2" }
+        // === State ===
+        let state = {
+            user: null,
+            tripId: null,
+            tripData: null,
+            route: { id: null, name: '', destination: '', steps: [], isPublic: true, createdBy: null },
+            places: [],
+            hotels: [],
+            availablePoints: [],
+            draggedIndex: null,
+            maps: { builder: null, picker: null, summary: null },
+            mapMarkers: new Map()
         };
 
-        // --- Custom Dialog System ---
-        const Dialog = {
-            el: document.getElementById('confirm-modal'),
-            box: document.getElementById('confirm-box'),
-            title: document.getElementById('confirm-title'),
-            text: document.getElementById('confirm-text'),
-            icon: document.getElementById('confirm-icon'),
-            okBtn: document.getElementById('confirm-ok-btn'),
-            cancelBtn: document.getElementById('confirm-cancel-btn'),
-            
-            show(title, text, onConfirm, iconClass = 'fa-question') {
-                this.title.textContent = title;
-                this.text.textContent = text;
-                this.icon.className = `fas ${iconClass}`;
-                
-                this.el.classList.remove('hidden');
-                // Force reflow
-                void this.el.offsetWidth;
-                this.el.classList.remove('opacity-0', 'pointer-events-none');
-                this.box.classList.remove('scale-95');
-                this.box.classList.add('scale-100');
+        const categoryConfig = {
+            "מסעדה/אוכל": { icon: "fa-utensils", color: "#f97316", bg: "#ffedd5", label: "אוכל" },
+            "מלון": { icon: "fa-bed", color: "#8b5cf6", bg: "#f3e8ff", label: "לינה" },
+            "מוזיאון": { icon: "fa-landmark", color: "#64748b", bg: "#f1f5f9", label: "תרבות" },
+            "קניון/מרכז קניות": { icon: "fa-bag-shopping", color: "#ec4899", bg: "#fce7f3", label: "קניות" },
+            "אטרקציה": { icon: "fa-star", color: "#eab308", bg: "#fef9c3", label: "אטרקציה" },
+            "חוף": { icon: "fa-umbrella-beach", color: "#06b6d4", bg: "#cffafe", label: "חוף" },
+            "סיור": { icon: "fa-person-hiking", color: "#10b981", bg: "#d1fae5", label: "טבע" },
+            "סופר": { icon: "fa-cart-shopping", color: "#6366f1", bg: "#e0e7ff", label: "סופר" },
+            "other": { icon: "fa-note-sticky", color: "#94a3b8", bg: "#f8fafc", label: "הערה" },
+            "default": { icon: "fa-location-dot", color: "#ef4444", bg: "#fee2e2", label: "כללי" }
+        };
 
-                // Handlers
-                const close = () => {
-                    this.el.classList.add('opacity-0', 'pointer-events-none');
-                    this.box.classList.remove('scale-100');
-                    this.box.classList.add('scale-95');
-                    setTimeout(() => this.el.classList.add('hidden'), 200);
-                };
-
-                this.okBtn.onclick = () => {
-                    onConfirm();
-                    close();
-                };
-                this.cancelBtn.onclick = close;
+        // === UI Helpers ===
+        window.toggleModal = (id, show) => {
+            const el = document.getElementById(id);
+            if (show) {
+                el.classList.remove('hidden');
+                el.classList.add('flex');
+                // Animation reset
+                const content = el.querySelector('.modal-content');
+                if(content) {
+                    content.classList.remove('animate-slide-up');
+                    void content.offsetWidth; // trigger reflow
+                    content.classList.add('animate-slide-up');
+                }
+            } else {
+                el.classList.add('hidden');
+                el.classList.remove('flex');
             }
         };
 
-        // --- Init ---
-        async function initPage() {
+        window.closeModal = (id) => window.toggleModal(id, false);
+
+        window.showToast = (msg, isError = false) => {
+            const el = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            const icon = el.querySelector('i');
+            icon.className = isError ? "fas fa-circle-exclamation text-red-400 text-lg" : "fas fa-check-circle text-green-400 text-lg";
+            
+            el.classList.remove('-translate-y-24', 'opacity-0');
+            if(window.toastTimeout) clearTimeout(window.toastTimeout);
+            window.toastTimeout = setTimeout(() => el.classList.add('-translate-y-24', 'opacity-0'), 3000);
+        };
+
+        window.customAlert = (title, message) => {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-message').textContent = message;
+            window.toggleModal('alert-modal', true);
+        };
+
+        window.customConfirm = (title, message, onConfirm) => {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            
+            const btn = document.getElementById('confirm-ok-btn');
+            // Clone to remove old listeners
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.onclick = () => {
+                onConfirm();
+                window.toggleModal('confirm-modal', false);
+            };
+            
+            document.getElementById('confirm-cancel-btn').onclick = () => window.toggleModal('confirm-modal', false);
+            window.toggleModal('confirm-modal', true);
+        };
+
+        // === Init ===
+        async function init() {
             const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('id') || urlParams.get('tripId');
+            state.tripId = urlParams.get('id') || urlParams.get('tripId');
             const routeId = urlParams.get('routeId');
 
-            if (!tripId) {
-                // Fallback for demo purposes if no ID
-                tripId = 'demo-trip'; 
-                // In real app: window.location.href = 'index.html';
+            if (!state.tripId) {
+                showToast("שגיאה: מזהה טיול חסר", true);
+                document.getElementById('loading-overlay').classList.add('hidden');
+                return;
             }
+
+            document.getElementById('back-to-trip-btn').onclick = () => window.location.href = `trip.html?id=${state.tripId}`;
 
             onAuthStateChanged(auth, async (user) => {
                 if (!user) {
-                    window.location.href = 'login.html'; // Assuming this page exists
+                    window.location.href = 'login.html';
                     return;
                 }
-                currentUser = user;
+                state.user = user;
                 document.getElementById('auth-container').textContent = user.displayName?.split(' ')[0] || "משתמש";
 
                 try {
-                    await Promise.all([loadTripData(), loadAllPlaces(), loadAllHotels()]);
+                    await loadData();
                     
                     if (routeId) {
-                        await loadRouteForEdit(routeId);
+                        await loadRoute(routeId);
                     } else {
-                        populateDestinationSelect();
-                        hideLoader();
+                        setupInitialView();
                     }
                     
-                    setupEventListeners();
-                    setupTouchDrag();
+                    document.getElementById('loading-overlay').style.opacity = '0';
+                    setTimeout(() => document.getElementById('loading-overlay').style.display = 'none', 500);
+                    document.getElementById('main-content').classList.remove('hidden');
+                    
+                    setupListeners();
                 } catch (error) {
-                    console.error("Data Load Error:", error);
-                    hideLoader();
-                    showToast("שגיאה בטעינת נתונים", true);
+                    console.error(error);
+                    showToast("שגיאה בטעינת הנתונים", true);
+                    document.getElementById('loading-overlay').style.display = 'none';
                 }
             });
         }
 
-        function hideLoader() {
-            const loader = document.getElementById('loading-overlay');
-            loader.classList.add('opacity-0');
-            setTimeout(() => {
-                loader.style.display = 'none';
-                document.getElementById('main-content').classList.remove('hidden');
-            }, 500);
+        async function loadData() {
+            const [tripSnap, placesSnap, hotelsSnap] = await Promise.all([
+                getDoc(doc(db, 'trips', state.tripId)),
+                getDocs(query(collection(db, 'trips', state.tripId, 'places'))),
+                getDocs(query(collection(db, 'trips', state.tripId, 'logistics'), where("type", "==", "hotel")))
+            ]);
+
+            if (tripSnap.exists()) state.tripData = tripSnap.data();
+            state.places = placesSnap.docs.map(d => ({ id: d.id, ...d.data(), pointType: 'place' }));
+            state.hotels = hotelsSnap.docs.map(d => ({ id: d.id, ...d.data(), pointType: 'hotel', type: 'מלון' }));
         }
 
-        // --- Data Loading ---
-        async function loadTripData() {
-            try {
-                const docSnap = await getDoc(doc(db, 'trips', tripId));
-                if (docSnap.exists()) tripData = docSnap.data();
-            } catch (e) { console.log('Simulating trip data for demo'); tripData = { destinations: [{nameHe: 'תל אביב'}, {nameHe: 'ירושלים'}, {nameHe: 'אילת'}] }; }
-        }
-
-        async function loadAllPlaces() {
-            try {
-                const q = query(collection(db, 'trips', tripId, 'places'));
-                const snapshot = await getDocs(q);
-                allPlaces = snapshot.docs.map(d => ({ id: d.id, ...d.data(), pointType: 'place' }));
-            } catch (e) { allPlaces = []; }
-        }
-
-        async function loadAllHotels() {
-             try {
-                const q = query(collection(db, 'trips', tripId, 'logistics'), where("type", "==", "hotel"));
-                const snapshot = await getDocs(q);
-                allHotels = snapshot.docs.map(d => ({ id: d.id, ...d.data(), pointType: 'hotel', type: 'מלון' }));
-            } catch (e) { allHotels = []; }
-        }
-
-        async function loadRouteForEdit(routeId) {
-            const docSnap = await getDoc(doc(db, 'trips', tripId, 'routes', routeId));
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                currentRoute = { id: docSnap.id, ...data };
-                startRouteBuilding(currentRoute.name, currentRoute.destination);
-                document.getElementById('is-public-toggle').checked = currentRoute.isPublic;
-            }
-        }
-
-        function populateDestinationSelect() {
+        function setupInitialView() {
             const select = document.getElementById('destination-select');
-            select.innerHTML = '<option value="" disabled selected>בחר יעד...</option>';
-            tripData?.destinations?.forEach(d => {
+            select.innerHTML = '<option value="" disabled selected>בחירת יעד...</option>';
+            state.tripData?.destinations?.forEach(d => {
                 const opt = document.createElement('option');
                 opt.value = d.nameHe;
                 opt.textContent = d.nameHe;
@@ -531,67 +630,54 @@
             });
         }
 
-        // --- Logic ---
-        function startRouteBuilding(name, destination) {
-            currentRoute.name = name;
-            currentRoute.destination = destination;
-            currentRoute.createdBy = currentRoute.createdBy || currentUser.uid;
-            currentRoute.tripId = tripId;
+        async function loadRoute(routeId) {
+            const docSnap = await getDoc(doc(db, 'trips', state.tripId, 'routes', routeId));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                state.route = { id: docSnap.id, ...data };
+                startBuilderMode();
+                document.getElementById('is-public-toggle').checked = state.route.isPublic !== false;
+            }
+        }
 
+        // === Logic ===
+        function startBuilderMode() {
             document.getElementById('initial-state').classList.add('hidden');
             document.getElementById('building-state').classList.remove('hidden');
             document.getElementById('summary-view').classList.add('hidden');
 
-            document.getElementById('route-title').textContent = name;
-            document.getElementById('route-destination').textContent = destination;
-            
-            availablePoints = [...allPlaces, ...allHotels].filter(p => !p.destination || p.destination === destination);
+            document.getElementById('route-title').textContent = state.route.name;
+            document.getElementById('route-destination').textContent = state.route.destination;
 
-            // Populate Filter Categories
-            const cats = [...new Set(availablePoints.map(p => p.type || 'Other'))];
-            const filterContainer = document.getElementById('category-filters-container');
-            filterContainer.innerHTML = `
-                <button data-cat="all" class="cat-filter-btn active bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors">הכל</button>
-                ${cats.map(c => `<button data-cat="${c}" class="cat-filter-btn bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors">${c}</button>`).join('')}
-            `;
-            
-            // Filter click logic
-            filterContainer.querySelectorAll('.cat-filter-btn').forEach(btn => {
-                btn.onclick = () => {
-                    filterContainer.querySelectorAll('.cat-filter-btn').forEach(b => {
-                        b.classList.remove('bg-slate-800', 'text-white');
-                        b.classList.add('bg-slate-100', 'text-slate-600');
-                    });
-                    btn.classList.remove('bg-slate-100', 'text-slate-600');
-                    btn.classList.add('bg-slate-800', 'text-white');
-                    renderModalPlaces(btn.dataset.cat);
-                };
-            });
+            // Filter points
+            state.availablePoints = [...state.places, ...state.hotels].filter(p => 
+                !p.destination || p.destination === state.route.destination
+            );
 
-            toggleModal('create-route-modal', false);
-            renderRouteSteps();
+            renderSteps();
+            generateFilterChips();
         }
 
-        function renderRouteSteps() {
+        function renderSteps() {
             const container = document.getElementById('route-steps-container');
             container.innerHTML = '';
 
-            if (currentRoute.steps.length === 0) {
+            if (state.route.steps.length === 0) {
                 document.getElementById('start-prompt').classList.remove('hidden');
                 return;
             }
             document.getElementById('start-prompt').classList.add('hidden');
 
-            currentRoute.steps.forEach((step, index) => {
+            state.route.steps.forEach((step, index) => {
                 const config = categoryConfig[step.type] || categoryConfig.default;
-                const prevStep = currentRoute.steps[index - 1];
+                const prevStep = state.route.steps[index - 1];
                 let distHTML = '';
 
                 if (prevStep && prevStep.coords && step.coords) {
                     const dist = calculateDistance(prevStep.coords, step.coords);
                     distHTML = `
-                        <div class="flex justify-end pr-[3.75rem] -my-1 relative z-0">
-                            <span class="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                        <div class="flex justify-end pr-[3.2rem] -mt-2 mb-1 relative z-10">
+                            <span class="text-[10px] font-bold text-slate-400 bg-white/80 backdrop-blur px-2 py-0.5 rounded-full border border-slate-100 flex items-center gap-1 shadow-sm">
                                 <i class="fas fa-person-walking"></i> ${dist.toFixed(1)} ק"מ
                             </span>
                         </div>
@@ -601,226 +687,327 @@
                 const el = document.createElement('div');
                 el.className = 'route-step relative animate-fade-in group';
                 el.dataset.index = index;
-                el.draggable = true;
-                
-                // Add a small delay for animation staggering
-                el.style.animationDelay = `${index * 50}ms`;
-
                 el.innerHTML = `
                     <div class="timeline-line"></div>
                     ${distHTML}
-                    <div class="flex items-center gap-3 p-3.5 bg-white rounded-2xl border border-slate-100 shadow-soft z-10 relative select-none mt-2 active:scale-[0.98] transition-transform">
-                        <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-slate-500 bg-slate-100 border border-slate-200 z-10">
+                    <div class="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 shadow-sm relative select-none">
+                        <!-- Number -->
+                        <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-slate-500 bg-slate-50 border border-slate-100 z-10">
                             ${index + 1}
                         </div>
                         
-                        <div class="shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center text-lg shadow-sm" style="background:${config.bg}; color:${config.color}">
+                        <!-- Icon -->
+                        <div class="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-lg shadow-sm" style="background:${config.bg}; color:${config.color}">
                             <i class="fas ${config.icon}"></i>
                         </div>
                         
+                        <!-- Text -->
                         <div class="flex-grow min-w-0">
-                            <h4 class="font-bold text-slate-800 text-sm truncate leading-tight">${step.name}</h4>
-                            <p class="text-xs text-slate-500 truncate mt-0.5">${step.description || step.type}</p>
+                            <h4 class="font-bold text-slate-800 text-sm truncate leading-snug">${step.name}</h4>
+                            <p class="text-xs text-slate-500 truncate">${step.description || step.type}</p>
                         </div>
                         
+                        <!-- Actions -->
                         <div class="flex items-center gap-1 pl-1">
-                            <button class="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-indigo-500 drag-handle cursor-grab active:cursor-grabbing touch-none">
+                            <button class="drag-handle w-9 h-9 flex items-center justify-center text-slate-300 hover:text-indigo-500 active:text-indigo-600 rounded-lg touch-manipulation cursor-grab active:cursor-grabbing">
                                 <i class="fas fa-grip-vertical"></i>
                             </button>
-                            <button class="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors remove-btn">
+                            <button class="remove-btn w-9 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                                 <i class="fas fa-trash-can"></i>
                             </button>
                         </div>
                     </div>
+                    <div class="h-3"></div> <!-- Spacer -->
                 `;
 
                 // Events
-                const handle = el.querySelector('.drag-handle');
-                handle.onmousedown = () => { el.draggable = true; };
-                el.querySelector('.remove-btn').onclick = () => {
-                     Dialog.show('מחיקת נקודה', `למחוק את ${step.name} מהמסלול?`, () => removeStep(index), 'fa-trash-can');
+                const removeBtn = el.querySelector('.remove-btn');
+                removeBtn.onclick = () => {
+                    // Slight vibration
+                    if(navigator.vibrate) navigator.vibrate(10);
+                    el.classList.add('opacity-0', '-translate-x-full');
+                    setTimeout(() => {
+                        state.route.steps.splice(index, 1);
+                        renderSteps();
+                    }, 200);
                 };
-
+                
+                // Drag Logic Setup
+                setupDragItem(el, index);
+                
                 container.appendChild(el);
             });
             
-            // Auto scroll to bottom if new item added
+            // Auto scroll to bottom if added
             // container.parentElement.scrollTop = container.parentElement.scrollHeight;
         }
 
-        function renderModalPlaces(category = 'all') {
-            const search = document.getElementById('modal-search-input').value.toLowerCase();
-            const container = document.getElementById('modal-places-list-container');
+        // === Drag & Drop System (Unified Touch/Mouse) ===
+        function setupDragItem(el, index) {
+            const handle = el.querySelector('.drag-handle');
             
-            let sortPoint = null;
-            const lastStep = [...currentRoute.steps].reverse().find(s => s.coords);
-            if (lastStep) sortPoint = lastStep.coords;
+            // Mouse API
+            el.draggable = true;
+            
+            el.addEventListener('dragstart', (e) => {
+                state.draggedIndex = index;
+                el.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                // Ghost image fix if needed
+            });
+            
+            el.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const target = e.target.closest('.route-step');
+                if (target && target !== el) {
+                    const rect = target.getBoundingClientRect();
+                    const offset = e.clientY - rect.top - rect.height / 2;
+                    // Simple swap visual
+                    document.querySelectorAll('.drag-over-item').forEach(i => i.classList.remove('drag-over-item'));
+                    target.classList.add('drag-over-item');
+                }
+            });
+            
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const target = e.target.closest('.route-step');
+                if (target) {
+                    const toIndex = parseInt(target.dataset.index);
+                    moveStep(state.draggedIndex, toIndex);
+                }
+                cleanupDrag();
+            });
+            
+            el.addEventListener('dragend', cleanupDrag);
 
-            const filtered = availablePoints.filter(p => 
-                (category === 'all' || p.type === category) &&
-                (p.name.toLowerCase().includes(search))
-            ).map(p => {
-                p._dist = (sortPoint && p.coords) ? calculateDistance(sortPoint, p.coords) : Infinity;
+            // Touch API (Custom Implementation)
+            handle.addEventListener('touchstart', (e) => {
+                // Prevent scrolling when touching handle
+                e.preventDefault();
+                state.draggedIndex = index;
+                el.classList.add('dragging');
+                if(navigator.vibrate) navigator.vibrate(20);
+            }, {passive: false});
+
+            handle.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.route-step');
+                
+                document.querySelectorAll('.drag-over-item').forEach(i => i.classList.remove('drag-over-item'));
+                if (target && target.dataset.index != state.draggedIndex) {
+                    target.classList.add('drag-over-item');
+                }
+            }, {passive: false});
+
+            handle.addEventListener('touchend', (e) => {
+                 const touch = e.changedTouches[0];
+                 const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.route-step');
+                 if (target) {
+                     const toIndex = parseInt(target.dataset.index);
+                     if (toIndex !== state.draggedIndex) moveStep(state.draggedIndex, toIndex);
+                 }
+                 cleanupDrag();
+            });
+        }
+
+        function cleanupDrag() {
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            document.querySelectorAll('.drag-over-item').forEach(el => el.classList.remove('drag-over-item'));
+            state.draggedIndex = null;
+        }
+
+        function moveStep(from, to) {
+            const item = state.route.steps.splice(from, 1)[0];
+            state.route.steps.splice(to, 0, item);
+            renderSteps();
+        }
+
+        // === Place Selection ===
+        function generateFilterChips() {
+            const container = document.getElementById('filter-chips-container');
+            const cats = ['all', ...new Set(state.availablePoints.map(p => p.type || 'default'))];
+            
+            container.innerHTML = cats.map(c => {
+                const conf = categoryConfig[c] || categoryConfig.default;
+                const label = c === 'all' ? 'הכל' : (conf.label || c);
+                const isActive = c === 'all';
+                return `
+                    <button class="filter-chip px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}" data-cat="${c}">
+                        ${label}
+                    </button>
+                `;
+            }).join('');
+
+            container.querySelectorAll('.filter-chip').forEach(btn => {
+                btn.onclick = () => {
+                    container.querySelectorAll('.filter-chip').forEach(b => {
+                        b.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+                        b.classList.add('bg-white', 'text-slate-600', 'border-slate-200');
+                    });
+                    btn.classList.remove('bg-white', 'text-slate-600', 'border-slate-200');
+                    btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+                    renderModalPlaces(btn.dataset.cat);
+                }
+            });
+            renderModalPlaces('all');
+        }
+
+        function renderModalPlaces(category = 'all', searchTerm = '') {
+            searchTerm = document.getElementById('modal-search-input').value.toLowerCase();
+            const list = document.getElementById('modal-places-list-container');
+            
+            // Sort by distance to last point if exists
+            let lastPoint = null;
+            const routePoints = state.route.steps.filter(s => s.coords);
+            if (routePoints.length > 0) lastPoint = routePoints[routePoints.length - 1].coords;
+
+            const filtered = state.availablePoints.filter(p => {
+                 const matchesCat = category === 'all' || p.type === category;
+                 const matchesSearch = p.name.toLowerCase().includes(searchTerm);
+                 return matchesCat && matchesSearch;
+            }).map(p => {
+                p._dist = (lastPoint && p.coords) ? calculateDistance(lastPoint, p.coords) : Infinity;
                 return p;
             }).sort((a, b) => {
-                if (sortPoint) return a._dist - b._dist;
+                if (lastPoint) return a._dist - b._dist;
                 return a.name.localeCompare(b.name, 'he');
             });
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="text-center p-10 text-slate-400 flex flex-col items-center">
-                    <i class="fas fa-search text-3xl mb-2 opacity-50"></i>
-                    <span>לא נמצאו תוצאות</span>
-                </div>`;
+                list.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-10 text-slate-400">
+                        <i class="fas fa-search text-3xl mb-2 opacity-50"></i>
+                        <p>לא נמצאו תוצאות</p>
+                    </div>`;
                 return;
             }
 
-            container.innerHTML = filtered.map(p => {
+            list.innerHTML = filtered.map(p => {
                 const config = categoryConfig[p.type] || categoryConfig.default;
-                const distBadge = p._dist !== Infinity ? 
-                    `<span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold mr-auto">${p._dist.toFixed(1)} ק"מ</span>` : '';
+                const distBadge = p._dist !== Infinity ? `<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2 border border-slate-200">${p._dist.toFixed(1)} ק"מ</span>` : '';
                 
                 return `
-                <div class="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-[0.98] transition-transform place-item overflow-hidden" onclick="window.addPlaceToRoute('${p.id}')">
-                    <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0" style="background:${config.bg}; color:${config.color}">
-                        <i class="fas ${config.icon}"></i>
-                    </div>
-                    <div class="flex-grow min-w-0 flex flex-col">
-                        <div class="flex items-center justify-between w-full">
-                            <h4 class="font-bold text-slate-800 text-sm truncate">${p.name}</h4>
-                            ${distBadge}
+                    <div class="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-100 hover:border-indigo-400 transition-all cursor-pointer group" onclick="window.addStep('${p.id}')">
+                         <div class="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0" style="background:${config.bg}; color:${config.color}">
+                            <i class="fas ${config.icon}"></i>
                         </div>
-                        <p class="text-xs text-slate-500">${p.type}</p>
+                        <div class="flex-grow min-w-0">
+                             <div class="flex items-center">
+                                <h4 class="font-bold text-slate-800 text-sm truncate">${p.name}</h4>
+                                ${distBadge}
+                            </div>
+                            <p class="text-xs text-slate-500">${p.type}</p>
+                        </div>
+                        <button class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            <i class="fas fa-plus"></i>
+                        </button>
                     </div>
-                    <button class="w-9 h-9 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center shrink-0">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                </div>`;
+                `;
             }).join('');
         }
 
-        window.addPlaceToRoute = (id) => {
-            const point = availablePoints.find(p => p.id === id);
-            if (!point) return;
-            currentRoute.steps.push({ ...point }); 
-            renderRouteSteps();
-            showToast(`נוסף: ${point.name}`);
-            toggleModal('add-place-modal', false);
+        window.addStep = (id) => {
+            const point = state.availablePoints.find(p => p.id === id);
+            if (point) {
+                state.route.steps.push({ ...point });
+                renderSteps();
+                showToast(`נוסף: ${point.name}`);
+                if (window.innerWidth < 640) window.toggleModal('add-place-modal', false);
+            }
         };
 
-        function removeStep(index) {
-            currentRoute.steps.splice(index, 1);
-            renderRouteSteps();
-        }
-
+        // === Actions ===
         function organizeRoute() {
-             Dialog.show('סידור אוטומטי', 'המסלול יסודר מחדש לפי המרחק הקצר ביותר בין הנקודות. להמשיך?', () => {
-                 // Logic
-                const withCoords = currentRoute.steps.filter(s => s.coords);
-                const noCoords = currentRoute.steps.filter(s => !s.coords);
-                if (withCoords.length < 2) return showToast("אין מספיק נקודות לסידור", true);
+            if (state.route.steps.filter(s => s.coords).length < 2) {
+                showToast("אין מספיק נקודות עם מיקום לסידור", true);
+                return;
+            }
 
-                let sorted = [withCoords.shift()];
-                while (withCoords.length > 0) {
-                    const current = sorted[sorted.length - 1];
-                    let nearestIdx = 0, minDst = Infinity;
-                    withCoords.forEach((p, i) => {
-                        const dst = calculateDistance(current.coords, p.coords);
-                        if (dst < minDst) { minDst = dst; nearestIdx = i; }
-                    });
-                    sorted.push(withCoords.splice(nearestIdx, 1)[0]);
-                }
-                currentRoute.steps = [...sorted, ...noCoords];
-                renderRouteSteps();
-                showToast("המסלול סודר בהצלחה");
-            }, 'fa-wand-magic-sparkles');
+            // Nearest Neighbor Algo
+            const withCoords = state.route.steps.filter(s => s.coords);
+            const others = state.route.steps.filter(s => !s.coords);
+            
+            let sorted = [withCoords.shift()];
+            while (withCoords.length > 0) {
+                const current = sorted[sorted.length - 1];
+                let nearestIdx = 0, minDst = Infinity;
+                withCoords.forEach((p, i) => {
+                    const dst = calculateDistance(current.coords, p.coords);
+                    if (dst < minDst) { minDst = dst; nearestIdx = i; }
+                });
+                sorted.push(withCoords.splice(nearestIdx, 1)[0]);
+            }
+            
+            state.route.steps = [...sorted, ...others];
+            renderSteps();
+            showToast("המסלול סודר מחדש");
         }
 
-        // --- Save & View ---
         async function saveRoute() {
             const btn = document.getElementById('save-route-btn');
             const originalHTML = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> שומר...';
-            
+            btn.disabled = true;
+
             try {
-                currentRoute.isPublic = document.getElementById('is-public-toggle').checked;
-                const routeData = { ...currentRoute, updatedAt: new Date() };
+                state.route.isPublic = document.getElementById('is-public-toggle').checked;
+                state.route.createdBy = state.route.createdBy || state.user.uid;
+                state.route.tripId = state.tripId;
                 
-                if (currentRoute.id) {
-                    await setDoc(doc(db, 'trips', tripId, 'routes', currentRoute.id), routeData);
+                const dataToSave = { ...state.route, updatedAt: new Date() };
+
+                if (state.route.id) {
+                    await setDoc(doc(db, 'trips', state.tripId, 'routes', state.route.id), dataToSave);
                 } else {
-                    const ref = await addDoc(collection(db, 'trips', tripId, 'routes'), routeData);
-                    currentRoute.id = ref.id;
+                    const ref = await addDoc(collection(db, 'trips', state.tripId, 'routes'), dataToSave);
+                    state.route.id = ref.id;
+                    dataToSave.id = ref.id; // Ensure ID is in public record
                 }
-                showToast("המסלול נשמר בהצלחה!");
-                renderSummaryView();
+
+                // Handle public route logic
+                if (state.route.isPublic) {
+                    await setDoc(doc(db, 'publicRoutes', state.route.id), dataToSave);
+                } else {
+                    try { await deleteDoc(doc(db, 'publicRoutes', state.route.id)); } catch(e){}
+                }
+
+                showSummary();
             } catch (e) {
                 console.error(e);
                 showToast("שגיאה בשמירה", true);
             } finally {
                 btn.innerHTML = originalHTML;
+                btn.disabled = false;
             }
         }
 
-        function renderSummaryView() {
+        // === Summary & Map ===
+        function showSummary() {
             document.getElementById('building-state').classList.add('hidden');
-            const summary = document.getElementById('summary-view');
-            summary.classList.remove('hidden');
+            document.getElementById('summary-view').classList.remove('hidden');
+            
+            document.getElementById('summary-title').textContent = state.route.name;
+            document.getElementById('summary-details').innerHTML = `
+                <span><i class="fas fa-map-pin ml-1"></i> ${state.route.destination}</span>
+                <span class="border-r border-indigo-400/30 pr-3 mr-3"><i class="fas fa-stopwatch ml-1"></i> ${state.route.steps.length} תחנות</span>
+            `;
 
-            summary.innerHTML = `
-                <div class="flex flex-col h-full relative">
-                    <div class="bg-indigo-600 text-white p-6 pt-8 pb-14 rounded-b-[40px] shadow-xl relative z-10">
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <h1 class="text-3xl font-extrabold mb-1">${currentRoute.name}</h1>
-                                <p class="text-indigo-200 text-sm flex items-center gap-2">
-                                    <i class="fas fa-location-dot"></i> ${currentRoute.destination}
-                                </p>
-                            </div>
-                            <button onclick="editRoute()" class="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl backdrop-blur transition-colors">
-                                <i class="fas fa-pen text-sm"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="absolute -bottom-8 left-6 right-6 flex shadow-lg rounded-2xl overflow-hidden">
-                             <button onclick="shareRoute()" class="flex-1 bg-white text-indigo-900 py-4 font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 border-l border-slate-100">
-                                <i class="fas fa-share-nodes text-indigo-500"></i> שתף
-                             </button>
-                             <button onclick="window.print()" class="flex-1 bg-white text-indigo-900 py-4 font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
-                                <i class="fas fa-print text-indigo-500"></i> הדפס
-                             </button>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-12 px-6 mb-2 flex justify-center">
-                        <div class="bg-slate-200 p-1 rounded-xl flex w-full max-w-sm">
-                            <button onclick="switchTab('list')" id="tab-list" class="flex-1 py-2 rounded-lg bg-white shadow-sm text-slate-800 font-bold text-sm transition-all">רשימה</button>
-                            <button onclick="switchTab('map')" id="tab-map" class="flex-1 py-2 rounded-lg text-slate-500 font-bold text-sm transition-all hover:text-slate-700">מפה</button>
-                        </div>
-                    </div>
-
-                    <div class="flex-grow overflow-hidden bg-slate-50 relative">
-                        <div id="summary-content-list" class="h-full overflow-y-auto p-4 space-y-3 pb-10">
-                            ${currentRoute.steps.map((s, i) => `
-                                <div class="flex items-start gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                                    <div class="font-bold text-lg text-indigo-600 min-w-[1.5rem] mt-0.5">${i+1}.</div>
-                                    <div>
-                                        <h3 class="font-bold text-slate-800 text-base">${s.name}</h3>
-                                        <p class="text-sm text-slate-500">${s.description || s.type}</p>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <div id="summary-content-map" class="hidden absolute inset-0 w-full h-full z-0">
-                             <div id="final-map" class="w-full h-full"></div>
-                        </div>
+            const listContent = document.getElementById('summary-content-list');
+            listContent.innerHTML = state.route.steps.map((s, i) => `
+                <div class="flex items-start gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
+                    <div class="font-bold text-lg text-indigo-600 w-6">${i+1}.</div>
+                    <div>
+                        <h3 class="font-bold text-slate-800">${s.name}</h3>
+                        <p class="text-sm text-slate-500">${s.description || s.type}</p>
                     </div>
                 </div>
-            `;
+            `).join('');
+
+            window.switchTab('list');
         }
 
-        window.editRoute = () => {
+        window.closeSummary = () => {
             document.getElementById('summary-view').classList.add('hidden');
             document.getElementById('building-state').classList.remove('hidden');
         };
@@ -834,64 +1021,56 @@
             if (tab === 'list') {
                 listDiv.classList.remove('hidden');
                 mapDiv.classList.add('hidden');
-                tabList.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
-                tabList.classList.remove('text-slate-500');
-                tabMap.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
-                tabMap.classList.add('text-slate-500');
+                tabList.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all shadow-sm bg-white text-indigo-600";
+                tabMap.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all text-slate-500 hover:bg-white/50";
             } else {
                 listDiv.classList.add('hidden');
                 mapDiv.classList.remove('hidden');
-                tabMap.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
-                tabMap.classList.remove('text-slate-500');
-                tabList.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
-                tabList.classList.add('text-slate-500');
+                tabMap.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all shadow-sm bg-white text-indigo-600";
+                tabList.className = "flex-1 py-2 rounded-lg text-sm font-bold transition-all text-slate-500 hover:bg-white/50";
                 
-                setTimeout(() => {
-                    initMap('final-map', currentRoute.steps);
-                }, 100);
+                // Initialize map with delay to ensure container has size
+                setTimeout(() => initLeafletMap('final-map', state.route.steps, false), 100);
             }
         };
 
-        window.shareRoute = () => {
-             if (navigator.share) {
-                navigator.share({
-                    title: currentRoute.name,
-                    text: `המסלול שלי ל${currentRoute.destination}`,
-                    url: window.location.href
-                }).catch(console.error);
-             } else {
-                 const txt = currentRoute.steps.map((s, i) => `${i+1}. ${s.name}`).join('\n');
-                 navigator.clipboard.writeText(txt);
-                 showToast("הועתק ללוח!");
-             }
-        }
+        window.copyLink = () => {
+             const txt = state.route.steps.map((s, i) => `${i+1}. ${s.name}`).join('\n');
+             navigator.clipboard.writeText(`המסלול שלי ל${state.route.destination}:\n${txt}`);
+             showToast("הועתק ללוח!");
+        };
 
-        // --- Map ---
-        function initMap(divId, points = [], isSelectionMode = false) {
-            const el = document.getElementById(divId);
-            if (!el) return;
+        // === Leaflet Map Logic ===
+        function initLeafletMap(divId, points, isPicker) {
+            const container = document.getElementById(divId);
+            if (!container) return;
+
+            // Cleanup old map if exists in this container (using a global tracker for simplicity)
+            const mapKey = isPicker ? 'picker' : 'summary';
+            if (state.maps[mapKey]) {
+                state.maps[mapKey].remove();
+                state.maps[mapKey] = null;
+            }
+
+            const map = L.map(divId, { zoomControl: false }).setView([31.768, 35.213], 8);
+            state.maps[mapKey] = map;
             
-            // Clean up existing map instance
-            if (map) { map.remove(); map = null; }
-            
-            map = L.map(divId, { zoomControl: false }).setView([31.768, 35.213], 8);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: ''
             }).addTo(map);
 
             const group = L.featureGroup();
-            const pointsToRender = isSelectionMode ? availablePoints : points;
-
             const latlngs = [];
-            
+
+            const pointsToRender = isPicker ? state.availablePoints : points;
+
             pointsToRender.forEach((p, i) => {
                 if (!p.coords) return;
                 const config = categoryConfig[p.type] || categoryConfig.default;
-                
-                if (!isSelectionMode) latlngs.push([p.coords.lat, p.coords.lng]);
+                latlngs.push([p.coords.lat, p.coords.lng]);
 
                 const icon = L.divIcon({
-                    className: 'custom-div-icon',
+                    className: 'bg-transparent',
                     html: `<div class="custom-marker" style="background:${config.color}; width:36px; height:36px; color:white;">
                             <i class="fas ${config.icon} text-sm"></i>
                            </div>`,
@@ -902,129 +1081,100 @@
 
                 const marker = L.marker([p.coords.lat, p.coords.lng], { icon }).addTo(map);
                 
-                if (isSelectionMode) {
+                if (isPicker) {
                     marker.on('click', () => {
-                         Dialog.show('הוספת מקום', `להוסיף את ${p.name} למסלול?`, () => {
-                             window.addPlaceToRoute(p.id);
-                             toggleModal('map-selection-modal', false);
-                             toggleModal('add-place-modal', true);
-                         }, 'fa-map-pin');
+                        window.customConfirm(`הוספת ${p.name}`, `האם להוסיף את המקום למסלול?`, () => {
+                            window.addStep(p.id);
+                            window.closeModal('map-selection-modal');
+                            window.toggleModal('add-place-modal', true);
+                        });
                     });
                 } else {
-                    marker.bindPopup(`<div class="text-center"><b class="block text-indigo-600 mb-1">${i+1}. ${p.name}</b><span class="text-xs text-slate-500">${p.type}</span></div>`).addTo(group);
+                     marker.bindPopup(`<div class="text-right font-sans font-bold">${i+1}. ${p.name}</div>`).addTo(group);
                 }
                 group.addLayer(marker);
             });
 
-            if (latlngs.length > 0 && !isSelectionMode) {
-                L.polyline(latlngs, { color: '#6366f1', weight: 4, opacity: 0.8, dashArray: '10, 8', lineCap: 'round' }).addTo(map);
+            if (!isPicker && latlngs.length > 1) {
+                L.polyline(latlngs, { color: '#4f46e5', weight: 4, opacity: 0.8, dashArray: '10, 10', lineCap: 'round' }).addTo(map);
             }
-            
+
             if (group.getLayers().length > 0) {
-                 map.fitBounds(group.getBounds(), { padding: [50, 50] });
+                map.fitBounds(group.getBounds(), { padding: [50, 50] });
             }
-        }
-
-        // --- Touch & Drag ---
-        function setupTouchDrag() {
-            const container = document.getElementById('route-steps-container');
             
-            // Mouse Drag
-            container.addEventListener('dragstart', (e) => {
-                const item = e.target.closest('.route-step');
-                if(!item) return;
-                draggedItemIndex = parseInt(item.dataset.index);
-                item.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-            });
+            // Fix gray tiles
+            setTimeout(() => map.invalidateSize(), 200);
+        }
 
-            container.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                const item = e.target.closest('.route-step');
-                if (item && item !== document.querySelector('.dragging')) {
-                    document.querySelectorAll('.drag-over-item').forEach(el => el.classList.remove('drag-over-item'));
-                    item.classList.add('drag-over-item');
-                }
-            });
+        // === Event Listeners ===
+        function setupListeners() {
+            // Create Route Form
+            document.getElementById('create-route-btn').onclick = () => window.toggleModal('create-route-modal', true);
             
-            container.addEventListener('drop', (e) => {
+            document.getElementById('create-route-form').onsubmit = (e) => {
                 e.preventDefault();
-                const target = e.target.closest('.route-step');
-                if (target) {
-                    const toIndex = parseInt(target.dataset.index);
-                    if (draggedItemIndex !== null && draggedItemIndex !== toIndex) {
-                        const item = currentRoute.steps.splice(draggedItemIndex, 1)[0];
-                        currentRoute.steps.splice(toIndex, 0, item);
-                        renderRouteSteps();
-                    }
+                const name = document.getElementById('new-route-name').value;
+                const dest = document.getElementById('destination-select').value;
+                if(name && dest) {
+                    state.route.name = name;
+                    state.route.destination = dest;
+                    window.closeModal('create-route-modal');
+                    startBuilderMode();
                 }
-                draggedItemIndex = null;
-                document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-                document.querySelectorAll('.drag-over-item').forEach(el => el.classList.remove('drag-over-item'));
-            });
+            };
 
-            // Touch Drag (Custom Logic)
-            container.addEventListener('touchstart', (e) => {
-                const handle = e.target.closest('.drag-handle');
-                if (!handle) return;
-                
-                const item = handle.closest('.route-step');
-                touchStartY = e.touches[0].clientY;
-                
-                longPressTimer = setTimeout(() => {
-                    isTouchDragging = true;
-                    draggedItemIndex = parseInt(item.dataset.index);
-                    item.classList.add('dragging');
-                    if(navigator.vibrate) navigator.vibrate(50);
-                }, 200);
-            }, {passive: false});
+            // Add Place
+            document.getElementById('open-add-place-modal-btn').onclick = () => {
+                document.getElementById('modal-search-input').value = '';
+                generateFilterChips(); // Reset filters
+                window.toggleModal('add-place-modal', true);
+            };
+            document.getElementById('modal-search-input').oninput = () => renderModalPlaces();
 
-            container.addEventListener('touchmove', (e) => {
-                if (!isTouchDragging) {
-                    if (longPressTimer) clearTimeout(longPressTimer);
-                    return;
-                }
-                e.preventDefault(); // Stop scrolling
-                const touch = e.touches[0];
-                const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.route-step');
-                
-                document.querySelectorAll('.drag-over-item').forEach(el => el.classList.remove('drag-over-item'));
-                if (target && target.dataset.index != draggedItemIndex) target.classList.add('drag-over-item');
-            }, {passive: false});
+            // Map Selection
+            document.getElementById('open-map-selection-btn').onclick = () => {
+                window.toggleModal('add-place-modal', false);
+                window.toggleModal('map-selection-modal', true);
+                setTimeout(() => initLeafletMap('map-modal-container', [], true), 300);
+            };
+            
+            // Toggle map view in builder (mobile)
+            document.getElementById('toggle-map-view').onclick = () => {
+                 window.toggleModal('map-selection-modal', true);
+                 // Hack: pass current route points but treat as picker false visually but true functionally? 
+                 // Actually better to just show current route on map modal in read-only mode or something.
+                 // For simplicity, let's just show the picker map again but maybe zoom to route?
+                 setTimeout(() => initLeafletMap('map-modal-container', state.route.steps, false), 300);
+            };
 
-            container.addEventListener('touchend', (e) => {
-                if (longPressTimer) clearTimeout(longPressTimer);
-                if (isTouchDragging) {
-                    const touch = e.changedTouches[0];
-                    const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.route-step');
-                    if (target) {
-                        const toIndex = parseInt(target.dataset.index);
-                        if (draggedItemIndex !== null && draggedItemIndex !== toIndex) {
-                            const item = currentRoute.steps.splice(draggedItemIndex, 1)[0];
-                            currentRoute.steps.splice(toIndex, 0, item);
-                            renderRouteSteps();
-                        }
-                    }
-                }
-                isTouchDragging = false;
-                draggedItemIndex = null;
-                document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-                document.querySelectorAll('.drag-over-item').forEach(el => el.classList.remove('drag-over-item'));
-            });
+            // Add Note
+            document.getElementById('open-add-other-btn').onclick = () => {
+                document.getElementById('add-other-form').reset();
+                window.toggleModal('add-other-modal', true);
+            };
+            
+            document.getElementById('add-other-form').onsubmit = (e) => {
+                e.preventDefault();
+                const name = document.getElementById('other-name').value;
+                const desc = document.getElementById('other-description').value;
+                state.route.steps.push({ 
+                    id: crypto.randomUUID(), 
+                    name, 
+                    description: desc, 
+                    type: 'other', 
+                    coords: null 
+                });
+                renderSteps();
+                window.closeModal('add-other-modal');
+            };
+
+            // Main Actions
+            document.getElementById('save-route-btn').onclick = saveRoute;
+            document.getElementById('organize-route-btn').onclick = organizeRoute;
         }
 
-        // --- Helpers ---
-        function toggleModal(id, show) {
-            const el = document.getElementById(id);
-            if (show) {
-                el.classList.remove('hidden');
-                el.classList.add('flex');
-            } else {
-                el.classList.add('hidden');
-                el.classList.remove('flex');
-            }
-        }
-
+        // Utils
         function calculateDistance(c1, c2) {
             if (!c1 || !c2) return 0;
             const R = 6371; 
@@ -1036,81 +1186,9 @@
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        function showToast(msg, isError = false) {
-            const el = document.getElementById('toast');
-            document.getElementById('toast-message').textContent = msg;
-            el.querySelector('div').className = isError 
-                ? "w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 shrink-0" 
-                : "w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 shrink-0";
-            el.querySelector('i').className = isError ? "fas fa-exclamation text-xs" : "fas fa-check text-xs";
-            
-            el.classList.remove('-translate-y-24', 'opacity-0');
-            setTimeout(() => el.classList.add('-translate-y-24', 'opacity-0'), 3000);
-        }
+        // Start
+        init();
 
-        // --- Event Setup ---
-        function setupEventListeners() {
-            // New Route
-            document.getElementById('create-route-btn').onclick = () => toggleModal('create-route-modal', true);
-            document.getElementById('cancel-create-route').onclick = () => toggleModal('create-route-modal', false);
-            document.getElementById('create-route-form').onsubmit = (e) => {
-                e.preventDefault();
-                startRouteBuilding(
-                    document.getElementById('new-route-name').value,
-                    document.getElementById('destination-select').value
-                );
-            };
-
-            // Add Place
-            document.getElementById('open-add-place-modal-btn').onclick = () => {
-                document.getElementById('modal-search-input').value = '';
-                renderModalPlaces();
-                toggleModal('add-place-modal', true);
-            };
-            document.getElementById('close-add-place-modal-btn').onclick = () => toggleModal('add-place-modal', false);
-            document.getElementById('modal-search-input').oninput = () => renderModalPlaces();
-
-            // Map Selection
-            document.getElementById('open-map-selection-btn').onclick = () => {
-                toggleModal('add-place-modal', false);
-                toggleModal('map-selection-modal', true);
-                setTimeout(() => initMap('map-modal-container', [], true), 200);
-            };
-            document.getElementById('close-map-modal-btn').onclick = () => {
-                 toggleModal('map-selection-modal', false);
-                 toggleModal('add-place-modal', true);
-            };
-             document.getElementById('toggle-map-view').onclick = () => {
-                 toggleModal('map-selection-modal', true);
-                 setTimeout(() => initMap('map-modal-container', currentRoute.steps, false), 200);
-             }
-
-            // Other Note
-            document.getElementById('open-add-other-btn').onclick = () => {
-                document.getElementById('add-other-form').reset();
-                toggleModal('add-other-modal', true);
-            };
-            document.getElementById('cancel-add-other').onclick = () => toggleModal('add-other-modal', false);
-            document.getElementById('add-other-form').onsubmit = (e) => {
-                e.preventDefault();
-                currentRoute.steps.push({ 
-                    id: crypto.randomUUID(), 
-                    name: document.getElementById('other-name').value, 
-                    description: document.getElementById('other-description').value, 
-                    type: 'other', 
-                    coords: null 
-                });
-                renderRouteSteps();
-                toggleModal('add-other-modal', false);
-            };
-
-            // Main Actions
-            document.getElementById('save-route-btn').onclick = saveRoute;
-            document.getElementById('organize-route-btn').onclick = organizeRoute;
-        }
-
-        // Start App
-        initPage();
     </script>
 </body>
 </html>
