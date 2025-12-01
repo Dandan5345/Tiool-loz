@@ -143,20 +143,9 @@
       box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
     }
 
-    /* --- Accordion / Sidebar Styles --- */
-    .submenu { 
-        max-height: 0; 
-        overflow: hidden; 
-        transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
-    }
-    .submenu.open { 
-        max-height: 1200px; 
-    }
-    .chevron-icon { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-
-    /* Details styling for regular page content */
     details > summary { list-style: none; cursor: pointer; outline: none; }
     details > summary::-webkit-details-marker { display: none; }
+    .chevron-icon { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     details[open] > summary .chevron-icon { transform: rotate(180deg); }
 
     .modal-step { display: none; width: 100%; }
@@ -184,6 +173,16 @@
     .ac-item { padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; }
     .ac-item:last-child { border-bottom: none; }
     .ac-item:active { background: #e0f2fe; }
+
+    /* --- Sidebar Submenu Animation --- */
+    .submenu { 
+        max-height: 0; 
+        overflow: hidden; 
+        transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+    }
+    .submenu.open { 
+        max-height: 1200px; 
+    }
 
     /* --- Modal Mobile Optimization --- */
     @media (max-width: 640px) {
@@ -238,14 +237,14 @@
   </div>
 
   <!-- Sidebar -->
-  <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl z-[150] transform translate-x-full transition-transform duration-300 ease-out border-l border-white/20">
-    <div class="p-5 flex justify-between items-center border-b border-slate-100 bg-gradient-to-l from-cyan-50 to-transparent">
+  <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl z-[150] transform translate-x-full transition-transform duration-300 ease-out border-l border-white/20 flex flex-col">
+    <div class="p-5 flex justify-between items-center border-b border-slate-100 bg-gradient-to-l from-cyan-50 to-transparent shrink-0">
       <h2 class="text-2xl font-bold text-slate-800 font-rubik">תפריט המסע 🧭</h2>
       <button id="close-sidebar-btn" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 transition flex items-center justify-center shadow-sm">
         <i class="fas fa-times fa-lg"></i>
       </button>
     </div>
-    <nav id="main-menu" class="p-4 space-y-3 overflow-y-auto h-[calc(100%-80px)] pb-20"></nav>
+    <nav id="main-menu" class="p-4 space-y-3 overflow-y-auto flex-grow pb-20"></nav>
   </aside>
   
   <div id="overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] hidden transition-opacity duration-300"></div>
@@ -678,7 +677,7 @@
       return starsHtml;
     }
 
-    // --- Helper Functions for Dates (NEW) ---
+    // --- Helper Functions for Menu (Date Parsing) ---
     function parseDDMMYYYY(s) {
         if (!s || typeof s !== 'string') return null;
         const [d, m, y] = s.split('/').map(Number);
@@ -849,73 +848,78 @@
       } catch (e) { console.error('loadCustomSettings', e); }
     }
 
-    // --- REPLACED MENU BUILDER (FIXED) ---
+    // --- REPLACED FUNCTION START (Improved Menu Logic) ---
     function buildMenuFromTrip() {
       mainMenu.innerHTML = '';
       
       // קישור חזרה למרכז הבקרה (ראשי)
       const homeLink = document.createElement('a');
       homeLink.href = `index.html?tripId=${tripId}`; 
-      homeLink.className = 'block w-full text-right p-4 bg-white hover:bg-cyan-50 rounded-2xl font-bold text-slate-700 flex justify-between items-center shadow-sm border border-slate-100 transition-all mb-2';
-      homeLink.innerHTML = '<span class="flex items-center gap-3"><i class="fas fa-home text-cyan-500"></i> מרכז הבקרה</span>';
+      homeLink.className = 'block w-full text-right p-3 bg-blue-50 hover:bg-blue-100 rounded-lg font-bold text-blue-700 mb-2 transition-colors';
+      homeLink.innerHTML = '<i class="fas fa-home ml-2"></i>מרכז הבקרה';
       mainMenu.appendChild(homeLink);
 
       if (!tripData?.destinations || !Array.isArray(tripData.destinations)) return;
-      
-      // Update global destinations list for the dropdown
       siteData.destinations = tripData.destinations.map(d => d.nameHe || d.name || 'יעד');
 
       // מיון היעדים לפי תאריך
       const sortedDestinations = [...tripData.destinations].sort((a, b) => {
-          const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
-          const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          return dateA - dateB;
+        const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
+        const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateA - dateB;
       });
 
       // בניית ה-HTML לכל יעד
       sortedDestinations.forEach(dest => {
-        const div = document.createElement('div');
-        div.className = 'mb-1';
-        
-        const btn = document.createElement('button');
-        const destName = dest.nameHe || dest.name;
-        btn.className = 'w-full text-right p-4 bg-white hover:bg-cyan-50 rounded-2xl font-bold text-slate-700 flex justify-between items-center shadow-sm border border-slate-100 transition-all';
-        btn.innerHTML = `<span class="flex items-center gap-3"><i class="fas fa-map-marked-alt text-cyan-500"></i> ${destName}</span> <i class="fas fa-chevron-down chevron-icon text-slate-400"></i>`;
-        
-        const submenu = document.createElement('div');
-        submenu.className = 'submenu mt-2 mr-4 border-r-2 border-cyan-100 pr-3 space-y-1';
-        
-        if (dest.dates) {
-          generateDatesFromRange(dest.dates).forEach(dateStr => {
-            const d = parseDDMMYYYY(dateStr);
-            if (!d) return;
+          const destinationDiv = document.createElement('div');
+          destinationDiv.className = 'mb-1';
 
-            const link = document.createElement('a');
-            const destNameParam = encodeURIComponent(destName);
-            // CORRECTED LINK STRUCTURE
-            link.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
-            link.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 rounded-lg transition text-sm font-medium';
-            link.innerHTML = `
-                <div class="flex flex-col">
-                    <span class="font-bold flex items-center gap-2"><i class="far fa-calendar-alt opacity-50"></i> ${hebWeekday(d)}</span>
-                    <span class="text-xs opacity-70 mr-6">${dotted(d)}</span>
-                </div>`;
-            submenu.appendChild(link);
+          // כפתור ראשי ליעד (פותח אקורדיון)
+          const button = document.createElement('button');
+          button.className = 'w-full text-right p-4 bg-white hover:bg-cyan-50 rounded-2xl font-bold text-slate-700 flex justify-between items-center shadow-sm border border-slate-100 transition-all';
+          button.innerHTML = `<span class="flex items-center gap-3"><i class="fas fa-map-marked-alt text-cyan-500"></i> ${dest.nameHe || dest.name}</span> <i class="fas fa-chevron-down chevron-icon text-slate-400"></i>`;
+
+          // מיכל לתתי-התפריטים (ימים)
+          const submenu = document.createElement('div');
+          submenu.className = 'submenu mt-2 mr-4 border-r-2 border-cyan-100 pr-3 space-y-1';
+
+          if (dest.dates) {
+             const dates = generateDatesFromRange(dest.dates);
+             dates.forEach(dateStr => {
+                 const d = parseDDMMYYYY(dateStr);
+                 if (!d) return;
+                 const a = document.createElement('a');
+                 
+                 const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
+                 // שימור הקישור לדף הלו"ז היומי עם הפרמטרים הנכונים
+                 a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+                 
+                 a.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 rounded-lg transition text-sm font-medium';
+                 a.innerHTML = `
+                      <div class="flex flex-col">
+                          <span class="font-bold">${hebWeekday(d)}</span>
+                          <span class="text-xs opacity-75">${dotted(d)}</span>
+                      </div>
+                 `;
+                 submenu.appendChild(a);
+             });
+          }
+
+          // אירוע לחיצה לפתיחת האקורדיון
+          button.addEventListener('click', () => {
+              submenu.classList.toggle('open');
+              button.querySelector('.chevron-icon').classList.toggle('rotate-180');
+              button.classList.toggle('bg-cyan-50');
           });
-        }
-        
-        btn.onclick = () => { 
-            submenu.classList.toggle('open'); 
-            btn.querySelector('.chevron-icon').classList.toggle('rotate-180');
-            btn.classList.toggle('bg-cyan-50');
-        };
-        
-        div.append(btn, submenu);
-        mainMenu.appendChild(div);
+
+          destinationDiv.appendChild(button);
+          destinationDiv.appendChild(submenu);
+          mainMenu.appendChild(destinationDiv);
       });
     }
+    // --- REPLACED FUNCTION END ---
 
     // --- Modal Logic ---
     function showModalError(message) {
@@ -1743,11 +1747,14 @@
         const tripSnap = await getDoc(doc(db, 'trips', tripId));
         if (tripSnap.exists()) {
            const data = tripSnap.data();
-           if (data.owner === currentUser.uid || (data.editors && data.editors.includes(currentUser.uid))) {
+           if (data.editors && data.editors.includes(currentUser.uid)) {
              tripData = data;
              if (tripTitleLine && tripData.name) tripTitleLine.innerHTML = `<span class="font-rubik text-slate-600">מתכננים את:</span> <span class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-600">${tripData.name}</span>`;
              await Promise.all([loadTripHotels(), loadCustomSettings()]);
+             
+             // קריאה לפונקציה החדשה והמתוקנת
              buildMenuFromTrip();
+             
              listenPlaces();
            } else { showAlert('אין גישה'); setTimeout(() => location.href='index.html', 2000); }
         } else { showAlert('הטיול לא נמצא'); setTimeout(() => location.href='index.html', 2000); }
