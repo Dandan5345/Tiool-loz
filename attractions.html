@@ -330,7 +330,7 @@
             <p>טוען את המקומות הכי שווים...</p>
           </div>
         </div>
-      
+       
       </div>
     </main>
   </div>
@@ -512,21 +512,47 @@
       placeTypeEmojis: { "מסעדה/אוכל":"🍔","סופר":"🛒","מוזיאון":"🏛️","קניון/מרכז קניות":"🛍️","אטרקציה":"🎢","חוף":"🏖️","סיור":"🚶‍♂️" }
     };
     
-    // --- ROBUST FALLBACK IMAGES SYSTEM ---
+    // --- Fallback Images Map (Updated with better images) ---
     const FALLBACK_IMAGES = {
-        "מסעדה/אוכל": "https://images.unsplash.com/photo-1552566626-52f8b828add9?q=80&w=800&auto=format&fit=crop", // Restaurant
-        "סופר": "https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop", // Supermarket
-        "מוזיאון": "https://images.unsplash.com/photo-1518998053901-5348d3969104?q=80&w=800&auto=format&fit=crop", // Museum
-        "קניון/מרכז קניות": "https://images.unsplash.com/photo-1519567241046-7f570eee3d9f?q=80&w=800&auto=format&fit=crop", // Mall
-        "אטרקציה": "https://images.unsplash.com/photo-1513883049090-d0b7439799bf?q=80&w=800&auto=format&fit=crop", // Disney/Park
-        "חוף": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop", // Beach
-        "סיור": "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=800&auto=format&fit=crop", // Tour
-        "default": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=800&auto=format&fit=crop" // Travel generic
+        "מסעדה/אוכל": "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800&q=80", // Restaurant Table
+        "קניון/מרכז קניות": "https://images.unsplash.com/photo-1519567241046-7f570eee3d9f?w=800&q=80", // Mall
+        "סופר": "https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=800&q=80", // Supermarket
+        "מוזיאון": "https://images.unsplash.com/photo-1518998053901-5348d3969105?w=800&q=80", // Museum (Art)
+        "אטרקציה": "https://images.unsplash.com/photo-1513838531850-22f87a8b438c?w=800&q=80", // Disney Castle
+        "חוף": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80", // Beach
+        "סיור": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=80", // Tour/Walking
+        "default": "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80" // Travel generic
     };
     
-    // Helper to get fallback with fallback
+    // --- Helper to get fallback ---
     window.getFallbackImage = function(type) {
         return FALLBACK_IMAGES[type] || FALLBACK_IMAGES['default'];
+    }
+
+    // --- Date Cutoff Check (29.11.2025) ---
+    const CUTOFF_DATE = new Date('2025-11-29T00:00:00').getTime();
+
+    // Function to check if we should use the generic image (fixes old broken photos)
+    function shouldUseGenericImage(item) {
+        // If item has no creation date, assume it's old and use generic
+        if (!item.createdAt) return true;
+
+        let itemDate;
+        // Handle Firestore Timestamp object (has .toDate())
+        if (item.createdAt.toDate) {
+            itemDate = item.createdAt.toDate().getTime();
+        } 
+        // Handle serialized timestamp (seconds)
+        else if (item.createdAt.seconds) {
+            itemDate = item.createdAt.seconds * 1000;
+        } 
+        // Handle standard Date object or string
+        else {
+            itemDate = new Date(item.createdAt).getTime();
+        }
+
+        // Return TRUE if the item was created BEFORE the cutoff date
+        return itemDate < CUTOFF_DATE;
     }
 
     // --- DOM Elements ---
@@ -1266,15 +1292,16 @@
               // Image header
               let imgHeader = '';
               let imgSrc = '';
-              const fallbackUrl = getFallbackImage(item.type);
+              const useGeneric = shouldUseGenericImage(item);
               
-              if (item.photos && item.photos.length > 0) {
+              if (!useGeneric && item.photos && item.photos.length > 0) {
                  imgSrc = item.photos[0];
               } else {
-                 imgSrc = fallbackUrl;
+                 imgSrc = getFallbackImage(item.type);
               }
               
               // New Image Implementation (Fix for "Red X")
+              const fallbackUrl = getFallbackImage(item.type);
               imgHeader = `<div class="h-32 w-full relative overflow-hidden bg-slate-200">
                     <img src="${imgSrc}" 
                          alt="${item.name}" 
@@ -1334,7 +1361,14 @@
     function openDetailsModal(itemId) {
       const item = allItems.find(i=>i.id===itemId);
       if (!item) return;
-      ensurePhotosForItem(item); 
+      
+      const useGeneric = shouldUseGenericImage(item);
+      
+      // Don't auto-repair old items, they are doomed to be generic
+      if (!useGeneric) {
+        ensurePhotosForItem(item); 
+      }
+      
       const wrap = document.getElementById('details-modal-content');
 
       let tags = '';
@@ -1343,18 +1377,18 @@
       if (item.reservation && item.reservation!=='לא') tags += `<span class="text-xs font-bold text-rose-700 bg-rose-100 px-3 py-1 rounded-full border border-rose-200 shadow-sm">הזמנה: ${item.reservation}</span>`;
       const ratingHtml = renderStars(item.rating);
 
-      const fbUrl = getFallbackImage(item.type);
-
       let photosHtml = '';
-      if (item.photos && item.photos.length > 0) {
+      // Only show gallery if not using generic images AND photos exist
+      if (!useGeneric && item.photos && item.photos.length > 0) {
         photosHtml = `<div class="grid grid-cols-3 gap-2 mb-4">
-          ${item.photos.map(u=>`<div class="aspect-square bg-slate-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:opacity-90 transition"><img src="${u}" class="w-full h-full object-cover" loading="lazy" onclick="window.open('${u}','_blank')" onerror="this.onerror=null; this.src='${fbUrl}'"></div>`).join('')}
+          ${item.photos.map(u=>`<div class="aspect-square bg-slate-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:opacity-90 transition"><img src="${u}" class="w-full h-full object-cover" loading="lazy" onclick="window.open('${u}','_blank')" onerror="this.onerror=null; this.src='${getFallbackImage(item.type)}'"></div>`).join('')}
         </div>`;
       }
 
       const navBtn = item.coords ? `<button data-id="${item.id}" class="navigate-btn flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 px-5 rounded-xl hover:shadow-lg hover:scale-[1.02] transition flex items-center justify-center gap-2"><i class="fa-solid fa-diamond-turn-right"></i> נווט למקום</button>` : '';
 
-      let imgSrc = (item.photos && item.photos[0]) ? item.photos[0] : fbUrl;
+      let imgSrc = (!useGeneric && item.photos && item.photos[0]) ? item.photos[0] : getFallbackImage(item.type);
+      const fbUrl = getFallbackImage(item.type);
 
       wrap.innerHTML = `
         <div class="relative h-40 bg-slate-200 shrink-0 overflow-hidden">
@@ -1604,6 +1638,9 @@
     // --- Self Healing ---
     async function ensurePhotosForItem(item) {
        try {
+         // Added check: If it's a legacy item (no created date or created before cutoff), DO NOT try to repair
+         if (shouldUseGenericImage(item)) return;
+
          if (!gmapsApiLoaded || !item.googlePlaceId || (item.photos?.length) || photosRepairInFlight.has(item.id)) return;
          if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(document.createElement('div'));
          
@@ -1629,7 +1666,13 @@
         newItems.forEach(n => { const old = allItems.find(i=>i.id===n.id); if(old?.airDistanceKm) n.airDistanceKm = old.airDistanceKm; });
         allItems = newItems;
         renderAllItems();
-        allItems.forEach(it => ensurePhotosForItem(it));
+        
+        // Only run self-healing on items that are allowed to have custom photos
+        allItems.forEach(it => {
+            if (!shouldUseGenericImage(it)) {
+                ensurePhotosForItem(it);
+            }
+        });
 
         if (isInitialLoad) {
            isInitialLoad = false;
