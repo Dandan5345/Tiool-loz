@@ -483,7 +483,6 @@
     // --- Scroll Locking State ---
     let scrollPosition = 0;
 
-    const photosRepairInFlight = new Set();
     const GOOGLE_MAPS_API_KEY = "AIzaSyAz7QZ2CBpCK_aOVbkqQLjfMRG5taaFs8c";
     let gmapsApiLoaded = false;
     let gmaps_addEditMap = null, gmaps_addEditMarker = null;
@@ -519,24 +518,6 @@
     // --- Helper to get fallback ---
     window.getFallbackImage = function(type) {
         return FALLBACK_IMAGES[type] || FALLBACK_IMAGES['default'];
-    }
-
-    // --- Date Cutoff Check (29.11.2025) ---
-    const CUTOFF_DATE = new Date('2025-11-29T00:00:00').getTime();
-
-    function shouldUseGenericImage(item) {
-        if (!item.createdAt) return true;
-        let itemDate;
-        if (item.createdAt.toDate) {
-            itemDate = item.createdAt.toDate().getTime();
-        } 
-        else if (item.createdAt.seconds) {
-            itemDate = item.createdAt.seconds * 1000;
-        } 
-        else {
-            itemDate = new Date(item.createdAt).getTime();
-        }
-        return itemDate < CUTOFF_DATE;
     }
 
     // --- DOM Elements ---
@@ -848,11 +829,9 @@
       } catch (e) { console.error('loadCustomSettings', e); }
     }
 
-    // --- REPLACED FUNCTION START (Improved Menu Logic) ---
     function buildMenuFromTrip() {
       mainMenu.innerHTML = '';
       
-      // קישור חזרה למרכז הבקרה (ראשי)
       const homeLink = document.createElement('a');
       homeLink.href = `index.html?tripId=${tripId}`; 
       homeLink.className = 'block w-full text-right p-3 bg-blue-50 hover:bg-blue-100 rounded-lg font-bold text-blue-700 mb-2 transition-colors';
@@ -862,7 +841,6 @@
       if (!tripData?.destinations || !Array.isArray(tripData.destinations)) return;
       siteData.destinations = tripData.destinations.map(d => d.nameHe || d.name || 'יעד');
 
-      // מיון היעדים לפי תאריך
       const sortedDestinations = [...tripData.destinations].sort((a, b) => {
         const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
         const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
@@ -871,17 +849,14 @@
         return dateA - dateB;
       });
 
-      // בניית ה-HTML לכל יעד
       sortedDestinations.forEach(dest => {
           const destinationDiv = document.createElement('div');
           destinationDiv.className = 'mb-1';
 
-          // כפתור ראשי ליעד (פותח אקורדיון)
           const button = document.createElement('button');
           button.className = 'w-full text-right p-4 bg-white hover:bg-cyan-50 rounded-2xl font-bold text-slate-700 flex justify-between items-center shadow-sm border border-slate-100 transition-all';
           button.innerHTML = `<span class="flex items-center gap-3"><i class="fas fa-map-marked-alt text-cyan-500"></i> ${dest.nameHe || dest.name}</span> <i class="fas fa-chevron-down chevron-icon text-slate-400"></i>`;
 
-          // מיכל לתתי-התפריטים (ימים)
           const submenu = document.createElement('div');
           submenu.className = 'submenu mt-2 mr-4 border-r-2 border-cyan-100 pr-3 space-y-1';
 
@@ -893,7 +868,6 @@
                   const a = document.createElement('a');
                   
                   const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
-                  // שימור הקישור לדף הלו"ז היומי עם הפרמטרים הנכונים
                   a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
                   
                   a.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 rounded-lg transition text-sm font-medium';
@@ -907,7 +881,6 @@
               });
           }
 
-          // אירוע לחיצה לפתיחת האקורדיון
           button.addEventListener('click', () => {
               submenu.classList.toggle('open');
               button.querySelector('.chevron-icon').classList.toggle('rotate-180');
@@ -919,7 +892,6 @@
           mainMenu.appendChild(destinationDiv);
       });
     }
-    // --- REPLACED FUNCTION END ---
 
     // --- Modal Logic ---
     function showModalError(message) {
@@ -931,10 +903,8 @@
       editingItemId = itemId;
       selectedGooglePlaceDetails = null;
       
-      // --- FIX: Reset map to force re-initialization on fresh DOM ---
       gmaps_addEditMap = null;
       gmaps_addEditMarker = null;
-      // -------------------------------------------------------------
 
       form.reset();
       for (let i = 1; i <= 9; i++) {
@@ -1204,6 +1174,23 @@
       }
     }
 
+    // --- NEW: 24-Hour Expiry Logic ---
+    function arePhotosValid(item) {
+        if (!item.photos || item.photos.length === 0) return false;
+        // If never fetched timestamp, assume invalid
+        if (!item.photosLastFetch) return false; 
+        
+        const now = Date.now();
+        // Handle firestore timestamp if it comes as object or use saved millis
+        let lastFetch = item.photosLastFetch;
+        // If it was saved as serverTimestamp() and came back as Timestamp object:
+        if (typeof lastFetch.toMillis === 'function') lastFetch = lastFetch.toMillis();
+        
+        // 24 hours in milliseconds
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+        return (now - lastFetch) < twentyFourHours;
+    }
+
     // --- Rendering ---
     function renderAllItems() {
       if (!itemsContainer) return;
@@ -1332,22 +1319,16 @@
               card.style.animationDelay = `${index * 50}ms`;
               card.dataset.id = item.id;
 
-              let imgHeader = '';
-              let imgSrc = '';
-              const useGeneric = shouldUseGenericImage(item);
+              // --- LOGIC CHANGE: Check expiry before showing image ---
+              const useRealPhotos = arePhotosValid(item);
+              let imgSrc = useRealPhotos ? item.photos[0] : getFallbackImage(item.type);
               
-              if (!useGeneric && item.photos && item.photos.length > 0) {
-                 imgSrc = item.photos[0];
-              } else {
-                 imgSrc = getFallbackImage(item.type);
-              }
-              
-              const fallbackUrl = getFallbackImage(item.type);
-              imgHeader = `<div class="h-32 w-full relative overflow-hidden bg-slate-200">
+              const imgHeader = `<div class="h-32 w-full relative overflow-hidden bg-slate-200">
                     <img src="${imgSrc}" 
+                         id="thumb-${item.id}"
                          alt="${item.name}" 
                          class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                         onerror="this.onerror=null; this.src='${fallbackUrl}';"
+                         onerror="this.onerror=null; this.src='${getFallbackImage(item.type)}';"
                     />
                     <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                   </div>`;
@@ -1398,15 +1379,64 @@
       });
     }
 
+    // --- New Function: Fetch & Update on Click ---
+    function fetchAndRefreshPhotos(item) {
+        // 1. Check if we already have valid photos (less than 24 hours old)
+        if (arePhotosValid(item)) return; 
+
+        // 2. Need API key loaded and a google place id
+        if (!gmapsApiLoaded || !item.googlePlaceId) return;
+
+        // 3. Init service if needed
+        if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(document.createElement('div'));
+
+        // 4. Fetch
+        gmaps_placesService.getDetails({ placeId: item.googlePlaceId, fields: ["photos", "rating"] }, async (place, status) => {
+           if (status === google.maps.places.PlacesServiceStatus.OK && place && place.photos?.length) {
+              
+              const newPhotos = place.photos.slice(0,3).map(p => p.getUrl({ maxWidth: 800 }));
+              const newRating = (typeof place.rating === 'number' ? place.rating : (item.rating||null));
+              
+              // 5. Update Firestore with new photos and current timestamp (millis)
+              // We use Date.now() for the timestamp to make client-side validation easier (no timestamp conversion)
+              await updateDoc(doc(db, 'trips', tripId, 'places', item.id), {
+                 photos: newPhotos,
+                 rating: newRating,
+                 photosLastFetch: Date.now() // Save as number
+              });
+
+              // 6. Update local 'allItems' state so we don't fetch again if clicked immediately
+              const localItem = allItems.find(i => i.id === item.id);
+              if (localItem) {
+                  localItem.photos = newPhotos;
+                  localItem.rating = newRating;
+                  localItem.photosLastFetch = Date.now();
+              }
+
+              // 7. Dynamic DOM Update:
+              // Update the open modal images if it's still open for this item
+              const modalHeaderImg = document.getElementById(`details-header-img-${item.id}`);
+              const modalGallery = document.getElementById(`details-gallery-${item.id}`);
+              
+              if (modalHeaderImg) modalHeaderImg.src = newPhotos[0];
+              
+              if (modalGallery && newPhotos.length > 0) {
+                 modalGallery.innerHTML = newPhotos.map(u => 
+                    `<div class="aspect-square bg-slate-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:opacity-90 transition"><img src="${u}" class="w-full h-full object-cover" loading="lazy" onclick="window.open('${u}','_blank')"></div>`
+                 ).join('');
+              }
+
+              // Update the background card thumbnail as well
+              const cardThumb = document.getElementById(`thumb-${item.id}`);
+              if (cardThumb) cardThumb.src = newPhotos[0];
+           }
+        });
+    }
+
     // --- Details & Navigation ---
     function openDetailsModal(itemId) {
       const item = allItems.find(i=>i.id===itemId);
       if (!item) return;
-      
-      const useGeneric = shouldUseGenericImage(item);
-      if (!useGeneric) {
-        ensurePhotosForItem(item); 
-      }
       
       const wrap = document.getElementById('details-modal-content');
 
@@ -1416,21 +1446,25 @@
       if (item.reservation && item.reservation!=='לא') tags += `<span class="text-xs font-bold text-rose-700 bg-rose-100 px-3 py-1 rounded-full border border-rose-200 shadow-sm">הזמנה: ${item.reservation}</span>`;
       const ratingHtml = renderStars(item.rating);
 
-      let photosHtml = '';
-      if (!useGeneric && item.photos && item.photos.length > 0) {
-        photosHtml = `<div class="grid grid-cols-3 gap-2 mb-4">
-          ${item.photos.map(u=>`<div class="aspect-square bg-slate-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:opacity-90 transition"><img src="${u}" class="w-full h-full object-cover" loading="lazy" onclick="window.open('${u}','_blank')" onerror="this.onerror=null; this.src='${getFallbackImage(item.type)}'"></div>`).join('')}
-        </div>`;
+      // --- LOGIC CHANGE: Determine photos based on expiry check ---
+      const hasValidPhotos = arePhotosValid(item);
+      const displayPhotos = hasValidPhotos ? item.photos : [];
+      const mainImgSrc = (hasValidPhotos && displayPhotos[0]) ? displayPhotos[0] : getFallbackImage(item.type);
+      const fbUrl = getFallbackImage(item.type);
+
+      let galleryHtml = '';
+      if (displayPhotos.length > 0) {
+        galleryHtml = displayPhotos.map(u=>`<div class="aspect-square bg-slate-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:opacity-90 transition"><img src="${u}" class="w-full h-full object-cover" loading="lazy" onclick="window.open('${u}','_blank')" onerror="this.onerror=null; this.src='${getFallbackImage(item.type)}'"></div>`).join('');
       }
 
       const navBtn = item.coords ? `<button data-id="${item.id}" class="navigate-btn flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 px-5 rounded-xl hover:shadow-lg hover:scale-[1.02] transition flex items-center justify-center gap-2"><i class="fa-solid fa-diamond-turn-right"></i> נווט למקום</button>` : '';
 
-      let imgSrc = (!useGeneric && item.photos && item.photos[0]) ? item.photos[0] : getFallbackImage(item.type);
-      const fbUrl = getFallbackImage(item.type);
-
       wrap.innerHTML = `
         <div class="relative h-40 bg-slate-200 shrink-0 overflow-hidden">
-           <img src="${imgSrc}" class="absolute inset-0 w-full h-full object-cover" onerror="this.onerror=null; this.src='${fbUrl}'">
+           <img src="${mainImgSrc}" 
+                id="details-header-img-${item.id}"
+                class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300" 
+                onerror="this.onerror=null; this.src='${fbUrl}'">
            <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
            
            <button id="details-modal-close" class="absolute top-4 left-4 z-50 w-10 h-10 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-slate-900 transition flex items-center justify-center shadow-lg border border-white/20">
@@ -1448,7 +1482,10 @@
 
         <div class="p-5 flex-grow overflow-y-auto space-y-5 bg-white scroll-smooth pb-8 selectable-text overscroll-contain">
           ${tags ? `<div class="flex flex-wrap gap-2">${tags}</div>` : ''}
-          ${photosHtml}
+          
+          <div id="details-gallery-${item.id}" class="grid grid-cols-3 gap-2 mb-4">
+             ${galleryHtml}
+          </div>
           
           ${item.shortDescription ? `<div class="bg-gradient-to-br from-blue-50 to-indigo-50 border-l-4 border-blue-400 p-4 rounded-r-xl shadow-sm"><p class="text-slate-800 font-medium italic">"${item.shortDescription}"</p></div>` : ''}
           
@@ -1472,7 +1509,9 @@
       detailsModal.classList.add('flex');
       lockBodyScroll();
 
-      // Ensure event listener is attached properly
+      // Trigger photo fetch/update if needed
+      fetchAndRefreshPhotos(item);
+
       setTimeout(() => {
         const closeBtn = document.getElementById('details-modal-close');
         if(closeBtn) closeBtn.onclick = closeDetailsModal;
@@ -1676,26 +1715,6 @@
       });
     }
 
-    async function ensurePhotosForItem(item) {
-       try {
-         if (shouldUseGenericImage(item)) return;
-
-         if (!gmapsApiLoaded || !item.googlePlaceId || (item.photos?.length) || photosRepairInFlight.has(item.id)) return;
-         if (!gmaps_placesService) gmaps_placesService = new google.maps.places.PlacesService(document.createElement('div'));
-         
-         photosRepairInFlight.add(item.id);
-         gmaps_placesService.getDetails({ placeId: item.googlePlaceId, fields: ["photos","rating"] }, async (place, status) => {
-           photosRepairInFlight.delete(item.id);
-           if (status === google.maps.places.PlacesServiceStatus.OK && place && place.photos?.length) {
-             const newPhotos = place.photos.slice(0,3).map(p => p.getUrl({ maxWidth: 800 }));
-             await updateDoc(doc(db, 'trips', tripId, 'places', item.id), {
-               photos: newPhotos, rating: (typeof place.rating==='number'?place.rating:(item.rating||null)), updatedAt: serverTimestamp()
-             });
-           }
-         });
-       } catch(e) { photosRepairInFlight.delete(item?.id); }
-    }
-
     // --- Boot ---
     function listenPlaces() {
       const qRef = query(collection(db, 'trips', tripId, 'places'), orderBy('createdAt','desc'));
@@ -1705,11 +1724,7 @@
         allItems = newItems;
         renderAllItems();
         
-        allItems.forEach(it => {
-            if (!shouldUseGenericImage(it)) {
-                ensurePhotosForItem(it);
-            }
-        });
+        // --- REMOVED AUTO FETCH LOOP HERE ---
 
         if (isInitialLoad) {
            isInitialLoad = false;
@@ -1758,7 +1773,6 @@
              if (tripTitleLine && tripData.name) tripTitleLine.innerHTML = `<span class="font-rubik text-slate-600">מתכננים את:</span> <span class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-600">${tripData.name}</span>`;
              await Promise.all([loadTripHotels(), loadCustomSettings()]);
              
-             // קריאה לפונקציה החדשה והמתוקנת
              buildMenuFromTrip();
              
              listenPlaces();
