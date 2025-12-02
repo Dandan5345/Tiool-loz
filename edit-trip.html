@@ -161,8 +161,17 @@
                 right: 0;
                 border-bottom-left-radius: 0;
                 border-bottom-right-radius: 0;
-                max-height: 92dvh;
+                max-height: 95dvh;
             }
+        }
+
+        /* Checkbox Custom Style */
+        .custom-checkbox:checked + div {
+            border-color: #4f46e5;
+            background-color: #eef2ff;
+        }
+        .custom-checkbox:checked + div .check-icon {
+            display: block;
         }
     </style>
 </head>
@@ -192,6 +201,12 @@
             </div>
             
             <div class="flex gap-2">
+                 <!-- AI Button -->
+                 <button id="btn-open-ai" class="btn-secondary w-auto px-3 h-10 rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-md gap-2">
+                    <i class="fas fa-wand-magic-sparkles"></i>
+                    <span class="text-xs font-bold hidden sm:inline">פורמט AI</span>
+                </button>
+
                 <button id="btn-show-summary" class="hidden btn-secondary w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center active:scale-95 transition-all">
                     <i class="fas fa-list-check"></i>
                 </button>
@@ -352,6 +367,45 @@
         </div>
     </div>
 
+    <!-- AI Wizard Modal -->
+    <div id="ai-wizard-modal" class="fixed inset-0 z-[150] hidden items-end sm:items-center justify-center">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeAiWizard()"></div>
+        <div class="relative w-full sm:max-w-lg bg-surface h-[95dvh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col animate-slide-up overflow-hidden">
+            
+            <!-- Header -->
+            <div class="bg-indigo-600 p-6 pb-8 text-white relative shrink-0">
+                <button onclick="closeAiWizard()" class="absolute top-6 left-6 w-8 h-8 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl mb-3 backdrop-blur-md">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <h2 class="text-2xl font-bold">בונה הלו"ז החכם</h2>
+                <p class="text-indigo-200 text-sm">ענו על כמה שאלות וה-AI יבנה לכם תוכנית</p>
+                
+                <!-- Progress -->
+                <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-indigo-800/50">
+                    <div id="ai-progress-bar" class="h-full bg-white transition-all duration-300 w-[10%]"></div>
+                </div>
+            </div>
+
+            <!-- Body (Dynamic) -->
+            <div id="ai-wizard-body" class="flex-grow overflow-y-auto p-6 bg-slate-50">
+                <!-- Content Injected via JS -->
+            </div>
+
+            <!-- Footer Controls -->
+            <div class="p-4 bg-white border-t border-slate-100 flex justify-between items-center shrink-0 safe-area-bottom">
+                <button id="ai-btn-back" class="text-slate-500 font-bold px-4 py-2 hover:text-slate-800 disabled:opacity-0 transition-opacity" disabled>
+                    חזרה
+                </button>
+                <button id="ai-btn-next" class="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform flex items-center gap-2">
+                    הבא <i class="fas fa-chevron-left text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Place Modal (Drawer Style) -->
     <div id="add-place-modal" class="fixed inset-0 z-[70] hidden flex-col justify-end sm:justify-center items-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm modal-overlay" onclick="closeModal('add-place-modal')"></div>
@@ -457,7 +511,7 @@
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="fixed top-6 right-1/2 translate-x-1/2 bg-slate-800/95 backdrop-blur text-white py-3 px-6 rounded-full shadow-2xl transition-all duration-300 -translate-y-24 opacity-0 z-[110] flex items-center gap-3 min-w-max border border-slate-700/50">
+    <div id="toast" class="fixed top-6 right-1/2 translate-x-1/2 bg-slate-800/95 backdrop-blur text-white py-3 px-6 rounded-full shadow-2xl transition-all duration-300 -translate-y-24 opacity-0 z-[200] flex items-center gap-3 min-w-max border border-slate-700/50">
         <i class="fas fa-check-circle text-green-400 text-lg"></i>
         <span id="toast-message" class="font-medium text-sm"></span>
     </div>
@@ -496,7 +550,7 @@
                 modal: null, // Shared map for Selection AND Route Preview in Modal
                 summary: null // Final summary map
             },
-            currentMapMode: null // 'PICKER' or 'VIEW'
+            currentMapMode: null
         };
 
         const categoryConfig = {
@@ -566,6 +620,407 @@
             
             document.getElementById('confirm-cancel-btn').onclick = () => window.toggleModal('confirm-modal', false);
             window.toggleModal('confirm-modal', true);
+        };
+
+        // === AI Wizard Logic ===
+        let aiState = {
+            step: 0,
+            data: {}
+        };
+
+        const aiSteps = [
+            // Step 0: Destination
+            {
+                title: 'יעד הנסיעה',
+                render: () => {
+                    const destinations = state.tripData?.destinations || [];
+                    if(destinations.length === 0) return `<p class="text-center text-slate-500">אין יעדים שמורים בטיול זה</p>`;
+                    
+                    return `
+                        <div class="space-y-3">
+                            <p class="font-bold text-slate-700">לאיזה יעד תרצה לבנות את הלו"ז?</p>
+                            <div class="grid grid-cols-1 gap-2">
+                                ${destinations.map(d => `
+                                    <label class="relative cursor-pointer group">
+                                        <input type="radio" name="ai_dest" value="${d.nameHe}" class="peer sr-only" onchange="window.handleAiInput('dest', '${d.nameHe}')">
+                                        <div class="p-4 rounded-xl border border-slate-200 bg-white peer-checked:border-indigo-600 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 transition-all flex items-center justify-between">
+                                            <span class="font-bold">${d.nameHe}</span>
+                                            <i class="fas fa-check-circle hidden peer-checked:block text-indigo-600"></i>
+                                        </div>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                },
+                validate: () => aiState.data.dest ? true : 'יש לבחור יעד'
+            },
+            // Step 1: Dates
+            {
+                title: 'זמנים',
+                render: () => `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">כמה ימים?</label>
+                            <select id="ai_days_count" class="w-full p-3 bg-white border border-slate-200 rounded-xl" onchange="window.handleAiInput('days', this.value)">
+                                <option value="" disabled selected>בחרו מספר ימים (1-30)</option>
+                                ${Array.from({length: 30}, (_, i) => `<option value="${i+1}">${i+1} ימים</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">תאריך התחלה</label>
+                            <input type="date" id="ai_start_date" class="w-full p-3 bg-white border border-slate-200 rounded-xl" onchange="window.handleAiInput('startDate', this.value)">
+                        </div>
+                    </div>
+                `,
+                validate: () => (aiState.data.days && aiState.data.startDate) ? true : 'יש לבחור מספר ימים ותאריך התחלה'
+            },
+            // Step 2: Hotel Source
+            {
+                title: 'לינה',
+                render: () => `
+                    <div class="space-y-3">
+                        <p class="font-bold text-slate-700">היכן אתם ישנים?</p>
+                        <label class="relative cursor-pointer">
+                            <input type="radio" name="ai_hotel_source" value="saved" class="peer sr-only" onchange="window.handleAiInput('hotelSource', 'saved')">
+                            <div class="p-4 rounded-xl border border-slate-200 bg-white peer-checked:border-indigo-600 peer-checked:bg-indigo-50 transition-all">
+                                <div class="font-bold text-slate-800">אחד המלונות ששמרתי באתר</div>
+                                <div class="text-xs text-slate-500 mt-1">מלון שקיים ברשימת הלוגיסטיקה</div>
+                            </div>
+                        </label>
+                        <label class="relative cursor-pointer">
+                            <input type="radio" name="ai_hotel_source" value="new" class="peer sr-only" onchange="window.handleAiInput('hotelSource', 'new')">
+                            <div class="p-4 rounded-xl border border-slate-200 bg-white peer-checked:border-indigo-600 peer-checked:bg-indigo-50 transition-all">
+                                <div class="font-bold text-slate-800">מלון שאינו שמור באתר</div>
+                            </div>
+                        </label>
+                    </div>
+                `,
+                validate: () => {
+                    if(!aiState.data.hotelSource) return 'יש לבחור אפשרות';
+                    if(aiState.data.hotelSource === 'new') {
+                        window.customAlert('עצרו רגע', 'כדי שה-AI יכיר את המלון, עליכם להוסיף אותו תחילה בדף "לוגיסטיקה" באתר.');
+                        return false;
+                    }
+                    return true;
+                }
+            },
+            // Step 3: Select Hotel (Only if 'saved' chosen)
+            {
+                title: 'בחירת מלון',
+                render: () => {
+                    const hotelsInDest = state.hotels.filter(h => h.destination === aiState.data.dest);
+                    if(hotelsInDest.length === 0) return `<div class="text-center py-4"><p>לא נמצאו מלונות ביעד "${aiState.data.dest}".</p><p class="text-sm text-slate-500 mt-2">הוסיפו מלון בלוגיסטיקה ונסו שוב.</p></div>`;
+                    
+                    return `
+                        <div class="space-y-3">
+                            <p class="font-bold text-slate-700">באיזה מלון/ות תשהו?</p>
+                            <div class="space-y-2">
+                                ${hotelsInDest.map(h => `
+                                    <label class="flex items-center p-3 bg-white border border-slate-200 rounded-xl cursor-pointer">
+                                        <input type="checkbox" class="custom-checkbox w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 accent-indigo-600" value="${h.name}" onchange="window.handleAiHotelSelect(this, '${h.name}')">
+                                        <span class="mr-3 font-medium text-slate-700">${h.name}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                },
+                validate: () => (aiState.data.selectedHotels && aiState.data.selectedHotels.length > 0) ? true : 'יש לבחור לפחות מלון אחד'
+            },
+            // Step 4: Hotel Dates (Only if >1 hotel selected) - SKIPPED IF 1 HOTEL
+            {
+                title: 'תאריכי שהייה',
+                condition: () => aiState.data.selectedHotels && aiState.data.selectedHotels.length > 1,
+                render: () => `
+                    <div class="space-y-4">
+                        <p class="text-sm text-slate-600">אנא ציינו תאריכים לכל מלון:</p>
+                        ${aiState.data.selectedHotels.map((h, i) => `
+                            <div class="bg-white p-3 rounded-xl border border-slate-200">
+                                <div class="font-bold text-indigo-700 mb-2">${h}</div>
+                                <input type="text" placeholder="למשל: 12/10 - 15/10" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" onchange="window.handleAiInput('hotelDates_${i}', this.value)">
+                            </div>
+                        `).join('')}
+                    </div>
+                `,
+                validate: () => true // Optional validation
+            },
+            // Step 5: Times
+            {
+                title: 'שעות הגעה/עזיבה',
+                render: () => `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">שעת הגעה ליעד</label>
+                            <input type="time" class="w-full p-3 bg-white border border-slate-200 rounded-xl" onchange="window.handleAiInput('arrivalTime', this.value)">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">שעת עזיבה מהיעד</label>
+                            <input type="time" class="w-full p-3 bg-white border border-slate-200 rounded-xl" onchange="window.handleAiInput('departureTime', this.value)">
+                        </div>
+                    </div>
+                `,
+                validate: () => true
+            },
+            // Step 6: Places
+            {
+                title: 'מקומות לביקור',
+                render: () => `
+                    <div class="space-y-4">
+                        <p class="font-bold text-slate-700">איזה מקומות תרצו לבקר?</p>
+                        
+                        <label class="relative cursor-pointer block">
+                            <input type="radio" name="ai_places_mode" value="all" class="peer sr-only" onchange="window.handleAiPlacesMode('all')" checked>
+                            <div class="p-3 rounded-xl border border-slate-200 bg-white peer-checked:border-indigo-600 peer-checked:bg-indigo-50 transition-all flex items-center gap-3">
+                                <i class="fas fa-layer-group text-slate-400 peer-checked:text-indigo-600"></i>
+                                <span>כל המקומות השמורים ב${aiState.data.dest}</span>
+                            </div>
+                        </label>
+                        
+                        <label class="relative cursor-pointer block">
+                            <input type="radio" name="ai_places_mode" value="select" class="peer sr-only" onchange="window.handleAiPlacesMode('select')">
+                            <div class="p-3 rounded-xl border border-slate-200 bg-white peer-checked:border-indigo-600 peer-checked:bg-indigo-50 transition-all flex items-center gap-3">
+                                <i class="fas fa-list-check text-slate-400 peer-checked:text-indigo-600"></i>
+                                <span>בחירה ספציפית</span>
+                            </div>
+                        </label>
+
+                        <div id="ai_places_selection" class="hidden space-y-2 mt-2 pl-2 border-r-2 border-slate-100 pr-2 max-h-48 overflow-y-auto">
+                             ${state.places.filter(p => p.destination === aiState.data.dest).map(p => `
+                                <label class="flex items-center p-2 hover:bg-slate-100 rounded cursor-pointer">
+                                    <input type="checkbox" class="w-4 h-4 accent-indigo-600" onchange="window.handleAiPlaceSelect(this, '${p.name.replace(/'/g, "\\'")}', '${p.address || ''}')">
+                                    <span class="mr-2 text-sm text-slate-700">${p.name}</span>
+                                </label>
+                            `).join('')}
+                             ${state.places.filter(p => p.destination === aiState.data.dest).length === 0 ? '<p class="text-xs text-red-500">אין מקומות שמורים ביעד זה</p>' : ''}
+                        </div>
+                    </div>
+                `,
+                validate: () => {
+                    if(aiState.data.placesMode === 'select' && (!aiState.data.selectedPlaces || aiState.data.selectedPlaces.length === 0)) return 'יש לבחור לפחות מקום אחד';
+                    return true;
+                }
+            },
+            // Step 7: Transport
+            {
+                title: 'התניידות',
+                render: () => `
+                    <div class="space-y-3">
+                        <p class="font-bold text-slate-700">איך תתניידו?</p>
+                        <select class="w-full p-3 bg-white border border-slate-200 rounded-xl" onchange="window.handleAiTransport(this.value)">
+                            <option value="" disabled selected>בחרו אפשרות...</option>
+                            <option value="תחבורה ציבורית וברגל">תחבורה ציבורית וברגל</option>
+                            <option value="רק ברגל">רק ברגל</option>
+                            <option value="רכב שכור">רכב שכור</option>
+                            <option value="תחבורה ציבורית ומוניות/אובר">תחבורה ציבורית ומוניות</option>
+                            <option value="רק מוניות/אובר">רק מוניות/אובר</option>
+                            <option value="other">אחר...</option>
+                        </select>
+                        <textarea id="ai_transport_other" class="hidden w-full p-3 bg-white border border-slate-200 rounded-xl text-sm" rows="2" placeholder="פרט כאן (למשל: רכב בחלק מהימים...)" onchange="window.handleAiInput('transportDetails', this.value)"></textarea>
+                    </div>
+                `,
+                validate: () => aiState.data.transport ? true : 'יש לבחור דרך התניידות'
+            },
+            // Step 8: Free Text
+            {
+                title: 'פרטים נוספים',
+                render: () => `
+                    <div class="space-y-3">
+                        <p class="font-bold text-slate-700">משהו נוסף?</p>
+                        <textarea class="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" rows="4" placeholder="למשל: נוחת במיאמי ב-6 בערב, רוצה לוז רגוע, אוכל כשר בלבד..." onchange="window.handleAiInput('notes', this.value)"></textarea>
+                    </div>
+                `,
+                validate: () => true
+            },
+            // Step 9: Result
+            {
+                title: 'הפורמט מוכן',
+                render: () => {
+                    const prompt = generateAiPrompt();
+                    return `
+                        <div class="space-y-4">
+                            <div class="bg-green-50 text-green-700 p-4 rounded-xl flex items-center gap-3">
+                                <i class="fas fa-check-circle text-2xl"></i>
+                                <div>
+                                    <p class="font-bold">הטקסט נוצר בהצלחה!</p>
+                                    <p class="text-xs">העתיקו את הטקסט והדביקו ב-ChatGPT או Gemini</p>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <textarea id="ai_final_prompt" class="w-full p-4 bg-slate-800 text-slate-200 rounded-xl text-xs sm:text-sm font-mono leading-relaxed h-64 focus:outline-none" readonly>${prompt}</textarea>
+                                <button onclick="window.copyAiPrompt()" class="absolute top-2 left-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-xs backdrop-blur border border-white/10">
+                                    <i class="fas fa-copy ml-1"></i> העתק
+                                </button>
+                            </div>
+                            <button onclick="window.open('https://chat.openai.com', '_blank')" class="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200">
+                                <i class="fas fa-external-link-alt"></i> פתח את ChatGPT
+                            </button>
+                        </div>
+                    `;
+                },
+                isFinal: true
+            }
+        ];
+
+        window.openAiWizard = () => {
+            aiState = { step: 0, data: {} };
+            renderAiStep();
+            window.toggleModal('ai-wizard-modal', true);
+        };
+
+        window.closeAiWizard = () => window.toggleModal('ai-wizard-modal', false);
+
+        window.handleAiInput = (key, value) => {
+            aiState.data[key] = value;
+        };
+        
+        window.handleAiHotelSelect = (el, name) => {
+            if(!aiState.data.selectedHotels) aiState.data.selectedHotels = [];
+            if(el.checked) aiState.data.selectedHotels.push(name);
+            else aiState.data.selectedHotels = aiState.data.selectedHotels.filter(h => h !== name);
+        };
+
+        window.handleAiPlacesMode = (mode) => {
+            aiState.data.placesMode = mode;
+            const selectionDiv = document.getElementById('ai_places_selection');
+            if(mode === 'select') selectionDiv.classList.remove('hidden');
+            else selectionDiv.classList.add('hidden');
+        };
+
+        window.handleAiPlaceSelect = (el, name, address) => {
+            if(!aiState.data.selectedPlaces) aiState.data.selectedPlaces = [];
+            if(el.checked) aiState.data.selectedPlaces.push({name, address});
+            else aiState.data.selectedPlaces = aiState.data.selectedPlaces.filter(p => p.name !== name);
+        };
+
+        window.handleAiTransport = (val) => {
+            aiState.data.transport = val;
+            const otherInput = document.getElementById('ai_transport_other');
+            if(val === 'other') {
+                otherInput.classList.remove('hidden');
+                otherInput.focus();
+            } else {
+                otherInput.classList.add('hidden');
+                aiState.data.transportDetails = '';
+            }
+        };
+
+        window.renderAiStep = () => {
+            // Skip logic check
+            while(aiSteps[aiState.step].condition && !aiSteps[aiState.step].condition()) {
+                aiState.step++;
+            }
+
+            const stepObj = aiSteps[aiState.step];
+            const body = document.getElementById('ai-wizard-body');
+            const progress = document.getElementById('ai-progress-bar');
+            const backBtn = document.getElementById('ai-btn-back');
+            const nextBtn = document.getElementById('ai-btn-next');
+
+            // Render
+            body.innerHTML = stepObj.render();
+            
+            // UI Updates
+            const percent = ((aiState.step) / (aiSteps.length - 1)) * 100;
+            progress.style.width = `${percent}%`;
+            
+            backBtn.disabled = aiState.step === 0;
+            backBtn.style.opacity = aiState.step === 0 ? '0' : '1';
+            
+            if(stepObj.isFinal) {
+                nextBtn.innerHTML = 'סיים <i class="fas fa-check"></i>';
+                nextBtn.onclick = () => window.closeAiWizard();
+            } else {
+                nextBtn.innerHTML = 'הבא <i class="fas fa-chevron-left text-xs"></i>';
+                nextBtn.onclick = () => {
+                    const validation = stepObj.validate();
+                    if(validation === true) {
+                        aiState.step++;
+                        window.renderAiStep();
+                    } else if (typeof validation === 'string') {
+                        showToast(validation, true);
+                    }
+                };
+            }
+            backBtn.onclick = () => {
+                if(aiState.step > 0) {
+                    aiState.step--;
+                    // Check reverse skip logic
+                    while(aiSteps[aiState.step].condition && !aiSteps[aiState.step].condition()) {
+                        aiState.step--;
+                    }
+                    window.renderAiStep();
+                }
+            };
+        };
+
+        window.generateAiPrompt = () => {
+            const d = aiState.data;
+            
+            // Calculate end date
+            let dateStr = d.startDate;
+            if(d.startDate && d.days) {
+                const start = new Date(d.startDate);
+                const end = new Date(start);
+                end.setDate(start.getDate() + parseInt(d.days));
+                dateStr = `${d.startDate} עד ${end.toISOString().split('T')[0]}`;
+            }
+
+            // Get Places List
+            let placesList = [];
+            if(d.placesMode === 'all') {
+                placesList = state.places.filter(p => p.destination === d.dest).map(p => ({name: p.name, address: p.address || ''}));
+            } else {
+                placesList = d.selectedPlaces || [];
+            }
+
+            const placesText = placesList.map(p => `- ${p.name} ${p.address ? `(${p.address})` : ''}`).join('\n');
+
+            // Hotel Text
+            let hotelText = '';
+            if(d.selectedHotels && d.selectedHotels.length === 1) {
+                hotelText = `אני שוהה במלון: ${d.selectedHotels[0]}`;
+            } else if (d.selectedHotels && d.selectedHotels.length > 1) {
+                hotelText = `אני שוהה במלונות הבאים:\n`;
+                d.selectedHotels.forEach((h, i) => {
+                    const dates = d[`hotelDates_${i}`] || 'בתאריכים שהוגדרו';
+                    hotelText += `- ${h}: ${dates}\n`;
+                });
+            }
+
+            // Transport Text
+            let transText = d.transport;
+            if(d.transport === 'other') transText = d.transportDetails || 'אחר';
+
+            return `
+אני נוסע ל${d.dest}
+בתאריכים: ${dateStr} (${d.days} ימים)
+מגיע בשעה: ${d.arrivalTime || '--'}
+עוזב בשעה: ${d.departureTime || '--'}
+
+${hotelText}
+
+אני מתנייד ב: ${transText}
+
+ובנוסף שתדע: ${d.notes || 'אין הערות מיוחדות'}
+
+עכשיו אני ארצה לבקר בכל המקומות הבאים:
+${placesText}
+
+תעשה לי לוז חכם והגיוני שבהם נבקר בכל המקומות הנ"ל שיוצאים מהמלון וחוזרים בערב למלון.
+לוז חכם כלומר לוז שלא חוזר על עצמו, שאני לא אעבור באותם מקומות פעמיים, שהמרחקים בין יעד ליעד יהיו הגיוניים ולא קפיצות ממקום למקום.
+ותבנה את הלוז ממש כמו שסוכן נסיעות מטורף היה עושה שכולל זמן משוער ממקום למקום ועלות משוערת וכמה זמן משוער בכל מקום.
+בנוסף תעשה את הלוז יפה תשמש בסמיילים ודברים לקשט את הלוז.
+תעשה הכל מושלם.
+            `.trim();
+        };
+
+        window.copyAiPrompt = () => {
+            const el = document.getElementById('ai_final_prompt');
+            el.select();
+            document.execCommand('copy'); // Fallback
+            navigator.clipboard.writeText(el.value);
+            showToast('הטקסט הועתק!');
         };
 
         // === Init ===
@@ -1137,6 +1592,9 @@
                 }
             };
 
+            // AI Button Handler
+            document.getElementById('btn-open-ai').onclick = window.openAiWizard;
+
             // Add Place
             document.getElementById('open-add-place-modal-btn').onclick = () => {
                 document.getElementById('modal-search-input').value = '';
@@ -1217,3 +1675,4 @@
     </script>
 </body>
 </html>
+
