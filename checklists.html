@@ -693,7 +693,8 @@
                             <!-- Expandable Content -->
                             <div class="${isOpen ? 'block animate-fade-in' : 'hidden'} mt-4 border-t border-slate-700/50 pt-3">
                                 <div class="space-y-3 mb-4">
-                                    ${(list.items || []).slice().sort((a,b)=> (b.priority||0)-(a.priority||0)).map((item, idx) => `
+                                    ${/* BUG FIX: Removed .sort() to prevent index mismatch between UI and DB */ 
+                                    (list.items || []).map((item, idx) => `
                                         <div class="flex items-start gap-3 group/item">
                                             <input type="checkbox" id="chk-${list.id}-${idx}" 
                                                 class="peer sr-only" 
@@ -762,18 +763,20 @@
         // 2. Optimistic Update (Update local array immediately so UI doesn't jump)
         lists[listIndex].items[itemIdx].checked = isChecked;
         
+        // BUG FIX: Force re-render immediately to show progress bar changes
+        renderDashboard();
+
         // 3. Database Update
         try {
             const listRef = doc(db, 'trips', tripId, 'checklists', listId);
-            // We read the doc again just to be safe about concurrency, 
-            // or we can just push the local state if we trust it.
-            // Let's rely on local state to prevent race conditions with snapshot.
             const newItems = lists[listIndex].items;
             await updateDoc(listRef, { items: newItems });
         } catch(e) { 
             console.error(e);
             showToast('שגיאה בעדכון', 'error');
-            // Revert on error would go here
+            // Revert on error
+            lists[listIndex].items[itemIdx].checked = !isChecked;
+            renderDashboard();
         }
     };
 
