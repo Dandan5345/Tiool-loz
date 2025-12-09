@@ -278,25 +278,12 @@
           </div>
           <div>
             <label class="block text-sm font-semibold text-slate-300 mb-2">סוג רשימה</label>
-            <div class="grid grid-cols-2 gap-3">
-                <label class="cursor-pointer group">
-                    <input type="radio" name="list-type" value="לפני הטיול" class="peer sr-only">
-                    <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">✈️ לפני הטיול</div>
-                </label>
-                <label class="cursor-pointer group">
-                    <input type="radio" name="list-type" value="לפני יעד" class="peer sr-only">
-                    <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">🗺️ לפני יעד</div>
-                </label>
-                <label class="cursor-pointer group">
-                    <input type="radio" name="list-type" value="לפני מעבר" class="peer sr-only">
-                    <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">🚚 לפני מעבר</div>
-                </label>
-                <label class="cursor-pointer group">
-                    <input type="radio" name="list-type" value="אחר" class="peer sr-only">
-                    <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">📋 אחר</div>
-                </label>
+            <!-- Dynamic Categories Container -->
+            <div class="grid grid-cols-2 gap-3" id="checklist-categories-container">
+                <!-- Injected via JS -->
             </div>
-            <input type="text" id="checklist-type-other" class="w-full mt-3 p-3 bg-slate-800 border border-slate-700 rounded-xl text-white hidden focus:border-teal-500 outline-none" placeholder="הזן סוג..." />
+            
+            <input type="text" id="checklist-type-other" class="w-full mt-3 p-3 bg-slate-800 border border-slate-700 rounded-xl text-white hidden focus:border-teal-500 outline-none" placeholder="הזן סוג חדש..." />
           </div>
         </div>
 
@@ -408,7 +395,7 @@
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
     import {
       getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc,
-      serverTimestamp, query, orderBy, getDoc, enableIndexedDbPersistence
+      serverTimestamp, query, orderBy, getDoc, enableIndexedDbPersistence, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     // --- Config ---
@@ -442,10 +429,24 @@
     let notes = [];
     let filters = { text: '' };
     
-    // Tracks open/close state of accordions by ID to persist across renders
-    const uiState = {
-        openItems: new Set()
+    // UI State Persistence
+    // 'closedCategories' stores names of categories that are collapsed (Default is open)
+    const localState = JSON.parse(localStorage.getItem(`tp_state_${tripId}`)) || { 
+        openItems: [], // Changed to Array for serialization
+        closedCategories: [] 
     };
+
+    const uiState = {
+        openItems: new Set(localState.openItems),
+        closedCategories: new Set(localState.closedCategories)
+    };
+
+    function saveUiState() {
+        localStorage.setItem(`tp_state_${tripId}`, JSON.stringify({
+            openItems: Array.from(uiState.openItems),
+            closedCategories: Array.from(uiState.closedCategories)
+        }));
+    }
 
     // --- DOM Elements ---
     const loader = document.getElementById('loader');
@@ -472,7 +473,26 @@
         document.getElementById('auth-container').innerHTML = userHtml;
         document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
 
-        await loadTripData();
+        // Listener for Trip Data (to catch category updates)
+        onSnapshot(doc(db, 'trips', tripId), (doc) => {
+            if (doc.exists()) {
+                tripData = doc.data();
+                if (!tripData.editors?.includes(currentUser.uid)) {
+                    alert('אין לך הרשאות לצפות בטיול זה');
+                    location.href = 'index.html';
+                }
+                document.title = `${tripData.destination || 'טיול'} | TravelPlanner`;
+                setupSidebar();
+                
+                // If this is the first load, remove loader
+                if (!loader.classList.contains('opacity-0')) {
+                    loader.classList.add('opacity-0');
+                    setTimeout(() => loader.remove(), 500);
+                }
+            }
+        });
+        
+        initListeners();
     });
 
     function updateGreeting() {
@@ -481,31 +501,6 @@
         if (h >= 12 && h < 18) text = "צהריים טובים";
         else if (h >= 18) text = "ערב טוב";
         document.getElementById('greeting-time').textContent = text;
-    }
-
-    async function loadTripData() {
-        try {
-            const snap = await getDoc(doc(db, 'trips', tripId));
-            if (!snap.exists()) throw new Error('הטיול לא נמצא');
-            
-            tripData = snap.data();
-            document.title = `${tripData.destination || 'טיול'} | TravelPlanner`;
-            
-            if (!tripData.editors?.includes(currentUser.uid)) {
-                alert('אין לך הרשאות לצפות בטיול זה');
-                location.href = 'index.html';
-                return;
-            }
-
-            setupSidebar();
-            initListeners();
-            loader.classList.add('opacity-0');
-            setTimeout(() => loader.remove(), 500);
-
-        } catch (e) {
-            console.error(e);
-            alert('שגיאה בטעינת הנתונים');
-        }
     }
 
     // --- Sidebar Logic ---
@@ -544,9 +539,16 @@
             document.body.style.overflow = isOpen ? 'auto' : 'hidden'; // Prevent body scroll
         };
 
+        const burger = document.getElementById('hamburger-btn');
+        const closeBtn = document.getElementById('close-sidebar-btn');
+        
+        // Remove old listeners to prevent duplication on re-render
+        burger.replaceWith(burger.cloneNode(true));
+        closeBtn.replaceWith(closeBtn.cloneNode(true));
+        
         document.getElementById('hamburger-btn').addEventListener('click', toggle);
         document.getElementById('close-sidebar-btn').addEventListener('click', toggle);
-        overlay.addEventListener('click', toggle);
+        overlay.onclick = toggle;
     }
 
     function generateDates(rangeStr) {
@@ -594,9 +596,6 @@
         document.getElementById('stat-total').textContent = totalTasks;
         document.getElementById('stat-done').textContent = completedTasks;
         
-        const percentTotal = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-
-        // Filter Content
         const filteredLists = lists.filter(l => l.name.toLowerCase().includes(filterText) || (l.items && l.items.some(i => i.text.toLowerCase().includes(filterText))));
         const filteredNotes = notes.filter(n => n.title.toLowerCase().includes(filterText) || n.content.toLowerCase().includes(filterText));
 
@@ -658,11 +657,18 @@
             });
 
             for (const [groupTitle, groupLists] of Object.entries(groups)) {
-                html += `<div class="glass-card rounded-2xl overflow-hidden border border-slate-700/50">
-                    <div class="bg-slate-800/80 p-3 border-b border-slate-700/50 flex items-center gap-2 backdrop-blur">
-                        <span class="font-bold text-slate-200 text-sm tracking-wide">${groupTitle}</span>
+                // Category Accordion Logic
+                const isCatOpen = !uiState.closedCategories.has(groupTitle);
+
+                html += `<div class="glass-card rounded-2xl overflow-hidden border border-slate-700/50 mb-6">
+                    <!-- Category Header (Collapsible) -->
+                    <div class="bg-slate-800/80 p-4 border-b border-slate-700/50 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition-colors" onclick="toggleCategory('${groupTitle}')">
+                        <span class="font-bold text-slate-200 text-base tracking-wide flex items-center gap-2">${groupTitle} <span class="text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">${groupLists.length}</span></span>
+                        <i class="fas fa-chevron-down text-slate-400 transition-transform duration-300 ${isCatOpen ? 'rotate-180' : ''}"></i>
                     </div>
-                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/40">
+
+                    <!-- Category Content -->
+                    <div class="${isCatOpen ? 'block' : 'hidden'} p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/40 animate-fade-in">
                 `;
                 
                 groupLists.forEach(list => {
@@ -693,8 +699,7 @@
                             <!-- Expandable Content -->
                             <div class="${isOpen ? 'block animate-fade-in' : 'hidden'} mt-4 border-t border-slate-700/50 pt-3">
                                 <div class="space-y-3 mb-4">
-                                    ${/* BUG FIX: Removed .sort() to prevent index mismatch between UI and DB */ 
-                                    (list.items || []).map((item, idx) => `
+                                    ${(list.items || []).map((item, idx) => `
                                         <div class="flex items-start gap-3 group/item">
                                             <input type="checkbox" id="chk-${list.id}-${idx}" 
                                                 class="peer sr-only" 
@@ -737,16 +742,22 @@
         window.editNote = (id) => openNoteModal(notes.find(n => n.id === id));
         window.deleteNote = (id) => confirmDelete('למחוק פתק זה?', () => deleteDoc(doc(db, 'trips', tripId, 'notes', id)));
         window.toggleAccordion = toggleAccordion;
+        window.toggleCategory = toggleCategory;
     }
 
-    // --- Logic: Accordion Toggle ---
+    // --- Logic: UI State Toggles ---
     function toggleAccordion(id) {
-        if (uiState.openItems.has(id)) {
-            uiState.openItems.delete(id);
-        } else {
-            uiState.openItems.add(id);
-        }
-        renderDashboard(); // Re-render to update classes
+        if (uiState.openItems.has(id)) uiState.openItems.delete(id);
+        else uiState.openItems.add(id);
+        saveUiState();
+        renderDashboard();
+    }
+
+    function toggleCategory(key) {
+        if (uiState.closedCategories.has(key)) uiState.closedCategories.delete(key);
+        else uiState.closedCategories.add(key);
+        saveUiState();
+        renderDashboard();
     }
 
     // --- Logic: Search ---
@@ -756,17 +767,12 @@
 
     // --- Logic: Checkbox Toggle (Optimistic Update) ---
     window.toggleItem = async function(listId, itemIdx, isChecked) {
-        // 1. Find local data
         const listIndex = lists.findIndex(l => l.id === listId);
         if (listIndex === -1) return;
         
-        // 2. Optimistic Update (Update local array immediately so UI doesn't jump)
         lists[listIndex].items[itemIdx].checked = isChecked;
-        
-        // BUG FIX: Force re-render immediately to show progress bar changes
         renderDashboard();
 
-        // 3. Database Update
         try {
             const listRef = doc(db, 'trips', tripId, 'checklists', listId);
             const newItems = lists[listIndex].items;
@@ -774,7 +780,6 @@
         } catch(e) { 
             console.error(e);
             showToast('שגיאה בעדכון', 'error');
-            // Revert on error
             lists[listIndex].items[itemIdx].checked = !isChecked;
             renderDashboard();
         }
@@ -787,7 +792,7 @@
         const newList = {
             ...original,
             name: original.name + ' (העתק)',
-            items: original.items.map(i => ({...i, checked: false})), // Reset checks
+            items: original.items.map(i => ({...i, checked: false})),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         };
@@ -803,11 +808,9 @@
     mainFab.addEventListener('click', () => {
         fabContainer.classList.toggle('active');
         document.getElementById('fab-icon').classList.toggle('rotate-45');
-        // Blur background when FAB open
         dashboard.classList.toggle('blur-sm', fabContainer.classList.contains('active'));
     });
 
-    // Close FAB when clicking outside
     document.addEventListener('click', (e) => {
         if (!fabContainer.contains(e.target) && fabContainer.classList.contains('active')) {
              fabContainer.classList.remove('active');
@@ -837,19 +840,14 @@
         document.getElementById('checklist-name').value = list?.name || '';
         document.getElementById('checklist-type-other').value = '';
         
-        const typeRadios = document.querySelectorAll('input[name="list-type"]');
-        let typeFound = false;
-        typeRadios.forEach(r => {
-            if (list && list.type === r.value) { r.checked = true; typeFound = true; }
-            else r.checked = false;
-        });
-        if (list && !typeFound) {
+        renderCategoryOptions(list?.type);
+
+        if (list && document.querySelector(`input[name="list-type"][value="${list.type}"]`) === null) {
+            // It's a legacy type or something weird, default to Other but preserve value
             document.querySelector('input[name="list-type"][value="אחר"]').checked = true;
             const otherInput = document.getElementById('checklist-type-other');
             otherInput.classList.remove('hidden');
             otherInput.value = list.type;
-        } else {
-             document.getElementById('checklist-type-other').classList.add('hidden');
         }
 
         renderItemsPreview();
@@ -857,11 +855,74 @@
         showModal(checklistModal);
     }
 
-    document.querySelectorAll('input[name="list-type"]').forEach(r => {
-        r.addEventListener('change', e => {
-            document.getElementById('checklist-type-other').classList.toggle('hidden', e.target.value !== 'אחר');
+    // Render Category Options Dynamically
+    window.renderCategoryOptions = (selectedType) => {
+        const container = document.getElementById('checklist-categories-container');
+        container.innerHTML = '';
+
+        // Default Categories
+        const defaults = [
+            { val: 'לפני הטיול', icon: '✈️' },
+            { val: 'לפני יעד', icon: '🗺️' },
+            { val: 'לפני מעבר', icon: '🚚' }
+        ];
+
+        // Custom Categories from Trip Data
+        const customs = tripData.customCategories || [];
+
+        // Combine
+        const allCats = [...defaults, ...customs.map(c => ({ val: c, icon: '🏷️', isCustom: true }))];
+
+        // 1. Render Buttons
+        allCats.forEach(cat => {
+            const isChecked = selectedType === cat.val;
+            const wrapper = document.createElement('label');
+            wrapper.className = 'cursor-pointer group relative';
+            wrapper.innerHTML = `
+                <input type="radio" name="list-type" value="${cat.val}" class="peer sr-only" ${isChecked ? 'checked' : ''}>
+                <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">
+                    ${cat.icon} ${cat.val}
+                </div>
+                ${cat.isCustom ? `
+                    <button type="button" onclick="event.preventDefault(); deleteCustomCategory('${cat.val}')" 
+                    class="absolute -top-2 -left-2 w-6 h-6 bg-red-500 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 hover:bg-red-600">
+                    <i class="fas fa-times"></i>
+                    </button>
+                ` : ''}
+            `;
+            container.appendChild(wrapper);
         });
-    });
+
+        // 2. Add "Other" Option
+        const otherWrapper = document.createElement('label');
+        otherWrapper.className = 'cursor-pointer group';
+        otherWrapper.innerHTML = `
+            <input type="radio" name="list-type" value="אחר" class="peer sr-only" ${selectedType && !allCats.some(c => c.val === selectedType) ? 'checked' : ''}>
+            <div class="p-3 border border-slate-700 rounded-xl text-center text-slate-400 peer-checked:bg-teal-500/10 peer-checked:border-teal-500 peer-checked:text-teal-400 hover:bg-slate-800 transition">📋 אחר</div>
+        `;
+        container.appendChild(otherWrapper);
+
+        // Re-attach listeners for "Other" visibility
+        document.querySelectorAll('input[name="list-type"]').forEach(r => {
+            r.addEventListener('change', e => {
+                document.getElementById('checklist-type-other').classList.toggle('hidden', e.target.value !== 'אחר');
+            });
+        });
+    }
+
+    // Delete Custom Category
+    window.deleteCustomCategory = async (catName) => {
+        if (!confirm(`למחוק את הקטגוריה "${catName}"?`)) return;
+        try {
+            await updateDoc(doc(db, 'trips', tripId), {
+                customCategories: arrayRemove(catName)
+            });
+            // Re-render handled by snapshot listener
+        } catch(e) {
+            console.error(e);
+            showToast('שגיאה במחיקת קטגוריה', 'error');
+        }
+    }
 
     function updateStepsUI() {
         const progress = document.getElementById('modal-progress-bar');
@@ -879,7 +940,12 @@
         });
 
         if (currentStep === 1) {
-            const type = document.querySelector('input[name="list-type"]:checked')?.value;
+            const typeRadio = document.querySelector('input[name="list-type"]:checked');
+            let type = typeRadio ? typeRadio.value : null;
+            
+            // Check if "Other" but has text value
+            if (type === 'אחר') type = document.getElementById('checklist-type-other').value;
+
             const contextContainer = document.getElementById('dynamic-context-fields');
             contextContainer.innerHTML = '';
             
@@ -915,9 +981,16 @@
     }
 
     document.getElementById('modal-next-btn').addEventListener('click', () => {
-        if (currentStep === 0 && !document.getElementById('checklist-name').value) {
-            showToast('נא להזין שם לרשימה', 'error');
-            return;
+        if (currentStep === 0) {
+            if(!document.getElementById('checklist-name').value) {
+                showToast('נא להזין שם לרשימה', 'error');
+                return;
+            }
+            // Check if radio selected
+            if(!document.querySelector('input[name="list-type"]:checked')) {
+                 showToast('נא לבחור סוג רשימה', 'error');
+                 return;
+            }
         }
         currentStep++;
         updateStepsUI();
@@ -967,8 +1040,18 @@
 
     document.getElementById('modal-finish-btn').addEventListener('click', async () => {
         const name = document.getElementById('checklist-name').value;
-        let type = document.querySelector('input[name="list-type"]:checked').value;
-        if (type === 'אחר') type = document.getElementById('checklist-type-other').value || 'אחר';
+        const selectedRadio = document.querySelector('input[name="list-type"]:checked');
+        let type = selectedRadio.value;
+        let customTypeValue = null;
+
+        if (type === 'אחר') {
+            customTypeValue = document.getElementById('checklist-type-other').value.trim();
+            if (customTypeValue) {
+                type = customTypeValue;
+            } else {
+                 type = 'אחר'; // fallback
+            }
+        }
         
         const destSelect = document.getElementById('context-dest-select');
         const destination = destSelect ? destSelect.value : null;
@@ -979,16 +1062,31 @@
         };
 
         try {
+            // 1. Save List
             if (editingListId) {
                 await updateDoc(doc(db, 'trips', tripId, 'checklists', editingListId), data);
                 showToast('הרשימה עודכנה');
-                uiState.openItems.add(editingListId); // Auto open on save
+                uiState.openItems.add(editingListId);
+                saveUiState();
             } else {
                 data.createdAt = serverTimestamp();
                 const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), data);
-                uiState.openItems.add(ref.id); // Auto open new
+                uiState.openItems.add(ref.id);
+                saveUiState();
                 showToast('רשימה חדשה נוצרה');
             }
+
+            // 2. Save Custom Category if needed
+            if (customTypeValue) {
+                // Check if it's not a duplicate
+                const currentCustoms = tripData.customCategories || [];
+                if (!currentCustoms.includes(customTypeValue)) {
+                    await updateDoc(doc(db, 'trips', tripId), {
+                        customCategories: arrayUnion(customTypeValue)
+                    });
+                }
+            }
+
             hideModal(checklistModal);
         } catch (e) {
             showToast('שגיאה בשמירה', 'error');
@@ -1063,11 +1161,13 @@
             if (editingNoteId) {
                 await updateDoc(doc(db, 'trips', tripId, 'notes', editingNoteId), data);
                 uiState.openItems.add(editingNoteId);
+                saveUiState();
                 showToast('הפתק עודכן');
             } else {
                 data.createdAt = serverTimestamp();
                 const ref = await addDoc(collection(db, 'trips', tripId, 'notes'), data);
                 uiState.openItems.add(ref.id);
+                saveUiState();
                 showToast('פתק חדש נוצר');
             }
             hideModal(noteModal);
