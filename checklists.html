@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>TravelPlanner | ניהול טיול</title>
+  <title>טיול בקלות | ניהול טיול</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -48,9 +48,13 @@
     }
 
     /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
     ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+
+    /* Hide scrollbar for stats carousel but keep functionality */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     /* Animations */
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -153,7 +157,8 @@
             <i class="fas fa-arrow-right"></i>
           </a>
           <div>
-            <h1 class="text-lg font-bold leading-tight text-white tracking-tight">Travel<span class="text-teal-400">Planner</span></h1>
+            <!-- CHANGED: Title updated -->
+            <h1 class="text-lg font-bold leading-tight text-white tracking-tight">טיול <span class="text-teal-400">בקלות</span></h1>
             <div id="stats-header" class="text-xs text-slate-400 font-medium hidden sm:block">טוען נתונים...</div>
           </div>
         </div>
@@ -201,22 +206,21 @@
     <!-- Content Area -->
     <main class="flex-grow p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
       
-      <!-- Greeting -->
-      <div class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-2">
-        <div>
-           <p class="text-teal-400 text-sm font-bold uppercase tracking-wider mb-1" id="greeting-time">ברוכים הבאים</p>
-           <h2 class="text-3xl font-black text-white" id="page-title">לוח משימות</h2>
+      <!-- CHANGED: Header and Stats Carousel -->
+      <div class="mb-6 space-y-4">
+        <div class="flex items-end justify-between px-1">
+           <div>
+               <p class="text-teal-400 text-sm font-bold uppercase tracking-wider mb-1" id="greeting-time">ברוכים הבאים</p>
+               <h2 class="text-3xl font-black text-white" id="page-title">לוח משימות</h2>
+           </div>
         </div>
-        <div class="bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700/50 flex gap-4 text-center">
-            <div>
-                <span class="block text-2xl font-bold text-white" id="stat-total">0</span>
-                <span class="text-[10px] text-slate-400 uppercase">סה"כ</span>
-            </div>
-            <div class="w-px bg-slate-700"></div>
-            <div>
-                <span class="block text-2xl font-bold text-teal-400" id="stat-done">0</span>
-                <span class="text-[10px] text-slate-400 uppercase">הושלמו</span>
-            </div>
+
+        <!-- NEW: Scrollable Stats Container (Carousel) -->
+        <!-- -mx-4 px-4 on mobile allows full width scroll while keeping alignment -->
+        <div id="stats-carousel" class="flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 select-none no-scrollbar">
+            <!-- Injected via JS -->
+            <div class="animate-pulse bg-slate-800/50 w-32 h-24 rounded-2xl flex-shrink-0"></div>
+            <div class="animate-pulse bg-slate-800/50 w-32 h-24 rounded-2xl flex-shrink-0"></div>
         </div>
       </div>
 
@@ -585,17 +589,70 @@
     function renderDashboard() {
         const filterText = filters.text.toLowerCase();
         
-        // Update Stats
-        let totalTasks = 0, completedTasks = 0;
+        // --- 1. Calculate Stats by Category for Carousel ---
+        const statsMap = {
+            'all': { name: 'כללי', total: 0, done: 0, icon: '📊' }
+        };
+
         lists.forEach(l => {
             if(l.items) {
-                totalTasks += l.items.length;
-                completedTasks += l.items.filter(i => i.checked).length;
+                const count = l.items.length;
+                const completed = l.items.filter(i => i.checked).length;
+                
+                // Add to Global
+                statsMap['all'].total += count;
+                statsMap['all'].done += completed;
+
+                // Determine Category Key (Same logic as main display grouping)
+                const key = l.destination ? `📍 ${l.destination}` : `📁 ${l.type}`;
+                let catName = l.destination ? l.destination : l.type;
+                
+                if (!statsMap[key]) {
+                    let icon = '🏷️';
+                    if (l.destination) icon = '📍';
+                    else if (l.type === 'לפני הטיול') icon = '✈️';
+                    else if (l.type === 'לפני מעבר') icon = '🚚';
+                    else if (l.type === 'לפני יעד') icon = '🗺️';
+                    
+                    statsMap[key] = { name: catName, total: 0, done: 0, icon: icon };
+                }
+                
+                statsMap[key].total += count;
+                statsMap[key].done += completed;
             }
         });
-        document.getElementById('stat-total').textContent = totalTasks;
-        document.getElementById('stat-done').textContent = completedTasks;
+
+        // --- 2. Render Carousel ---
+        const carousel = document.getElementById('stats-carousel');
+        if (Object.keys(statsMap).length > 1 || statsMap.all.total > 0) {
+            carousel.innerHTML = Object.values(statsMap).map(stat => {
+                const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+                return `
+                    <div class="snap-start flex-shrink-0 w-36 bg-slate-800/80 border border-slate-700/50 rounded-2xl p-3 flex flex-col justify-between backdrop-blur-sm relative overflow-hidden group">
+                        <div class="flex justify-between items-start z-10">
+                            <span class="text-xl">${stat.icon}</span>
+                            <span class="text-xs font-bold ${pct === 100 ? 'text-green-400' : 'text-slate-400'}">${pct}%</span>
+                        </div>
+                        <div class="z-10 mt-2">
+                             <div class="text-2xl font-bold text-white leading-none">${stat.done}<span class="text-xs text-slate-500 font-normal">/${stat.total}</span></div>
+                             <div class="text-[10px] text-slate-300 truncate font-medium mt-1 opacity-80">${stat.name}</div>
+                        </div>
+                        <!-- Mini Progress bar at bottom -->
+                        <div class="absolute bottom-0 left-0 right-0 h-1 bg-slate-700/50">
+                            <div class="h-full ${pct === 100 ? 'bg-green-500' : 'bg-teal-500'} shadow-[0_0_5px_rgba(45,212,191,0.5)]" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+             carousel.innerHTML = `
+                <div class="w-full text-center py-2 text-xs text-slate-500 border border-dashed border-slate-700 rounded-xl">
+                    טרם נוצרו משימות
+                </div>
+             `;
+        }
         
+        // --- 3. Filter Data ---
         const filteredLists = lists.filter(l => l.name.toLowerCase().includes(filterText) || (l.items && l.items.some(i => i.text.toLowerCase().includes(filterText))));
         const filteredNotes = notes.filter(n => n.title.toLowerCase().includes(filterText) || n.content.toLowerCase().includes(filterText));
 
