@@ -193,7 +193,7 @@
         right: 0;
         /* Rounded top corners for sheet look */
         border-radius: 24px 24px 0 0 !important; 
-        max-height: 85vh !important; /* Reduced height as requested */
+        max-height: 90vh !important; /* Increased slightly for more content */
         animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex;
         flex-direction: column;
@@ -333,7 +333,7 @@
   <div id="item-modal" class="fixed inset-0 z-[160] hidden items-center justify-center sm:p-4 transition-all duration-300">
     <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm transition-opacity" id="modal-backdrop"></div>
     
-    <div class="modal-content-wrapper relative bg-white w-full sm:max-w-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-full sm:max-h-[85vh] overflow-hidden">
+    <div class="modal-content-wrapper relative bg-white w-full sm:max-w-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-full sm:max-h-[90vh] overflow-hidden">
       <!-- Modal Header -->
       <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-white to-slate-50 relative z-10 shrink-0">
         <div>
@@ -356,11 +356,6 @@
         <div id="step-2" class="modal-step"></div>
         <div id="step-3" class="modal-step"></div>
         <div id="step-4" class="modal-step"></div>
-        <div id="step-5" class="modal-step"></div>
-        <div id="step-6" class="modal-step"></div>
-        <div id="step-7" class="modal-step"></div>
-        <div id="step-8" class="modal-step"></div>
-        <div id="step-9" class="modal-step"></div>
       </form>
 
       <!-- Modal Footer -->
@@ -474,7 +469,7 @@
     let activeFilters = {};
     let isInitialLoad = true;
     let currentModalStep = 1;
-    let totalModalSteps = 1;
+    let totalModalSteps = 4; // REDUCED TO 4
     let editingItemId = null;
     let isRestaurant = false;
     let userLocation = null;
@@ -907,10 +902,12 @@
       gmaps_addEditMarker = null;
 
       form.reset();
-      for (let i = 1; i <= 9; i++) {
+      // Clear previous steps
+      for (let i = 1; i <= 4; i++) {
         const c = document.getElementById(`step-${i}`);
         if (c) c.innerHTML = '';
       }
+      
       const modalTitle = document.getElementById('modal-title');
       const finishButton = document.getElementById('modal-finish-btn');
 
@@ -941,6 +938,7 @@
     }
 
     function updateModalView() {
+      // Determine if we need to show extra fields in step 3
       const itemTypeEl = document.getElementById('item-type');
       let currentType = '';
       if(itemTypeEl) currentType = itemTypeEl.value;
@@ -950,25 +948,28 @@
       }
       isRestaurant = currentType === 'מסעדה/אוכל';
 
-      const baseSteps = [1, 2, 3, 4, 5, 6, 7];
-      const restaurantSteps = [8, 9];
-      let steps = [...baseSteps];
-      if (isRestaurant) steps.push(...restaurantSteps);
-      steps.sort((a, b) => a - b);
-      totalModalSteps = steps.length;
+      // We have fixed 4 steps now
+      totalModalSteps = 4;
+      const actualStep = currentModalStep;
 
       document.querySelectorAll('.modal-step').forEach(s => s.classList.remove('active'));
-      const actualStep = steps[currentModalStep - 1];
       const stepEl = document.getElementById(`step-${actualStep}`);
+      
       if (stepEl) {
         if (!stepEl.innerHTML.trim()) generateStepContent(actualStep);
         stepEl.classList.add('active');
 
-        if (actualStep === 4) {
-              setTimeout(() => {
+        // Logic for map resize if step 2
+        if (actualStep === 2) {
+            setTimeout(() => {
                 if(gmaps_addEditMap) google.maps.event.trigger(gmaps_addEditMap, "resize");
                 if(gmaps_addEditMarker) gmaps_addEditMap.setCenter(gmaps_addEditMarker.getPosition());
-              }, 300);
+            }, 300);
+        }
+        
+        // Logic for step 3 visibility (restaurant fields)
+        if (actualStep === 3) {
+            handleTypeChange();
         }
       }
 
@@ -980,16 +981,26 @@
     }
 
     function handleTypeChange() {
-      const other = document.getElementById('item-type-other');
       const typeSelect = document.getElementById('item-type');
-      if (other && typeSelect) {
-        other.classList.toggle('hidden', typeSelect.value !== 'אחר');
+      if (!typeSelect) return;
+      
+      const val = typeSelect.value;
+      
+      // Toggle "Other" input for type
+      const otherTypeInput = document.getElementById('item-type-other');
+      if (otherTypeInput) otherTypeInput.classList.toggle('hidden', val !== 'אחר');
+
+      // Toggle Restaurant fields sections
+      const kosherContainer = document.getElementById('kosher-container');
+      const foodTypeContainer = document.getElementById('food-type-container');
+      
+      if (val === 'מסעדה/אוכל') {
+          if (kosherContainer) kosherContainer.classList.remove('hidden');
+          if (foodTypeContainer) foodTypeContainer.classList.remove('hidden');
+      } else {
+          if (kosherContainer) kosherContainer.classList.add('hidden');
+          if (foodTypeContainer) foodTypeContainer.classList.add('hidden');
       }
-      document.querySelectorAll('.modal-step').forEach((el) => {
-        const stepNum = parseInt(el.id.split('-')[1]);
-        if (stepNum > currentModalStep) el.innerHTML = '';
-      });
-      updateModalView();
     }
 
     function handleFoodTypeChange() {
@@ -1038,10 +1049,10 @@
       if (!c) return;
 
       const item = editingItemId ? allItems.find(i => i.id === editingItemId) : null;
-      const label = "block text-lg font-bold text-slate-800 mb-3";
+      const label = "block text-lg font-bold text-slate-800 mb-2";
 
       switch(step) {
-        case 1:
+        case 1: // Name
           c.innerHTML = `
             <div class="text-center mb-6">
                 <div class="w-16 h-16 bg-cyan-100 text-cyan-600 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -1052,34 +1063,8 @@
             <input type="text" id="item-name" required class="form-input w-full p-4 text-center text-xl font-bold" placeholder="למשל: מגדל אייפל" autofocus>`;
           if(item) document.getElementById('item-name').value = item.name || '';
           break;
-        case 2:
-          c.innerHTML = `
-            <div class="text-center mb-6">
-                <div class="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i class="fas fa-map-marked-alt fa-2x"></i>
-                </div>
-                <h4 class="text-xl font-bold text-slate-700">לאיזה יעד זה שייך?</h4>
-            </div>
-            <select id="item-destination" required class="form-select w-full p-4 text-lg bg-white shadow-sm cursor-pointer">
-                ${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}
-            </select>`;
-          if(item) document.getElementById('item-destination').value = item.destination || '';
-          else if (lastUsedDestination) document.getElementById('item-destination').value = lastUsedDestination;
-          break;
-        case 3:
-          c.innerHTML = `
-            <label class="${label}">מה סוג המקום? <span class="text-red-500">*</span></label>
-            <div class="relative">
-                <select id="item-type" required class="form-select w-full p-4 text-lg appearance-none bg-white">
-                    ${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}
-                </select>
-                <i class="fas fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-            </div>
-            <input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden border-dashed border-2" placeholder="הגדר סוג חדש...">`;
-          if(item) document.getElementById('item-type').value = item.type || '';
-          handleTypeChange();
-          break;
-        case 4:
+        
+        case 2: // Location (Was step 4)
           c.innerHTML = createLocationHtml();
           const searchInput = c.querySelector('#item-location-search-google');
           
@@ -1112,34 +1097,120 @@
             }
           }
           break;
-        case 5:
-          c.innerHTML = `<label class="${label}">צריך להזמין מקום מראש?</label>
-          <div class="grid grid-cols-3 gap-3">
-            <label class="cursor-pointer">
-                <input type="radio" name="res_radio" value="לא" class="peer sr-only" checked>
-                <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-green-500 peer-checked:bg-green-50 transition">
-                    <i class="fas fa-walking text-2xl mb-1 text-slate-400 peer-checked:text-green-500"></i>
-                    <div class="font-bold text-sm">לא</div>
+
+        case 3: // Categorization (Type, Dest, Kosher, Food) - COMBINED
+          c.innerHTML = `
+            <div class="space-y-6">
+                <!-- Destination -->
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600"><i class="fas fa-map-marked-alt"></i></div>
+                        <label class="text-lg font-bold text-slate-800">לאיזה יעד זה שייך?</label>
+                    </div>
+                    <select id="item-destination" required class="form-select w-full p-4 text-lg bg-white shadow-sm cursor-pointer">
+                        ${siteData.destinations.map(d=>`<option value="${d}">📍 ${d}</option>`).join('')}
+                    </select>
                 </div>
-            </label>
-            <label class="cursor-pointer">
-                <input type="radio" name="res_radio" value="מומלץ" class="peer sr-only">
-                <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-orange-500 peer-checked:bg-orange-50 transition">
-                    <i class="fas fa-ticket-alt text-2xl mb-1 text-slate-400 peer-checked:text-orange-500"></i>
-                    <div class="font-bold text-sm">מומלץ</div>
+
+                <!-- Type -->
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-tags"></i></div>
+                        <label class="text-lg font-bold text-slate-800">סוג המקום <span class="text-red-500">*</span></label>
+                    </div>
+                    <div class="relative">
+                        <select id="item-type" required class="form-select w-full p-4 text-lg appearance-none bg-white">
+                            ${[...siteData.placeTypes,"אחר"].map(o=>`<option value="${o}">${siteData.placeTypeEmojis[o]||'📌'} ${o}</option>`).join('')}
+                        </select>
+                        <i class="fas fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                    </div>
+                    <input type="text" id="item-type-other" class="form-input w-full p-3 mt-3 hidden border-dashed border-2" placeholder="הגדר סוג חדש...">
                 </div>
-            </label>
-            <label class="cursor-pointer">
-                <input type="radio" name="res_radio" value="כן" class="peer sr-only">
-                <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-red-500 peer-checked:bg-red-50 transition">
-                    <i class="fas fa-calendar-check text-2xl mb-1 text-slate-400 peer-checked:text-red-500"></i>
-                    <div class="font-bold text-sm">חובה</div>
+                
+                <!-- Kosher (Hidden unless restaurant) -->
+                <div id="kosher-container" class="hidden p-4 bg-green-50 rounded-xl border border-green-100 animate-fade-in">
+                    <div class="flex items-center gap-2 mb-2">
+                         <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-certificate"></i></div>
+                         <label class="font-bold text-slate-800">האם המקום כשר?</label>
+                    </div>
+                    <select id="item-kosher" class="form-select w-full p-3 text-lg bg-white"><option value="לא">לא</option><option value="כן">כן</option></select>
                 </div>
-            </label>
-          </div>
-          <select id="item-reservation" class="hidden"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>
+
+                <!-- Food Type (Hidden unless restaurant) -->
+                <div id="food-type-container" class="hidden p-4 bg-orange-50 rounded-xl border border-orange-100 animate-fade-in">
+                    <div class="flex items-center gap-2 mb-2">
+                         <div class="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><i class="fas fa-utensils"></i></div>
+                         <label class="font-bold text-slate-800">סוג המטבח</label>
+                    </div>
+                    <select id="item-food-type" class="form-select w-full p-3 text-lg bg-white">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value="${n}">${e} ${n}</option>`).join('')}</select>
+                    <input type="text" id="item-food-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג...">
+                </div>
+            </div>`;
+          
+          // Fill Data
+          if(item) {
+              document.getElementById('item-destination').value = item.destination || '';
+              document.getElementById('item-type').value = item.type || '';
+              document.getElementById('item-kosher').value = item.isKosher || 'לא';
+              
+              const foodSel = document.getElementById('item-food-type');
+              const foodOther = document.getElementById('item-food-type-other');
+              if (siteData.foodTypes[item.foodType]) foodSel.value = item.foodType;
+              else if (item.foodType) { foodSel.value = 'אחר'; foodOther.value = item.foodType; foodOther.classList.remove('hidden'); }
+          } else {
+             if (lastUsedDestination) document.getElementById('item-destination').value = lastUsedDestination; 
+          }
+          
+          handleTypeChange(); // Run initial visibility check
+          break;
+
+        case 4: // Details (Reservation, Short, Long) - COMBINED
+          c.innerHTML = `
+           <div class="space-y-6">
+             <!-- Reservation -->
+             <div>
+                 <label class="${label}">צריך להזמין מקום מראש?</label>
+                  <div class="grid grid-cols-3 gap-3">
+                    <label class="cursor-pointer">
+                        <input type="radio" name="res_radio" value="לא" class="peer sr-only" checked>
+                        <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-green-500 peer-checked:bg-green-50 transition">
+                            <i class="fas fa-walking text-2xl mb-1 text-slate-400 peer-checked:text-green-500"></i>
+                            <div class="font-bold text-sm">לא</div>
+                        </div>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="res_radio" value="מומלץ" class="peer sr-only">
+                        <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-orange-500 peer-checked:bg-orange-50 transition">
+                            <i class="fas fa-ticket-alt text-2xl mb-1 text-slate-400 peer-checked:text-orange-500"></i>
+                            <div class="font-bold text-sm">מומלץ</div>
+                        </div>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="res_radio" value="כן" class="peer sr-only">
+                        <div class="p-3 text-center rounded-xl border-2 border-slate-200 peer-checked:border-red-500 peer-checked:bg-red-50 transition">
+                            <i class="fas fa-calendar-check text-2xl mb-1 text-slate-400 peer-checked:text-red-500"></i>
+                            <div class="font-bold text-sm">חובה</div>
+                        </div>
+                    </label>
+                  </div>
+                  <select id="item-reservation" class="hidden"><option value="לא">לא</option><option value="כן">כן</option><option value="מומלץ">מומלץ</option></select>
+             </div>
+             
+             <!-- Short Desc -->
+             <div>
+                 <label class="${label}">משפט מחץ (תיאור קצר)</label>
+                 <textarea id="item-short-description" class="form-textarea w-full p-4" rows="2" placeholder="למשל: התצפית הכי יפה בעיר בשקיעה..."></textarea>
+             </div>
+
+             <!-- Long Desc -->
+             <div>
+                 <label class="${label}">טיפים ומידע נוסף</label>
+                 <textarea id="item-description" class="form-textarea w-full p-4" rows="5" placeholder="כאן אפשר לכתוב באריכות על המקום, מחירים, דרכי הגעה מומלצות ועוד..."></textarea>
+             </div>
+           </div>
           `;
           
+          // Logic for Reservation
           const radios = document.querySelectorAll('input[name="res_radio"]');
           radios.forEach(r => r.addEventListener('change', () => { document.getElementById('item-reservation').value = r.value; }));
           
@@ -1148,27 +1219,9 @@
              document.getElementById('item-reservation').value = val;
              const r = document.querySelector(`input[name="res_radio"][value="${val}"]`);
              if(r) r.checked = true;
-          }
-          break;
-        case 6:
-          c.innerHTML = `<label class="${label}">משפט מחץ (תיאור קצר)</label><textarea id="item-short-description" class="form-textarea w-full p-4" rows="3" placeholder="למשל: התצפית הכי יפה בעיר בשקיעה..."></textarea>`;
-          if(item) document.getElementById('item-short-description').value = item.shortDescription || '';
-          break;
-        case 7:
-          c.innerHTML = `<label class="${label}">טיפים ומידע נוסף</label><textarea id="item-description" class="form-textarea w-full p-4" rows="6" placeholder="כאן אפשר לכתוב באריכות על המקום, מחירים, דרכי הגעה מומלצות ועוד..."></textarea>`;
-          if(item) document.getElementById('item-description').value = item.description || '';
-          break;
-        case 8: 
-          c.innerHTML = `<label class="${label}">האם המקום כשר?</label><select id="item-kosher" class="form-select w-full p-4 text-lg"><option value="לא">לא</option><option value="כן">כן</option></select>`;
-          if(item) document.getElementById('item-kosher').value = item.isKosher || 'לא';
-          break;
-        case 9:
-          c.innerHTML = `<label class="${label}">סוג המטבח</label><select id="item-food-type" class="form-select w-full p-4 text-lg">${Object.entries(siteData.foodTypes).map(([n,e])=>`<option value="${n}">${e} ${n}</option>`).join('')}</select><input type="text" id="item-food-type-other" class="form-input w-full p-3 mt-3 hidden" placeholder="הגדר סוג...">`;
-          if(item) {
-            const foodSel = document.getElementById('item-food-type');
-            const foodOther = document.getElementById('item-food-type-other');
-            if (siteData.foodTypes[item.foodType]) foodSel.value = item.foodType;
-            else if (item.foodType) { foodSel.value = 'אחר'; foodOther.value = item.foodType; foodOther.classList.remove('hidden'); }
+             
+             document.getElementById('item-short-description').value = item.shortDescription || '';
+             document.getElementById('item-description').value = item.description || '';
           }
           break;
       }
@@ -1686,6 +1739,10 @@
              siteData.customPlaceTypes.push(finalType);
            }
         }
+        
+        // Handle Restaurant Logic - only grab food type/kosher if type is restaurant
+        isRestaurant = (document.getElementById('item-type')?.value === 'מסעדה/אוכל');
+        
         let finalFood = isRestaurant ? gv('item-food-type') : null;
         if(isRestaurant && finalFood==='אחר') {
            finalFood = (gv('item-food-type-other')||'').trim() || null;
@@ -1787,3 +1844,4 @@
   </script>
 </body>
 </html>
+
