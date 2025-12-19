@@ -2,46 +2,70 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>לוז יומי • מסע חלומות</title>
+    
+    <!-- ספריות חיצוניות -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
+    <!-- הגדרות Tailwind -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Assistant', 'sans-serif'],
+              rubik: ['Rubik', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+
     <style>
         :root {
             --card-bg: rgba(255, 255, 255, 0.85);
-            --card-text-color: #1e293b; /* slate-800 */
-            --card-secondary-text-color: #475569; /* slate-600 */
-            --card-border-color: rgba(203, 213, 225, 0.5); /* slate-300 with opacity */
+            --card-text-color: #1e293b;
+            --card-secondary-text-color: #475569;
+            --card-border-color: rgba(203, 213, 225, 0.5);
         }
 
-        /* מונע פלאש לבן מכוער בתחתית בסקרול (בעיקר באייפון) */
+        /* בסיס */
         html, body {
-            background-color:#000;
+            background-color: #000;
             overscroll-behavior-y: contain;
             overscroll-behavior-x: none;
-            -webkit-text-size-adjust:100%;
-        }
-        body { 
-            font-family: 'Assistant', sans-serif; 
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+            font-family: 'Assistant', sans-serif;
         }
 
-        #sidebar, #settings-modal { 
-            transition: transform 0.3s ease-in-out; 
+        /* --- עיצוב תפריט צד (Sidebar) החדש --- */
+        #sidebar {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        #main-content {
-            transition: opacity 0.5s, filter 0.3s ease-in-out;
-        }
+        #sidebar::-webkit-scrollbar { width: 4px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; }
+        #sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
         .submenu { 
             max-height: 0; 
             overflow: hidden; 
-            transition: max-height 0.5s ease-in-out; 
+            transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
         }
         .submenu.open { 
-            max-height: 1200px; 
+            max-height: 1000px; 
+        }
+        .chevron-icon { transition: transform 0.3s ease; }
+        .rotate-180 { transform: rotate(180deg); }
+        body.modal-locked { overflow: hidden; }
+
+        /* --- עיצוב כללי לאפליקציה --- */
+        #main-content {
+            transition: opacity 0.5s, filter 0.3s ease-in-out;
         }
         
         /* Themed Card Style */
@@ -52,19 +76,9 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
         }
-        .themed-card h1, .themed-card h2, .themed-card h3, .themed-card h4 {
-             color: var(--card-text-color);
-        }
-        .themed-card p, .themed-card span, .themed-card div:not([class*="override"]), .themed-card a:not([class*="override"]) {
-            color: var(--card-secondary-text-color);
-        }
-        .themed-card h2, .themed-card .font-extrabold, .themed-card .font-bold {
-            color: var(--card-text-color);
-        }
-        .themed-card .text-slate-700 { color: var(--card-text-color); }
-        .themed-card .text-slate-800 { color: var(--card-text-color); }
-        .themed-card .text-slate-500 { color: var(--card-secondary-text-color); }
-        .themed-card .text-slate-600 { color: var(--card-secondary-text-color); }
+        .themed-card h1, .themed-card h2, .themed-card h3, .themed-card h4 { color: var(--card-text-color); }
+        .themed-card p, .themed-card span, .themed-card div:not([class*="override"]), .themed-card a:not([class*="override"]) { color: var(--card-secondary-text-color); }
+        .themed-card h2, .themed-card .font-extrabold, .themed-card .font-bold { color: var(--card-text-color); }
 
         /* Timeline Styles */
         .timeline { position: relative; }
@@ -79,13 +93,11 @@
             width: 2px; 
             background: rgba(30,41,59,.15); 
         }
-        .timeline-item-wrapper {
-            position: relative;
-        }
+        .timeline-item-wrapper { position: relative; }
         .timeline.layout-line-style .timeline-item-wrapper, 
         .timeline.layout-line-style-accordion-full .timeline-item-wrapper,
         .timeline.layout-line-style-accordion-summary .timeline-item-wrapper {
-            padding-right: 6rem; /* Make space for the time */
+            padding-right: 6rem;
         }
         .timeline-time-outside {
             position: absolute;
@@ -104,209 +116,109 @@
         }
         
         /* Table Layout */
-        .timeline.layout-table .themed-card {
-            overflow: hidden;
-        }
-        .timeline.layout-table table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .timeline.layout-table th, .timeline.layout-table td {
-            padding: 0.75rem 1rem;
-            text-align: right;
-            border-bottom: 1px solid var(--card-border-color);
-        }
-        .timeline.layout-table th {
-            font-weight: 700;
-            background-color: rgba(0,0,0,0.05);
-        }
-        .timeline.layout-table tr:last-child td {
-            border-bottom: none;
-        }
-        .timeline.layout-table td:nth-child(1) { width: 15%; font-weight: 600; }
-        .timeline.layout-table td:nth-child(2) { width: 60%; }
-        .timeline.layout-table td:nth-child(3) { width: 25%; text-align: left; }
-
-        /* Condensed List Layout */
-        .timeline.layout-condensed-list .timeline-item-wrapper {
-             display: flex;
-             gap: 1rem;
-             padding: 0.75rem;
-             border-bottom: 1px solid var(--card-border-color);
-        }
-        .timeline.layout-condensed-list .timeline-item-wrapper:last-child {
-            border-bottom: none;
-        }
-        .timeline.layout-condensed-list .time-block {
-            flex-shrink: 0;
-            font-weight: 600;
-            width: 5rem;
-            text-align: right;
-        }
-        .timeline.layout-condensed-list .details-block {
-            flex-grow: 1;
-        }
+        .timeline.layout-table table { width: 100%; border-collapse: collapse; }
+        .timeline.layout-table th, .timeline.layout-table td { padding: 0.75rem 1rem; text-align: right; border-bottom: 1px solid var(--card-border-color); }
+        .timeline.layout-table th { font-weight: 700; background-color: rgba(0,0,0,0.05); }
+        .timeline.layout-table tr:last-child td { border-bottom: none; }
+        
+        /* Condensed List */
+        .timeline.layout-condensed-list .timeline-item-wrapper { display: flex; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid var(--card-border-color); }
+        .timeline.layout-condensed-list .time-block { flex-shrink: 0; font-weight: 600; width: 5rem; text-align: right; }
+        .timeline.layout-condensed-list .details-block { flex-grow: 1; }
 
         /* Smart Accordion Highlight */
-        .smart-accordion-active {
-            box-shadow: 0 0 0 3px #10b981; /* Green ring */
-            border-color: #10b981 !important;
-        }
+        .smart-accordion-active { box-shadow: 0 0 0 3px #10b981; border-color: #10b981 !important; }
 
-        /* Fix for scroll jitter */
-        .bg-fixed-image, header {
-            transform: translateZ(0);
-        }
-        .bg-fixed-image { 
-            background-size: cover; 
-            background-position: center; 
-        }
+        /* Loader & Animations */
         #initial-loader { 
-            position: fixed; 
-            inset: 0; 
-            z-index: 100; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            transition: opacity .5s ease-out; 
+            position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; transition: opacity .5s ease-out; 
         }
-        @keyframes spin { 
-            from { transform: rotate(0); } 
-            to { transform: rotate(360deg); } 
-        }
-        .plane-spinner { 
-            animation: spin 2s linear infinite; 
-        }
+        @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+        .plane-spinner { animation: spin 2s linear infinite; }
+        .bg-fixed-image { background-size: cover; background-position: center; transform: translateZ(0); }
 
-        /* Map Styles */
+        /* Maps */
         #route-map, .accordion-map-container, #modal-map, #ref-modal-map {
-            height: 450px;
-            border-radius: 1rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            background-color: #e2e8f0; /* Placeholder background */
+            height: 450px; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); background-color: #e2e8f0;
         }
-        #modal-map, .accordion-map-container, #ref-modal-map {
-            height: 250px; /* Smaller map for modals and accordions */
-        }
-        .leaflet-container {
-             font-family: 'Assistant', sans-serif;
-        }
+        #modal-map, .accordion-map-container, #ref-modal-map { height: 250px; }
+        .leaflet-container { font-family: 'Assistant', sans-serif; }
 
-        /* Accordion styles */
-        details > summary { 
-            list-style: none; /* Remove default marker */
-            cursor: pointer;
-        }
-        details > summary::-webkit-details-marker { 
-            display: none; /* Remove default marker for Chrome */
-        }
-        .chevron-icon { 
-            transition: transform 0.3s ease-out; 
-        }
-        details[open] > summary .chevron-icon { 
-            transform: rotate(180deg); 
-        }
-        
-        /* Accordion content padding fix */
-        details .accordion-content {
-            padding: 1rem 1.25rem 1.25rem 1.25rem; /* p-4/p-5 but no padding top */
-            border-top: 1px solid var(--card-border-color);
-        }
-        details > summary.accordion-summary {
-             padding: 1.25rem; /* p-5 */
-        }
-        
-        /* Custom modal for item details */
-        .item-detail-modal, #ref-detail-modal {
+        /* Modals */
+        .item-detail-modal {
             position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 100;
             display: flex; align-items: center; justify-content: center;
             opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
         }
-        .item-detail-modal.visible, #ref-detail-modal.visible { opacity: 1; visibility: visible; }
-        
-        .item-detail-modal-content, #ref-detail-modal-content {
+        .item-detail-modal.visible { opacity: 1; visibility: visible; }
+        .item-detail-modal-content {
             background: var(--card-bg); color: var(--card-text-color);
             padding: 1.5rem; border-radius: 1rem; width: 90%; max-width: 600px;
             max-height: 90vh; overflow-y: auto; transform: scale(0.95); transition: transform 0.3s;
         }
-        .item-detail-modal.visible .item-detail-modal-content, #ref-detail-modal.visible #ref-detail-modal-content { transform: scale(1); }
+        .item-detail-modal.visible .item-detail-modal-content { transform: scale(1); }
 
-        /* Selected Theme Button */
-        .theme-preset-btn.selected-theme {
-            box-shadow: 0 0 0 3px #3b82f6; /* Ring effect */
-        }
-        
-        /* Action buttons in cards */
+        /* Settings Modal */
+        #settings-modal { transition: transform 0.3s ease-in-out; }
+        .theme-preset-btn.selected-theme { box-shadow: 0 0 0 3px #3b82f6; }
+
+        /* Buttons & Toggles */
         .action-button {
-            display: inline-flex; align-items: center; gap: 0.5rem;
-            padding: 0.4rem 0.9rem; border-radius: 9999px;
-            font-size: 0.8rem; font-weight: 700; color: white;
-            transition: all 0.2s ease-out; text-decoration: none;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
-            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
-            border: none;
+            display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.9rem;
+            border-radius: 9999px; font-size: 0.8rem; font-weight: 700; color: white;
+            transition: all 0.2s ease-out; box-shadow: 0 1px 3px rgba(0,0,0,0.2); border: none;
         }
-        .action-button:hover { 
-            opacity: 0.9; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.1);
-            transform: translateY(-1px); 
-        }
-        .action-button.gmaps { background-color: #34A853; } /* Google Green */
-        .action-button.waze { background-color: #33CCFF; color: #1e293b; } /* Waze Blue with dark text */
-        .action-button.site { background-color: #4285F4; } /* Google Blue */
-        .action-button.booking { background-color: #003580; } /* Booking.com Blue */
-        .action-button.ref { background-color: #6366f1; } /* Indigo-500 */
-        .action-button.details { background-color: #64748b; } /* Slate-500 */
+        .action-button.gmaps { background-color: #34A853; }
+        .action-button.waze { background-color: #33CCFF; color: #1e293b; }
+        .action-button.site { background-color: #4285F4; }
+        .action-button.booking { background-color: #003580; }
+        .action-button.ref { background-color: #6366f1; }
+        .action-button.details { background-color: #64748b; }
 
-        /* Force black text for notes */
-        .force-black-text { color: #1e293b !important; }
-        .force-black-text-secondary { color: #334155 !important; }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 28px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .toggle-slider { background-color: #25a25a; }
+        input:checked + .toggle-slider:before { transform: translateX(22px); }
 
-        /* Smart Accordion Toggle Switch */
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 28px;
-        }
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 28px;
-        }
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 20px;
-            width: 20px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .toggle-slider {
-            background-color: #25a25a;
-        }
-        input:checked + .toggle-slider:before {
-            transform: translateX(22px);
-        }
         .status-text.ok { color: #10b981; }
         .status-text.err { color: #ef4444; }
+        .force-black-text { color: #1e293b !important; }
+
+        /* --- Date Navigator Styling --- */
+        #date-navigator-container {
+            position: sticky; top: 4rem; z-index: 20; 
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+        .nav-arrow-btn {
+            width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; background-color: rgba(255,255,255,0.8);
+            color: #475569; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .nav-arrow-btn:hover:not(:disabled) { background-color: #fff; color: #2563eb; transform: scale(1.1); }
+        .nav-arrow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        #date-select-wrapper {
+            position: relative; flex-grow: 1; margin: 0 1rem;
+        }
+        #date-navigator {
+            appearance: none; -webkit-appearance: none;
+            width: 100%; padding: 0.5rem 2.5rem 0.5rem 1rem;
+            background-color: rgba(255,255,255,0.9);
+            border: 1px solid rgba(203, 213, 225, 0.8);
+            border-radius: 0.75rem;
+            font-weight: 700; color: #334155;
+            text-align: center; cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-family: 'Assistant', sans-serif;
+        }
+        #date-navigator:focus { outline: 2px solid #60a5fa; }
     </style>
 </head>
 <body class="bg-transparent">
+    
+    <!-- Loader -->
     <div id="initial-loader">
         <div id="loader-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand');"></div>
         <div class="fixed inset-0 z-0 bg-black/50"></div>
@@ -319,14 +231,35 @@
     <div id="page-bg" class="fixed inset-0 z-0 bg-fixed-image" style="background-image:url('https://i.imgur.com/MjekTyd_d.webp?maxwidth=760&fidelity=grand');"></div>
     <div id="page-bg-overlay" class="fixed inset-0 z-0 bg-black/50"></div>
 
-    <aside id="sidebar" class="fixed top-0 right-0 h-full w-full max-w-sm sm:max-w-md bg-white shadow-2xl z-[60] transform translate-x-full overflow-y-auto">
-        <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white z-10">
-            <h2 class="text-2xl font-bold text-slate-800">תפריט המסע 🧭</h2>
-            <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+    <!-- --- New Sidebar Implementation --- -->
+    <div id="overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] hidden transition-opacity duration-300 opacity-0"></div>
+
+    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl z-[150] transform translate-x-full transition-transform duration-300 ease-out border-l border-white/20 flex flex-col">
+        <!-- Sidebar Header -->
+        <div class="p-5 flex justify-between items-center border-b border-slate-100 bg-gradient-to-l from-cyan-50 to-transparent shrink-0">
+          <h2 class="text-2xl font-bold text-slate-800 font-rubik">תפריט המסע 🧭</h2>
+          <button id="close-sidebar-btn" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 transition flex items-center justify-center shadow-sm">
+            <i class="fas fa-times fa-lg"></i>
+          </button>
         </div>
-        <nav id="main-menu" class="p-4 space-y-2"></nav>
-    </aside>
     
+        <!-- Sidebar Content -->
+        <nav id="main-menu" class="p-4 space-y-3 overflow-y-auto flex-grow pb-20 scroll-smooth">
+          <div class="text-center py-10 text-slate-400">
+              <i class="fas fa-circle-notch fa-spin mb-2"></i>
+              <p class="text-sm">טוען תפריט...</p>
+          </div>
+        </nav>
+        
+        <!-- Sidebar Footer -->
+        <div class="p-4 border-t border-slate-100 bg-slate-50 shrink-0 text-center">
+            <div id="auth-status-sidebar" class="text-xs text-slate-500 mb-2"></div>
+            <p class="text-xs text-slate-400">תכנון טיול חכם</p>
+        </div>
+    </aside>
+    <!-- --- End of Sidebar --- -->
+    
+    <!-- Settings Modal (Legacy code support) -->
     <aside id="settings-modal" class="fixed top-0 right-0 h-full w-full max-w-sm sm:w-96 bg-white shadow-2xl z-[80] transform translate-x-full">
         <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white z-10">
             <h2 class="text-2xl font-bold text-slate-800">הגדרות עיצוב 🎨</h2>
@@ -376,38 +309,38 @@
             <div id="settings-panel-layout" class="settings-panel space-y-4 hidden">
                  <p class="font-bold text-slate-700">סגנון תצוגת הלו"ז:</p>
                  <div class="space-y-2">
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="default">
-                        <div><span class="font-bold">כרטיסיות (ברירת מחדל)</span><p class="text-sm text-slate-500">כרטיסיה עם פרטים עיקריים. לחיצה פותחת חלון עם כל המידע.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">כרטיסיות (ברירת מחדל)</span><p class="text-sm text-slate-500">כרטיסיה עם פרטים עיקריים.</p></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="accordion-summary">
-                        <div><span class="font-bold">אקורדיון חלקי</span><p class="text-sm text-slate-500">כרטיסיה עם כותרת ושעה. לחיצה מרחיבה לפירוט.</p></div>
-                   </label>
+                        <div><span class="font-bold">אקורדיון חלקי</span></div>
+                    </label>
                     <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="accordion-full">
-                        <div><span class="font-bold">אקורדיון מלא</span><p class="text-sm text-slate-500">כרטיסיה עם כותרת ושעה. לחיצה מרחיבה וחושפת את כל הפרטים.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">אקורדיון מלא</span></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="line-style">
-                        <div><span class="font-bold">ציר זמן</span><p class="text-sm text-slate-500">קו אנכי עם כרטיסיות בצד. לחיצה פותחת חלון עם כל המידע.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">ציר זמן</span></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="line-style-accordion-summary">
-                        <div><span class="font-bold">ציר זמן אקורדיון חלקי</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לתקציר.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">ציר זמן אקורדיון חלקי</span></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="line-style-accordion-full">
-                        <div><span class="font-bold">ציר זמן אקורדיון מלא</span><p class="text-sm text-slate-500">שילוב של ציר זמן עם אקורדיון נפתח לכל הפרטים.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">ציר זמן אקורדיון מלא</span></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="table">
-                        <div><span class="font-bold">טבלה</span><p class="text-sm text-slate-500">מציג את פריטי היום בטבלה מסודרת וקומפקטית.</p></div>
-                   </label>
-                   <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
+                        <div><span class="font-bold">טבלה</span></div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg has-[:checked]:bg-sky-50 has-[:checked]:border-sky-400">
                         <input type="radio" name="timeline-layout" value="condensed-list">
-                        <div><span class="font-bold">רשימה דחוסה</span><p class="text-sm text-slate-500">רשימה פשוטה ונקייה, מתאימה להדפסה.</p></div>
-                   </label>
+                        <div><span class="font-bold">רשימה דחוסה</span></div>
+                    </label>
                  </div>
                  <div id="smart-accordion-controls" class="pt-4 border-t space-y-3 hidden">
                     <div class="flex justify-between items-center">
@@ -448,15 +381,12 @@
                 </div>
                 <div class="pt-4 border-t">
                      <p class="font-bold text-slate-700">בחר ערכת נושא מוכנה:</p>
-                      <div id="theme-presets-container" class="grid grid-cols-2 gap-2 mt-2">
-                           </div>
+                      <div id="theme-presets-container" class="grid grid-cols-2 gap-2 mt-2"></div>
                 </div>
                  <button id="apply-theme-settings" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">החל שינויים</button>
             </div>
         </div>
     </aside>
-
-    <div id="overlay" class="fixed inset-0 bg-black/40 cursor-pointer z-50 hidden"></div>
 
     <div id="main-content" class="relative z-10 opacity-0">
         <header class="bg-white/70 backdrop-blur-md sticky top-0 z-30 shadow-sm">
@@ -479,18 +409,38 @@
             </div>
         </header>
 
+        <!-- --- סרגל ניווט תאריכים --- -->
+        <div id="date-navigator-container" class="bg-white/80 border-b border-white/20">
+            <div class="container mx-auto px-4 py-2 flex justify-between items-center max-w-2xl">
+                <!-- חץ ימין (אחורה בזמן / הקודם) -->
+                <button id="prev-day-btn" class="nav-arrow-btn" disabled>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+
+                <!-- בחירת תאריך/יעד -->
+                <div id="date-select-wrapper">
+                    <select id="date-navigator">
+                        <option>טוען תאריכים...</option>
+                    </select>
+                    <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                        <i class="fas fa-calendar-alt text-slate-400"></i>
+                    </div>
+                </div>
+
+                <!-- חץ שמאל (קדימה בזמן / הבא) -->
+                <button id="next-day-btn" class="nav-arrow-btn" disabled>
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+        </div>
+        <!-- --- סוף סרגל ניווט --- -->
+
         <div class="bg-white/70 backdrop-blur-md border-b">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
                 <p id="schedule-headline" class="text-center text-slate-700 font-bold">טוען פרטי תאריך...</p>
             </div>
         </div>
 
-        <!-- 
-          CHANGELOG: 
-          1. Removed p-4/p-6/p-8 from main tag.
-          2. Added px-4/px-6/px-8 and pt-4/pt-6/pt-8 to the inner-wrapper div.
-          3. Added a large pb-24 to the main tag to prevent content cutoff at the bottom.
-        -->
         <main class="relative z-10 pb-24">
             <div class="max-w-5xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 lg:pt-8">
 
@@ -516,7 +466,6 @@
                     <div id="timeline" class="timeline space-y-4 hidden"></div>
                 </section>
 
-                <!-- דגשים / טיפים -->
                 <details id="notes-section" class="themed-card rounded-2xl shadow-lg overflow-hidden">
                     <summary class="accordion-summary flex justify-between items-center">
                         <h3 class="text-lg font-bold">דגשים וטיפים ליום זה</h3>
@@ -529,9 +478,8 @@
                     </div>
                 </details>
                 
-                <!-- מפה -->
                 <details id="map-container-section" class="themed-card rounded-2xl shadow-lg overflow-hidden hidden">
-                     <summary class="accordion-summary flex justify-between items-center">
+                      <summary class="accordion-summary flex justify-between items-center">
                         <h3 class="text-lg font-bold">מפת מסלול היום</h3>
                         <i class="fas fa-chevron-down chevron-icon"></i>
                     </summary>
@@ -588,13 +536,9 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         
-        // --- הוספת יכולות אופליין ---
         enableIndexedDbPersistence(db).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn("Persistence נכשל – יש יותר מדי טאבים פתוחים.");
-          } else if (err.code === 'unimplemented') {
-            console.warn("הדפדפן לא תומך ב־Persistence.");
-          }
+          if (err.code === 'failed-precondition') { console.warn("Persistence failed"); }
+          else if (err.code === 'unimplemented') { console.warn("Persistence not supported"); }
         });
         
         const IMAGE_WORKER_URL = "https://yellow-cloud-3f13.doronenakache.workers.dev/";
@@ -626,11 +570,18 @@
         const pageBgOverlay = document.getElementById('page-bg-overlay');
         const loaderBg = document.getElementById('loader-bg');
         
+        // Sidebar Elements
         const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
         const hamburgerBtn = document.getElementById('hamburger-btn');
         const closeSidebarBtn = document.getElementById('close-sidebar-btn');
-        const overlay = document.getElementById('overlay');
         const mainMenu = document.getElementById('main-menu');
+        const authStatusSidebar = document.getElementById('auth-status-sidebar');
+
+        // Nav Elements
+        const dateNavigator = document.getElementById('date-navigator');
+        const prevDayBtn = document.getElementById('prev-day-btn');
+        const nextDayBtn = document.getElementById('next-day-btn');
         
         const settingsModal = document.getElementById('settings-modal');
         const settingsBtn = document.getElementById('settings-btn');
@@ -639,7 +590,6 @@
         const smartAccordionControls = document.getElementById('smart-accordion-controls');
         const smartAccordionToggle = document.getElementById('smart-accordion-toggle');
 
-        // BG Image uploader elements
         const bgImageUploadBtn = document.getElementById('bg-image-upload-btn');
         const bgImageRemoveBtn = document.getElementById('bg-image-remove-btn');
         const bgImageUploadInput = document.getElementById('bg-image-upload-input');
@@ -669,16 +619,33 @@
         const refDetailModalContent = document.getElementById('ref-detail-modal-content');
 
         // ---------- Helpers ----------
+        // פונקציית תפריט צד החדשה
         function toggleSidebar() { 
-            sidebar.classList.toggle('translate-x-full'); 
-            overlay.classList.toggle('hidden'); 
-            settingsModal.classList.add('translate-x-full');
+            const isClosed = sidebar.classList.contains('translate-x-full');
+            if (isClosed) {
+                sidebar.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    overlay.classList.remove('opacity-0');
+                });
+                document.body.classList.add('modal-locked');
+            } else {
+                sidebar.classList.add('translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    document.body.classList.remove('modal-locked');
+                }, 300);
+            }
         }
+
         function toggleSettings() { 
             settingsModal.classList.toggle('translate-x-full'); 
-            overlay.classList.toggle('hidden'); 
-            sidebar.classList.add('translate-x-full');
-            configureBgSettingsUI();
+            // overlay logic for settings specifically if needed, but we keep sidebar overlay logic separate
+            // simple toggle for settings to not break existing flow:
+            if(!settingsModal.classList.contains('translate-x-full')) {
+                 configureBgSettingsUI();
+            }
         }
         
         function parseLocalDateFlexible(s) { 
@@ -713,25 +680,19 @@
             return out; 
         }
         
-        // BUGFIX: פונקציה מוצאת יעד לפי תאריך + שם יעד מה-URL אם יש
         function findDestinationForDate(trip, rawDDMMYYYY, destName) {
             const target = parseLocalDateFlexible(rawDDMMYYYY);
             if (!target) return null;
             const targetISO = toISODateUTC(target);
-
             const destinations = trip.destinations || [];
-
             if (destName) {
                 const specificDest = destinations.find(dest => (dest.nameHe === destName || dest.name === destName));
                 if (specificDest) {
                     const days = generateDatesFromRange(specificDest.dates);
                     const isoList = days.map(d => toISODateUTC(d));
-                    if (isoList.includes(targetISO)) {
-                        return specificDest;
-                    }
+                    if (isoList.includes(targetISO)) return specificDest;
                 }
             }
-
             return destinations.find(dest => {
                 const days = generateDatesFromRange(dest.dates);
                 const isoList = days.map(d => toISODateUTC(d));
@@ -744,12 +705,12 @@
             return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
         }
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Radius of the earth in km
+            const R = 6371; 
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; // Distance in km
+            return R * c; 
         }
 
         // ---------- Styling & Layout Functions ----------
@@ -787,9 +748,7 @@
             if (selectedBtn) selectedBtn.classList.add('selected-theme');
             
             customThemeControls.classList.toggle('hidden', themeKey !== 'custom');
-            
             renderTimelineFromItems(currentScheduleItems); 
-            
             setTimeout(() => { 
                 if (mapInstance) mapInstance.invalidateSize(); 
                 if(modalMapInstance) modalMapInstance.invalidateSize(); 
@@ -817,7 +776,7 @@
                 smartAccordionInterval = setInterval(updateSmartAccordionState, 30000);
             }
 
-            timelineBox.className = `timeline`; // Reset classes
+            timelineBox.className = `timeline`; 
             if (!['table', 'condensed-list'].includes(layout)) {
                 timelineBox.classList.add('space-y-4');
             }
@@ -825,17 +784,14 @@
             
             const radio = document.querySelector(`input[name="timeline-layout"][value="${layout}"]`);
             if(radio) radio.checked = true; 
-            
             renderTimelineFromItems(currentScheduleItems); 
         }
         
         // ---------- Image Upload Logic ----------
         async function handleImageUpload(file, urlStorageElement, statusElement, onCompleteCallback) {
             if (!file) return;
-
             statusElement.textContent = '';
             statusElement.className = 'status-text text-sm mt-2 text-slate-400 h-5';
-            
             if (!file.type.startsWith('image/')) {
                 statusElement.textContent = 'יש לבחור קובץ תמונה בלבד.';
                 statusElement.classList.add('err');
@@ -846,35 +802,27 @@
                 statusElement.classList.add('err');
                 return;
             }
-
             statusElement.textContent = 'מעלה תמונה...';
             const formData = new FormData();
             formData.append('image', file);
-
             try {
                 const response = await fetch(IMAGE_WORKER_URL, { method: 'POST', body: formData });
                 const result = await response.json();
-
                 if (!response.ok || !result.data?.url) {
                     throw new Error(result.error?.message || 'שגיאה לא ידועה מהשרת');
                 }
-
                 const imageUrl = result.data.url;
                 urlStorageElement.value = imageUrl;
                 statusElement.textContent = 'ההעלאה הושלמה!';
                 statusElement.classList.add('ok');
-
                 if (onCompleteCallback) onCompleteCallback(imageUrl);
-                
                 setTimeout(() => { statusElement.textContent = ''; statusElement.className = 'status-text text-sm mt-2 text-slate-400 h-5'; }, 3000);
-
             } catch (error) {
                 console.error('Image upload failed:', error);
                 statusElement.textContent = `שגיאה: ${error.message}`;
                 statusElement.classList.add('err');
             }
         }
-
         function configureBgSettingsUI() {
             const hasBgImage = !!bgImageUrlStorage.value;
             bgImageUploadBtn.innerHTML = hasBgImage 
@@ -883,38 +831,192 @@
             bgImageRemoveBtn.classList.toggle('hidden', !hasBgImage);
         }
 
-        // ---------- Rendering Functions ----------
+        // ---------- Sidebar & Nav Building ----------
         function buildMenuFromTrip() {
-            mainMenu.innerHTML = '';
+             mainMenu.innerHTML = '';
+             const tParam = `?tripId=${tripId}`;
+             const navLinks = [
+                { name: 'מרכז הבקרה', icon: 'fa-home', href: `trip.html${tParam}`, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { name: 'ניהול לוגיסטיקה', icon: 'fa-suitcase', href: `summary.html${tParam}`, color: 'text-orange-600', bg: 'bg-orange-50' },
+                { name: 'אטרקציות ומסעדות', icon: 'fa-utensils', href: `attractions.html${tParam}`, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+                { name: 'רשימות וצ\'ק ליסט', icon: 'fa-list-check', href: `checklists.html${tParam}`, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { name: 'מעקב הוצאות', icon: 'fa-coins', href: `expenses.html${tParam}`, color: 'text-rose-600', bg: 'bg-rose-50' },
+                { name: 'בניית מסלול חכם', icon: 'fa-magic-wand-sparkles', href: `edit-trip.html${tParam}`, color: 'text-purple-600', bg: 'bg-purple-50' }
+             ];
+
+             const navContainer = document.createElement('div');
+             navContainer.className = 'space-y-2 mb-6';
+             navLinks.forEach(link => {
+                  const a = document.createElement('a');
+                  a.href = link.href;
+                  a.className = `flex items-center gap-3 w-full p-3 rounded-xl transition-all hover:translate-x-1 hover:bg-slate-50`;
+                  a.innerHTML = `
+                    <div class="w-10 h-10 rounded-full ${link.bg} ${link.color} flex items-center justify-center shadow-sm">
+                        <i class="fas ${link.icon}"></i>
+                    </div>
+                    <span class="text-slate-700 font-medium">${link.name}</span>
+                  `;
+                  navContainer.appendChild(a);
+             });
+             mainMenu.appendChild(navContainer);
+
+             const separator = document.createElement('div');
+             separator.className = 'h-px bg-slate-200 my-4';
+             mainMenu.appendChild(separator);
+
+             const scheduleHeader = document.createElement('h3');
+             scheduleHeader.className = 'text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2';
+             scheduleHeader.innerText = "לו״ז יומי לפי יעדים";
+             mainMenu.appendChild(scheduleHeader);
+
+             if (!tripData?.destinations || !Array.isArray(tripData.destinations)) {
+                 mainMenu.insertAdjacentHTML('beforeend', '<p class="text-center text-slate-400 text-sm">לא הוגדרו יעדים.</p>');
+                 return;
+             }
+
+             // Sort destinations by start date (approx)
+             const sortedDestinations = [...tripData.destinations].sort((a, b) => {
+                 const startA = parseLocalDateFlexible(a.dates?.split(' - ')[0]);
+                 const startB = parseLocalDateFlexible(b.dates?.split(' - ')[0]);
+                 return (startA && startB) ? startA - startB : 0;
+             });
+
+             sortedDestinations.forEach(dest => {
+                  const destinationDiv = document.createElement('div');
+                  destinationDiv.className = 'mb-2';
+                  
+                  const button = document.createElement('button');
+                  button.className = 'w-full text-right p-3 hover:bg-cyan-50 rounded-xl font-bold text-slate-700 flex justify-between items-center transition-all group';
+                  button.innerHTML = `
+                    <span class="flex items-center gap-3">
+                        <i class="fas fa-map-marked-alt text-slate-400 group-hover:text-cyan-500 transition-colors"></i> 
+                        ${dest.nameHe || dest.name}
+                    </span> 
+                    <i class="fas fa-chevron-down chevron-icon text-slate-300 text-sm"></i>`;
+
+                  const submenu = document.createElement('div');
+                  submenu.className = 'submenu mt-1 mr-4 border-r-2 border-slate-100 pr-2 space-y-1';
+                  
+                  if (dest.dates) {
+                      const dates = generateDatesFromRange(dest.dates);
+                      dates.forEach(dObj => {
+                          const dateText = `${dObj.getUTCDate()}/${dObj.getUTCMonth()+1}/${dObj.getUTCFullYear()}`;
+                          const a = document.createElement('a');
+                          const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
+                          a.href = `?tripId=${tripId}&date=${encodeURIComponent(dateText)}&dest=${destNameParam}`;
+                          a.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-slate-50 hover:text-cyan-700 rounded-lg transition text-sm';
+                          a.innerHTML = `
+                              <div class="flex items-center gap-2">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                  <span class="font-medium">${hebWeekdayUTC(dObj)}</span>
+                                  <span class="text-xs text-slate-400">(${dateText})</span>
+                              </div>
+                          `;
+                          submenu.appendChild(a);
+                      });
+                  } else {
+                       const noDates = document.createElement('div');
+                       noDates.className = 'text-xs text-slate-400 pr-3 py-1';
+                       noDates.innerText = 'ללא תאריכים';
+                       submenu.appendChild(noDates);
+                  }
+                  
+                  button.addEventListener('click', () => {
+                      submenu.classList.toggle('open');
+                      button.querySelector('.chevron-icon').classList.toggle('rotate-180');
+                  });
+                  
+                  destinationDiv.appendChild(button);
+                  destinationDiv.appendChild(submenu);
+                  mainMenu.appendChild(destinationDiv);
+             });
+        }
+        
+        // ---------- Date Navigation Logic ----------
+        function initDateNavigator() {
             if (!tripData?.destinations) return;
-            tripData.destinations.forEach(dest => {
-                const div = document.createElement('div');
-                const btn = document.createElement('button');
-                btn.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center';
-                btn.innerHTML = `<span>${dest.nameHe || dest.name} ${dest.emoji || ''}</span> <i class="fas fa-chevron-down transition-transform"></i>`;
-                const submenu = document.createElement('div');
-                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
-                const dates = generateDatesFromRange(dest.dates);
-                dates.forEach(dObj => {
-                    const day = hebWeekdayUTC(dObj);
-                    const date = `${dObj.getUTCDate()}.${dObj.getUTCMonth()+1}.${dObj.getUTCFullYear()}`;
-                    const nice = `${dObj.getUTCDate()}/${dObj.getUTCMonth()+1}/${dObj.getUTCFullYear()}`;
-                    const a = document.createElement('a');
-                    
-                    // BUGFIX: Add the destination name to the URL to distinguish schedules on the same day.
-                    const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
-                    a.href = `?tripId=${tripId}&date=${encodeURIComponent(nice)}&dest=${destNameParam}`;
-                    
-                    a.className = 'block w-full text-right p-2 pr-4 text-slate-600 hover:bg-sky-100 hover:text-sky-600 rounded-md';
-                    a.textContent = `${day} ${date} (${dest.nameHe} ${dest.emoji || ''})`;
-                    submenu.appendChild(a);
-                });
-                btn.addEventListener('click', () => { submenu.classList.toggle('open'); btn.querySelector('i').classList.toggle('rotate-180'); });
-                div.append(btn, submenu);
-                mainMenu.appendChild(div);
-            });
+            
+            // 1. Flatten all dates into a sorted list
+            const allPoints = [];
+            // Assuming sortedDestinations was already useful, but let's re-process
+             const sortedDestinations = [...tripData.destinations].sort((a, b) => {
+                 const startA = parseLocalDateFlexible(a.dates?.split(' - ')[0]);
+                 const startB = parseLocalDateFlexible(b.dates?.split(' - ')[0]);
+                 return (startA && startB) ? startA - startB : 0;
+             });
+             
+             dateNavigator.innerHTML = '';
+             let currentIndex = -1;
+             let globalIndex = 0;
+
+             sortedDestinations.forEach(dest => {
+                 const dates = generateDatesFromRange(dest.dates);
+                 if (dates.length > 0) {
+                     const optGroup = document.createElement('optgroup');
+                     optGroup.label = dest.nameHe || dest.name;
+                     
+                     dates.forEach(d => {
+                         const dStr = `${d.getUTCDate()}/${d.getUTCMonth()+1}/${d.getUTCFullYear()}`;
+                         const dISO = toISODateUTC(d);
+                         const option = document.createElement('option');
+                         option.value = JSON.stringify({
+                             date: dStr,
+                             dest: dest.nameHe || dest.name
+                         });
+                         option.text = `${hebWeekdayUTC(d)} (${dStr})`;
+                         
+                         // Check if this is current Page
+                         // destForDate might be null if URL params invalid, but assuming page loaded
+                         if (destForDate && (dest.nameHe === destForDate.nameHe) && dateISO === dISO) {
+                             option.selected = true;
+                             currentIndex = globalIndex;
+                         }
+                         
+                         optGroup.appendChild(option);
+                         allPoints.push({
+                             date: dStr,
+                             dest: dest.nameHe || dest.name,
+                             iso: dISO
+                         });
+                         globalIndex++;
+                     });
+                     dateNavigator.appendChild(optGroup);
+                 }
+             });
+             
+             // 2. Setup Arrows
+             if (currentIndex > -1) {
+                 // Previous Button (Right arrow in code, goes to prev index)
+                 if (currentIndex > 0) {
+                     prevDayBtn.disabled = false;
+                     prevDayBtn.onclick = () => {
+                         const prev = allPoints[currentIndex - 1];
+                         window.location.href = `?tripId=${tripId}&date=${encodeURIComponent(prev.date)}&dest=${encodeURIComponent(prev.dest)}`;
+                     };
+                 } else {
+                     prevDayBtn.disabled = true;
+                 }
+                 
+                 // Next Button (Left arrow in code, goes to next index)
+                 if (currentIndex < allPoints.length - 1) {
+                     nextDayBtn.disabled = false;
+                     nextDayBtn.onclick = () => {
+                         const next = allPoints[currentIndex + 1];
+                         window.location.href = `?tripId=${tripId}&date=${encodeURIComponent(next.date)}&dest=${encodeURIComponent(next.dest)}`;
+                     };
+                 } else {
+                     nextDayBtn.disabled = true;
+                 }
+             }
+             
+             // 3. Setup Select Change
+             dateNavigator.addEventListener('change', (e) => {
+                 const val = JSON.parse(e.target.value);
+                 window.location.href = `?tripId=${tripId}&date=${encodeURIComponent(val.date)}&dest=${encodeURIComponent(val.dest)}`;
+             });
         }
 
+        // ---------- Rendering Functions (Content) ----------
         function renderHeadline(dayTitleFromDoc = null) {
             const destName = destForDate?.nameHe || destForDate?.name || 'היעד';
             const dayPart = dayNameHe ? ` ${dayNameHe}` : '';
@@ -1003,9 +1105,7 @@
             Object.values(accordionMaps).forEach(map => {
                 if (map) map.remove();
             });
-            for (const key in accordionMaps) {
-                delete accordionMaps[key];
-            }
+            for (const key in accordionMaps) { delete accordionMaps[key]; }
 
             currentScheduleItems = items;
             if (!items || items.length === 0) {
@@ -1024,18 +1124,14 @@
             createBtn.classList.add('hidden');
             editBtn.classList.remove('hidden');
             editBtn.classList.add('inline-flex');
-            mapContainerSection.classList.add('hidden'); // נסתיר עד שנטען מפה למהלך היום
+            mapContainerSection.classList.add('hidden'); 
 
             if (currentLayout === 'table') {
                 const tableHtml = `
                     <div class="themed-card rounded-lg shadow">
                         <table>
                             <thead>
-                                <tr>
-                                    <th>שעה</th>
-                                    <th>פעילות</th>
-                                    <th>פעולות</th>
-                                </tr>
+                                <tr><th>שעה</th><th>פעילות</th><th>פעולות</th></tr>
                             </thead>
                             <tbody>
                                 ${items.map((it, index) => `
@@ -1052,12 +1148,10 @@
                                                 <button class="action-button details open-modal-btn" data-index="${index}" title="פרטים מלאים"><i class="fa-solid fa-info-circle"></i></button>
                                             </div>
                                         </td>
-                                    </tr>
-                                `).join('')}
+                                    </tr>`).join('')}
                             </tbody>
                         </table>
-                    </div>
-                `;
+                    </div>`;
                 timelineBox.innerHTML = tableHtml;
             } else if (currentLayout === 'condensed-list') {
                 const listContainer = document.createElement('div');
@@ -1069,8 +1163,7 @@
                             <p class="font-bold">${it.title || 'פריט ללא שם'}</p>
                             ${it.summary ? `<p class="text-sm">${it.summary}</p>` : ''}
                         </div>
-                    </div>
-                `).join('');
+                    </div>`).join('');
                 timelineBox.appendChild(listContainer);
             } else {
                 items.forEach((it, index) => {
@@ -1092,10 +1185,7 @@
                                     </div>
                                     <i class="fas fa-chevron-down chevron-icon"></i>
                                 </div>`;
-                             const detailsContent = isFullAccordion
-                                ? getFullItemDetailsHTML(it, index)
-                                : `${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}<button class="text-blue-600 font-bold mt-2 text-sm open-modal-btn" data-index="${index}">פרטים מלאים...</button>`;
-
+                             const detailsContent = isFullAccordion ? getFullItemDetailsHTML(it, index) : `${it.summary ? `<p class="mt-1 text-sm">${it.summary}</p>` : ''}<button class="text-blue-600 font-bold mt-2 text-sm open-modal-btn" data-index="${index}">פרטים מלאים...</button>`;
                             itemHtml = `
                                 <div class="timeline-time-outside">${timeText(it)}</div>
                                 <details id="details-${index}" class="group accordion-item themed-card rounded-lg shadow-sm" style="padding-right: 0;">
@@ -1106,7 +1196,7 @@
                                         </div>
                                     </div>
                                 </details>`;
-                        } else { // line-style default
+                        } else { 
                             itemHtml = `
                                 <div class="timeline-time-outside">${timeText(it)}</div>
                                 <div class="themed-card rounded-lg shadow p-4 cursor-pointer open-modal-btn" data-index="${index}">
@@ -1140,7 +1230,7 @@
                                     </div>
                                 </div>
                             </details>`;
-                    } else { // default layout
+                    } else { 
                         const navLink = it.address?.label ? `<a href="https://maps.google.com/maps?q=${encodeURIComponent(it.address.label)}" target="_blank" class="action-button gmaps"><i class="fa-solid fa-map-location-dot"></i></a>` : '';
                         const siteLink = it.links?.site ? `<a href="${it.links.site}" target="_blank" class="action-button site"><i class="fa-solid fa-link"></i></a>` : '';
                         itemHtml = `
@@ -1153,13 +1243,11 @@
                                 </div>
                             </div>`;
                     }
-                    
                     itemWrapper.innerHTML = itemHtml;
                     timelineBox.appendChild(itemWrapper);
                 });
             }
             
-            // חיבור מאזינים אחרי ה-HTML
             timelineBox.querySelectorAll('.open-modal-btn').forEach(btn => {
                 const index = btn.dataset.index;
                 btn.addEventListener('click', (e) => { 
@@ -1186,9 +1274,7 @@
                             setTimeout(() => {
                                 const accordionMap = L.map(mapContainerId);
                                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(accordionMap);
-                                
                                 setupRouteOnMap(accordionMap, item);
-                                
                                 accordionMaps[mapContainerId] = accordionMap;
                             }, 50);
                         }
@@ -1202,17 +1288,13 @@
 
         function updateSmartAccordionState() {
             if (!isSmartAccordionActive || currentScheduleItems.length === 0) return;
-
             const now = new Date();
             const nowMinutes = now.getHours() * 60 + now.getMinutes();
             let activeIndex = -1;
-
             for (let i = 0; i < currentScheduleItems.length; i++) {
                 const item = currentScheduleItems[i];
                 if (!item.startTime) continue;
-                
                 const startMinutes = parseInt(item.startTime.split(':')[0]) * 60 + parseInt(item.startTime.split(':')[1]);
-                
                 let endMinutes;
                 if (item.endTime) {
                     endMinutes = parseInt(item.endTime.split(':')[0]) * 60 + parseInt(item.endTime.split(':')[1]);
@@ -1222,18 +1304,15 @@
                     if (nextItem) {
                         endMinutes = parseInt(nextItem.startTime.split(':')[0]) * 60 + parseInt(nextItem.startTime.split(':')[1]);
                     } else {
-                        endMinutes = 24 * 60; // סוף היום
+                        endMinutes = 24 * 60;
                     }
                 }
-
                 if (nowMinutes >= startMinutes && nowMinutes < endMinutes) {
                     activeIndex = i;
                     break;
                 }
             }
-
             document.querySelectorAll('.smart-accordion-active').forEach(el => el.classList.remove('smart-accordion-active'));
-
             if (activeIndex !== -1) {
                 const activeDetails = document.getElementById(`details-${activeIndex}`);
                 if (activeDetails) {
@@ -1243,9 +1322,7 @@
                                 d.open = false;
                             }
                         });
-                        if (!activeDetails.open) {
-                           activeDetails.open = true;
-                        }
+                        if (!activeDetails.open) { activeDetails.open = true; }
                     }
                     activeDetails.classList.add('smart-accordion-active');
                 }
@@ -1277,17 +1354,14 @@
         async function setupRouteOnMap(map, item) {
             const hasAddr = !!(item.address?.lat && item.address?.lng);
             const hasTravel = !!(item.travel?.from?.lat && item.travel?.from?.lng && item.travel?.to?.lat && item.travel?.to?.lng);
-
             if (currentRouteLayer && map.hasLayer(currentRouteLayer)) {
                 map.removeLayer(currentRouteLayer);
             }
-
             if (hasTravel) {
                 const a = item.travel.from;
                 const b = item.travel.to;
                 const profile = (item.travel.mode === 'foot') ? 'foot' : 'driving';
                 const url = `https://router.project-osrm.org/route/v1/${profile}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
-                
                 try {
                     const res = await fetch(url);
                     const data = await res.json();
@@ -1298,13 +1372,11 @@
                     }
                 } catch (e) {
                     console.error("Could not fetch route from OSRM", e);
-                    // fallback לקו ישר
                     currentRouteLayer = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], {color: 'red', dashArray: '5, 10'}).addTo(map);
                     map.fitBounds([[a.lat, a.lng], [b.lat, b.lng]], {padding: [40, 40]});
                 }
                 L.marker([a.lat, a.lng]).addTo(map).bindPopup(`מ: ${item.travel.from.label}`);
                 L.marker([b.lat, b.lng]).addTo(map).bindPopup(`אל: ${item.travel.to.label}`);
-
             } else if (hasAddr) {
                 map.setView([item.address.lat, item.address.lng], 15);
                 L.marker([item.address.lat, item.address.lng]).addTo(map);
@@ -1315,7 +1387,6 @@
             openModal();
             const hasAddr = !!(it.address?.lat && it.address?.lng);
             const hasTravel = !!(it.travel?.from?.lat && it.travel?.from?.lng && it.travel?.to?.lat && it.travel?.to?.lng);
-
             const headerHtml = `
                 <div class="flex justify-between items-start">
                     <div>
@@ -1385,37 +1456,27 @@
         function renderRouteMap(items) {
             const allPoints = [];
             const pointLabels = new Set(); 
-
             items.forEach(item => {
                 if (item.address && item.address.lat && item.address.lng) {
                     const label = `${item.address.lat},${item.address.lng}`;
                     if (!pointLabels.has(label)) {
-                        allPoints.push({
-                            ...item.address,
-                            title: item.title 
-                        });
+                        allPoints.push({ ...item.address, title: item.title });
                         pointLabels.add(label);
                     }
                 }
                 if (item.travel && item.travel.to && item.travel.to.lat && item.travel.to.lng) {
                     const label = `${item.travel.to.lat},${item.travel.to.lng}`;
-                     if (!pointLabels.has(label)) {
-                        allPoints.push({
-                            ...item.travel.to,
-                            title: item.title 
-                        });
+                      if (!pointLabels.has(label)) {
+                        allPoints.push({ ...item.travel.to, title: item.title });
                         pointLabels.add(label);
                     }
                 }
             });
-
             if (allPoints.length < 2) {
                 mapContainerSection.classList.add('hidden');
                 return;
             }
-
             mapContainerSection.classList.remove('hidden');
-
             if (mapInstance) { mapInstance.remove(); }
             mapInstance = L.map('route-map');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapInstance);
@@ -1430,12 +1491,10 @@
                         .addTo(mapInstance)
                         .bindPopup(`<b>${i + 1}. ${point.title}</b><br>${point.label}`)
                 );
-                
                 if (i > 0) {
                     const prevPoint = allPoints[i - 1];
                     const color = routeColors[(i - 1) % routeColors.length];
                     L.polyline([[prevPoint.lat, prevPoint.lng], [point.lat, point.lng]], { color: color }).addTo(mapInstance);
-                    
                     const legendItem = document.createElement('div');
                     legendItem.className = 'flex items-center gap-2';
                     legendItem.innerHTML = `
@@ -1444,7 +1503,6 @@
                     mapLegend.appendChild(legendItem);
                 }
             });
-
             if (markers.length > 0) {
                 mapInstance.fitBounds(new L.featureGroup(markers).getBounds().pad(0.2));
             }
@@ -1474,13 +1532,10 @@
         function attachEvents() {
             hamburgerBtn.addEventListener('click', toggleSidebar);
             closeSidebarBtn.addEventListener('click', toggleSidebar);
+            overlay.addEventListener('click', toggleSidebar);
+            
             settingsBtn.addEventListener('click', toggleSettings);
             closeSettingsBtn.addEventListener('click', toggleSettings);
-            overlay.addEventListener('click', () => { 
-                sidebar.classList.add('translate-x-full'); 
-                settingsModal.classList.add('translate-x-full'); 
-                overlay.classList.add('hidden'); 
-            });
 
             tripHomeBtn.href = 'index.html';
 
@@ -1608,7 +1663,6 @@
             document.getElementById('card-opacity-slider').addEventListener('input', updateCustomThemePreview);
             document.getElementById('card-text-color-picker').addEventListener('input', updateCustomThemePreview);
 
-
             document.getElementById('apply-theme-settings').addEventListener('click', () => {
                 if (currentThemeKey === 'custom') {
                     saveStyleSetting('theme', { key: 'custom', values: currentCustomTheme }, 'trip');
@@ -1631,7 +1685,6 @@
             const tripRef = doc(db, 'trips', tripId);
             let key;
             if (scope === 'date') {
-                // BUGFIX: אותו ID כמו בדף יצירת לוז
                 const scheduleDocId = `${dateISO}_${destForDate.nameHe}`;
                 key = `styles.date_${scheduleDocId}.${settingType}`;
             } else if (scope === 'destination') {
@@ -1657,8 +1710,6 @@
             const styles = tripData.styles || {};
             const tripStyle = styles.trip || {};
             const destStyle = destForDate ? (styles[`destination_${destForDate.id}`] || {}) : {};
-            
-            // BUGFIX: שימוש ב-ID המשולב של היום+יעד
             const scheduleDocId = (dateISO && destForDate) ? `${dateISO}_${destForDate.nameHe}` : null;
             const dateStyle = scheduleDocId ? (styles[`date_${scheduleDocId}`] || {}) : {};
             
@@ -1682,7 +1733,6 @@
             }
             setBackground(finalBg);
 
-            // ערכים ראשוניים בפאנל
             bgImageUrlStorage.value = finalBg.type === 'image' ? finalBg.value : '';
             bgColorPicker.value = finalBg.type === 'color' ? finalBg.value : '#f1f5f9';
             document.getElementById('bg-brightness-slider').value = finalBg.brightness;
@@ -1692,7 +1742,6 @@
             const url = new URLSearchParams(window.location.search);
             tripId = url.get('tripId');
             dateStr = decodeURIComponent(url.get('date') || '').trim();
-            // BUGFIX: שם יעד ב-URL
             const destNameFromUrl = decodeURIComponent(url.get('dest') || '').trim();
 
             const parsed = parseLocalDateFlexible(dateStr);
@@ -1705,7 +1754,6 @@
             }
 
             tripHomeBtn.href = `trip.html?id=${tripId}`;
-
             attachEvents();
 
             onAuthStateChanged(auth, async (user) => {
@@ -1720,6 +1768,8 @@
                         <i class="fas fa-right-from-bracket fa-lg"></i>
                     </button>`;
                 document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth));
+                
+                authStatusSidebar.innerHTML = `<span class="text-green-500">מחובר כ-${displayName}</span>`;
 
                 const tripRef = doc(db, 'trips', tripId);
                 const tripSnap = await getDoc(tripRef);
@@ -1730,8 +1780,6 @@
 
                     if (canAccess) {
                         tripData = loadedTripData;
-
-                        // BUGFIX: חיפוש היעד הספציפי לפי שם יעד מה-URL
                         destForDate = findDestinationForDate(tripData, dateStr, destNameFromUrl);
                         if (!destForDate) {
                             alert('לא נמצא יעד מתאים לתאריך ולשם שצוינו.');
@@ -1742,6 +1790,7 @@
                         loaderBg.style.backgroundImage = `url('${destForDate?.bgUrl || destForDate?.imageUrl || defaultBgUrl}')`;
                         
                         buildMenuFromTrip();
+                        initDateNavigator(); // Initialize Date Navigator
                         loadAndApplyStyles();
 
                         const destNameParam = encodeURIComponent(destForDate?.nameHe || destForDate?.name || '');
@@ -1749,7 +1798,6 @@
                         editBtn.href = editHref;
                         createBtn.href = editHref;
 
-                        // BUGFIX: מזהה ייחודי עבור schedule (תאריך+שם יעד)
                         if (dateISO && destForDate.nameHe) {
                             const scheduleDocId = `${dateISO}_${destForDate.nameHe}`;
                             const schedDocRef = doc(db, 'trips', tripId, 'schedules', scheduleDocId);
@@ -1800,7 +1848,6 @@
             });
         }
         
-        // --- Referenced Item Modal Logic (תיקון באג של אטרקציה שלא נטענת) ---
         function closeRefDetailModal() {
             if (refModalMapInstance) { 
                 refModalMapInstance.remove(); 
@@ -1812,24 +1859,15 @@
 
         async function showRefDetailModal(refType, refId) {
             openModal();
-            
             refDetailModalContent.innerHTML = `
                 <div class="flex justify-center items-center h-48">
                     <i class="fas fa-spinner fa-spin fa-2x"></i>
                 </div>`;
             refDetailModal.classList.add('visible');
 
-            // BUGFIX:
-            // לפעמים ב-schedule  נשמר refType כמו "place" או "attraction" ולא בדיוק "places",
-            // אז אנחנו מנרמל לשמות תתי-הקולקשנים האמיתיים בפיירסטור.
             const collectionMap = {
-                place: 'places',
-                places: 'places',
-                attraction: 'places',
-                attractions: 'places',
-                poi: 'places',
-                logistic: 'logistics',
-                logistics: 'logistics'
+                place: 'places', places: 'places', attraction: 'places', attractions: 'places', poi: 'places',
+                logistic: 'logistics', logistics: 'logistics'
             };
             const normalizedCollection = collectionMap[refType] || refType;
 
@@ -1921,7 +1959,7 @@
              let detailsHtml = '';
              switch(item.subType) {
                  case 'hotel':
-                       detailsHtml = `
+                        detailsHtml = `
                             <p><strong>יעד:</strong> ${item.destination}</p>
                             <p><strong>תאריכים:</strong> ${item.dates}</p>
                             <p><strong>מחיר:</strong> ${item.price ? `$${item.price.toLocaleString()}`: 'לא צוין'}</p>
@@ -1930,7 +1968,7 @@
                         `;
                        break;
                  case 'flight':
-                       detailsHtml = `
+                        detailsHtml = `
                             <p><strong>חברת תעופה:</strong> ${item.airline}</p>
                             <p><strong>מספר טיסה:</strong> ${item.flight_number}</p>
                             <p><strong>תאריך:</strong> ${item.dates}</p>
@@ -1939,7 +1977,7 @@
                         `;
                        break;
                  default:
-                       detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
+                        detailsHtml = `<p>אין פרטים נוספים להצגה.</p>`;
              }
 
              return `
@@ -1957,8 +1995,6 @@
                  </div>
              `;
         }
-
-        initPage();
     </script>
 </body>
 </html>
