@@ -1,341 +1,359 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>תפריט המבורגר - רכיב עצמאי</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>רכיב תפריט צד</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Assistant', 'sans-serif'],
+            rubik: ['Rubik', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
 
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    /* בסיס */
+    html, body { height: 100%; -webkit-tap-highlight-color: transparent; }
     
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    /* אנימציות לתפריט */
+    .submenu { 
+        max-height: 0; 
+        overflow: hidden; 
+        transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+    }
+    .submenu.open { 
+        max-height: 1000px; /* מספיק גדול כדי להכיל את התוכן */
+    }
+    
+    .chevron-icon { transition: transform 0.3s ease; }
+    .rotate-180 { transform: rotate(180deg); }
 
-    <style>
-        body {
-            font-family: 'Assistant', sans-serif;
-            background-color: #f1f5f9; /* רקע בהיר כללי לדף הדגמה */
-            overflow-x: hidden;
-        }
-
-        /* --- Sidebar Specific Styles --- */
-        #sidebar { 
-            transition: transform 0.3s ease-in-out; 
-            /* מוודא שהתפריט יהיה מעל הכל */
-            z-index: 1000; 
-        }
-
-        /* סגנונות לתתי-תפריטים (הימים בתוך היעד) */
-        .submenu { 
-            max-height: 0; 
-            overflow: hidden; 
-            transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
-        }
-        .submenu.open { 
-            max-height: 1200px; /* מספיק גובה כדי להכיל את כל הימים */
-        }
-
-        /* סגנון לכפתור ההמבורגר כשהוא נלחץ (אופציונלי - כאן הוא פשוט כפתור) */
-        #hamburger-btn {
-            cursor: pointer;
-        }
-
-        /* הסתרת פס גלילה בסיידבר כדי שיהיה נקי */
-        #sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-        #sidebar::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-        }
-        #sidebar::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 10px;
-        }
-        #sidebar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
-    </style>
+    /* עיצוב פס גלילה לתפריט */
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-track { background: transparent; }
+    #sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    
+    body.modal-locked { overflow: hidden; }
+  </style>
 </head>
-<body>
+<body class="bg-slate-100">
 
-    <!-- Loading Overlay (כדי לא להציג תפריט ריק לפני שטוענים נתונים) -->
-    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[2000] flex flex-col items-center justify-center gap-4 transition-opacity duration-500">
-        <i class="fas fa-circle-notch fa-spin text-4xl text-blue-600"></i>
-        <p class="text-lg font-bold text-slate-700">טוען תפריט...</p>
-    </div>
+  <!-- כפתור לפתיחת התפריט (לצורך ההדגמה) -->
+  <div class="p-10 flex flex-col items-center justify-center min-h-screen">
+      <button id="hamburger-btn" class="w-16 h-16 rounded-full bg-slate-900 text-white shadow-xl hover:scale-110 transition flex items-center justify-center text-2xl">
+        <i class="fas fa-bars"></i>
+      </button>
+      <p class="mt-4 text-slate-500 font-bold">לחץ לפתיחת התפריט</p>
+      <div id="auth-status" class="mt-2 text-xs text-slate-400">בודק חיבור...</div>
+  </div>
 
-    <!-- Header / Navbar Area (רק בשביל שיהיה איפה לשים את הכפתור) -->
-    <header class="bg-white shadow-sm p-4 sticky top-0 z-50">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold text-slate-800">דף הדגמה לתפריט</h1>
-            
-            <!-- --- THE HAMBURGER BUTTON --- -->
-            <button id="hamburger-btn" class="p-2 text-slate-600 hover:text-blue-600 transition-colors focus:outline-none border border-slate-200 rounded-lg hover:bg-slate-50">
-                <i class="fas fa-bars fa-lg"></i>
-            </button>
-        </div>
-    </header>
+  <!-- --- התחלת קוד התפריט (Sidebar) --- -->
+  
+  <!-- Overlay (הרקע הכהה מאחור) -->
+  <div id="overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] hidden transition-opacity duration-300 opacity-0"></div>
 
-    <!-- Main Content Placeholder -->
-    <main class="p-8 text-center text-slate-500">
-        <p>התוכן של הדף נמצא כאן...</p>
-        <p class="text-sm mt-2">(לחץ על ההמבורגר למעלה משמאל כדי לפתוח את התפריט)</p>
-    </main>
-
-    <!-- --- SIDEBAR COMPONENT START --- -->
+  <!-- Sidebar Container -->
+  <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl z-[150] transform translate-x-full transition-transform duration-300 ease-out border-l border-white/20 flex flex-col">
     
-    <!-- Dark Overlay (הרקע הכהה כשפותחים תפריט) -->
-    <div id="overlay" class="fixed inset-0 bg-black/50 z-[999] hidden transition-opacity duration-300"></div>
-
-    <!-- The Sidebar Itself -->
-    <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform translate-x-full overflow-y-auto">
-        <!-- Sidebar Header -->
-        <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white z-10">
-            <h2 class="text-2xl font-bold text-slate-800">תפריט המסע</h2>
-            <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500 transition-colors">
-                <i class="fas fa-times fa-lg"></i>
-            </button>
-        </div>
-        
-        <!-- Sidebar Navigation Content (Dynamic) -->
-        <nav id="main-menu" class="p-4 space-y-2 pb-20">
-            <!-- התוכן כאן יוזרק על ידי JavaScript -->
-        </nav>
-    </aside>
-
-    <!-- --- SIDEBAR COMPONENT END --- -->
-
-    <!-- Alert Modal (למקרה של שגיאות) -->
-    <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[3000] p-4">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
-            <h2 class="text-xl font-bold mb-2">הודעה</h2>
-            <p id="alert-msg" class="text-slate-600 mb-4"></p>
-            <button onclick="document.getElementById('alert-modal').classList.add('hidden')" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">אישור</button>
-        </div>
+    <!-- Sidebar Header -->
+    <div class="p-5 flex justify-between items-center border-b border-slate-100 bg-gradient-to-l from-cyan-50 to-transparent shrink-0">
+      <h2 class="text-2xl font-bold text-slate-800 font-rubik">תפריט המסע 🧭</h2>
+      <button id="close-sidebar-btn" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 transition flex items-center justify-center shadow-sm">
+        <i class="fas fa-times fa-lg"></i>
+      </button>
     </div>
 
-    <!-- Firebase Logic -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- Sidebar Content (Navigation) -->
+    <nav id="main-menu" class="p-4 space-y-3 overflow-y-auto flex-grow pb-20 scroll-smooth">
+      <!-- התוכן ייטען כאן דינאמית ע"י ה-JS -->
+      <div class="text-center py-10 text-slate-400">
+          <i class="fas fa-circle-notch fa-spin mb-2"></i>
+          <p class="text-sm">טוען תפריט...</p>
+      </div>
+    </nav>
+    
+    <!-- Footer קטן בתחתית התפריט -->
+    <div class="p-4 border-t border-slate-100 bg-slate-50 shrink-0 text-center">
+        <p class="text-xs text-slate-400">תכנון טיול חכם</p>
+    </div>
+  </aside>
+  <!-- --- סוף קוד התפריט --- -->
 
-        // --- Firebase Configuration ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
-            authDomain: "tiool-loz.firebaseapp.com",
-            projectId: "tiool-loz",
-            storageBucket: "tiool-loz.appspot.com",
-            messagingSenderId: "226069823505",
-            appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
-        };
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+  <!-- Firebase & Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // --- DOM Elements ---
-        const DOM = {
-            sidebar: document.getElementById('sidebar'),
-            hamburgerBtn: document.getElementById('hamburger-btn'),
-            closeSidebarBtn: document.getElementById('close-sidebar-btn'),
-            overlay: document.getElementById('overlay'),
-            mainMenu: document.getElementById('main-menu'),
-            loadingOverlay: document.getElementById('loading-overlay'),
-            alertModal: document.getElementById('alert-modal'),
-            alertMsg: document.getElementById('alert-msg')
-        };
+    // הגדרות Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAhuk5EfqaT9eZr3CxMYWP7qzjoGLhLq3o",
+      authDomain: "tiool-loz.firebaseapp.com",
+      projectId: "tiool-loz",
+      storageBucket: "tiool-loz.appspot.com",
+      messagingSenderId: "226069823505",
+      appId: "1:226069823505:web:ab7672692ccfa49173b1b0"
+    };
 
-        let tripId = null;
-        let tripData = null;
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-        // --- Helper Functions (Date Parsing) ---
-        function parseDDMMYYYY(s) {
-            if (!s || typeof s !== 'string') return null;
-            const [d, m, y] = s.split('/').map(Number);
-            if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
-            return new Date(y, m - 1, d);
+    // אלמנטים
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+    const mainMenu = document.getElementById('main-menu');
+    const authStatus = document.getElementById('auth-status');
+
+    let tripId = null;
+    let tripData = null;
+
+    // --- לוגיקת פתיחה/סגירה ---
+    function toggleSidebar() {
+      const isClosed = sidebar.classList.contains('translate-x-full');
+      if (isClosed) {
+        // פתיחה
+        sidebar.classList.remove('translate-x-full');
+        overlay.classList.remove('hidden');
+        // מאפשרים דפדפן לצייר לפני הוספת ה-opacity
+        requestAnimationFrame(() => {
+            overlay.classList.remove('opacity-0');
+        });
+        document.body.classList.add('modal-locked'); // נעילת גלילה בדף הראשי
+      } else {
+        // סגירה
+        sidebar.classList.add('translate-x-full');
+        overlay.classList.add('opacity-0');
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            document.body.classList.remove('modal-locked');
+        }, 300); // תואם ל-duration ב-CSS
+      }
+    }
+
+    hamburgerBtn.addEventListener('click', toggleSidebar);
+    closeSidebarBtn.addEventListener('click', toggleSidebar);
+    overlay.addEventListener('click', toggleSidebar);
+
+    // --- עזרי תאריכים ---
+    function parseDDMMYYYY(s) {
+        if (!s || typeof s !== 'string') return null;
+        const [d, m, y] = s.split('/').map(Number);
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+        return new Date(y, m - 1, d);
+    }
+
+    function hebWeekday(d) {
+        const n = d.toLocaleDateString('he-IL', { weekday: 'long' });
+        return n.startsWith('יום') ? n : `יום ${n}`;
+    }
+
+    function dotted(d) {
+        return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
+    }
+
+    function generateDatesFromRange(rangeStr) {
+        if (!rangeStr || !rangeStr.includes(' - ')) return [];
+        const [startStr, endStr] = rangeStr.split(' - ');
+        const startDate = parseDDMMYYYY(startStr);
+        const endDate = parseDDMMYYYY(endStr);
+        if (!startDate || !endDate) return [];
+        
+        const dates = [];
+        let currentDate = new Date(startDate);
+
+        while (currentDate <= endDate) {
+            const dd = String(currentDate.getDate()).padStart(2,'0');
+            const mm = String(currentDate.getMonth()+1).padStart(2,'0');
+            const yyyy = currentDate.getFullYear();
+            dates.push(`${dd}/${mm}/${yyyy}`);
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        return dates;
+    }
+
+    // --- פונקציית בניית התפריט הראשית ---
+    function buildMenuFromTrip() {
+      mainMenu.innerHTML = ''; // ניקוי
+
+      // 1. כפתורי ניווט מהירים (לפי הבקשה)
+      // אנחנו מוודאים שהקישור כולל את ה-tripId הנוכחי
+      const tParam = `?tripId=${tripId}`;
+      
+      const navLinks = [
+        { name: 'מרכז הבקרה', icon: 'fa-home', href: `trip.html${tParam}`, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { name: 'ניהול לוגיסטיקה', icon: 'fa-suitcase', href: `summary.html${tParam}`, color: 'text-orange-600', bg: 'bg-orange-50' },
+        { name: 'אטרקציות ומסעדות', icon: 'fa-utensils', href: `attractions.html${tParam}`, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+        { name: 'רשימות וצ\'ק ליסט', icon: 'fa-list-check', href: `checklists.html${tParam}`, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { name: 'מעקב הוצאות', icon: 'fa-coins', href: `expenses.html${tParam}`, color: 'text-rose-600', bg: 'bg-rose-50' },
+        { name: 'בניית מסלול חכם', icon: 'fa-magic-wand-sparkles', href: `edit-trip.html${tParam}`, color: 'text-purple-600', bg: 'bg-purple-50' }
+      ];
+
+      const navContainer = document.createElement('div');
+      navContainer.className = 'space-y-2 mb-6';
+
+      // זיהוי הדף הנוכחי להדגשה (בדף הזה אין משמעות, אבל הקוד מוכן להטמעה)
+      const currentPath = window.location.pathname;
+
+      navLinks.forEach(link => {
+          const a = document.createElement('a');
+          a.href = link.href;
+          // לוגיקה פשוטה לבדיקת "האם זה הדף הנוכחי" - כאן זה לא יופעל כי זה דף רכיב
+          const isActive = currentPath.includes(link.href.split('?')[0]); 
+
+          a.className = `flex items-center gap-3 w-full p-3 rounded-xl transition-all hover:translate-x-1 ${isActive ? 'bg-slate-100 font-bold border-r-4 border-cyan-500' : 'hover:bg-slate-50'}`;
+          
+          a.innerHTML = `
+            <div class="w-10 h-10 rounded-full ${link.bg} ${link.color} flex items-center justify-center shadow-sm">
+                <i class="fas ${link.icon}"></i>
+            </div>
+            <span class="text-slate-700 ${isActive ? 'font-bold' : 'font-medium'}">${link.name}</span>
+          `;
+          navContainer.appendChild(a);
+      });
+      mainMenu.appendChild(navContainer);
+
+      // 2. מפריד וכותרת
+      const separator = document.createElement('div');
+      separator.className = 'h-px bg-slate-200 my-4';
+      mainMenu.appendChild(separator);
+
+      const scheduleHeader = document.createElement('h3');
+      scheduleHeader.className = 'text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2';
+      scheduleHeader.innerText = "לו״ז יומי לפי יעדים";
+      mainMenu.appendChild(scheduleHeader);
+
+      // 3. בניית יעדים דינאמית מ-Firebase
+      if (!tripData?.destinations || !Array.isArray(tripData.destinations)) {
+          mainMenu.insertAdjacentHTML('beforeend', '<p class="text-center text-slate-400 text-sm">לא הוגדרו יעדים לטיול זה.</p>');
+          return;
+      }
+
+      // מיון יעדים לפי תאריך
+      const sortedDestinations = [...tripData.destinations].sort((a, b) => {
+        const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
+        const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateA - dateB;
+      });
+
+      sortedDestinations.forEach(dest => {
+          const destinationDiv = document.createElement('div');
+          destinationDiv.className = 'mb-2';
+
+          // כותרת היעד (אקורדיון)
+          const button = document.createElement('button');
+          button.className = 'w-full text-right p-3 hover:bg-cyan-50 rounded-xl font-bold text-slate-700 flex justify-between items-center transition-all group';
+          button.innerHTML = `
+            <span class="flex items-center gap-3">
+                <i class="fas fa-map-marked-alt text-slate-400 group-hover:text-cyan-500 transition-colors"></i> 
+                ${dest.nameHe || dest.name}
+            </span> 
+            <i class="fas fa-chevron-down chevron-icon text-slate-300 text-sm"></i>`;
+
+          // תת-תפריט לימים
+          const submenu = document.createElement('div');
+          submenu.className = 'submenu mt-1 mr-4 border-r-2 border-slate-100 pr-2 space-y-1';
+
+          if (dest.dates) {
+              const dates = generateDatesFromRange(dest.dates);
+              dates.forEach(dateStr => {
+                  const d = parseDDMMYYYY(dateStr);
+                  if (!d) return;
+                  
+                  const a = document.createElement('a');
+                  const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
+                  a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+                  
+                  a.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-slate-50 hover:text-cyan-700 rounded-lg transition text-sm';
+                  a.innerHTML = `
+                      <div class="flex items-center gap-2">
+                          <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                          <span class="font-medium">${hebWeekday(d)}</span>
+                          <span class="text-xs text-slate-400">(${dotted(d)})</span>
+                      </div>
+                  `;
+                  submenu.appendChild(a);
+              });
+          } else {
+             const noDates = document.createElement('div');
+             noDates.className = 'text-xs text-slate-400 pr-3 py-1';
+             noDates.innerText = 'ללא תאריכים';
+             submenu.appendChild(noDates);
+          }
+
+          // אירוע פתיחה/סגירה
+          button.addEventListener('click', () => {
+              submenu.classList.toggle('open');
+              button.querySelector('.chevron-icon').classList.toggle('rotate-180');
+          });
+
+          destinationDiv.appendChild(button);
+          destinationDiv.appendChild(submenu);
+          mainMenu.appendChild(destinationDiv);
+      });
+    }
+
+
+    // --- אתחול המערכת ---
+    async function init() {
+        // קבלת ID מה-URL
+        const urlParams = new URLSearchParams(window.location.search);
+        tripId = urlParams.get('id') || urlParams.get('tripId');
+        
+        if (!tripId) {
+            authStatus.innerHTML = '<span class="text-red-500">שגיאה: חסר מזהה טיול ב-URL</span>';
+            mainMenu.innerHTML = '<div class="p-4 text-center text-red-500">נא להוסיף ?tripId=... לכתובת</div>';
+            return;
         }
 
-        function hebWeekday(d) {
-            const n = d.toLocaleDateString('he-IL', { weekday: 'long' });
-            return n.startsWith('יום') ? n : `יום ${n}`;
-        }
-
-        function dotted(d) {
-            return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
-        }
-
-        function generateDatesFromRange(rangeStr) {
-            if (!rangeStr || !rangeStr.includes(' - ')) return [];
-            const [startStr, endStr] = rangeStr.split(' - ');
-            const startDate = parseDDMMYYYY(startStr);
-            const endDate = parseDDMMYYYY(endStr);
-            if (!startDate || !endDate) return [];
-           
-            const dates = [];
-            let currentDate = new Date(startDate);
-
-            while (currentDate <= endDate) {
-                const dd = String(currentDate.getDate()).padStart(2,'0');
-                const mm = String(currentDate.getMonth()+1).padStart(2,'0');
-                const yyyy = currentDate.getFullYear();
-                dates.push(`${dd}/${mm}/${yyyy}`);
-                currentDate.setDate(currentDate.getDate() + 1);
-            }
-            return dates;
-        }
-
-        function showAlert(msg) {
-            DOM.alertMsg.textContent = msg;
-            DOM.alertModal.classList.remove('hidden');
-        }
-
-        // --- Core Logic ---
-
-        function initPage() {
-            const urlParams = new URLSearchParams(window.location.search);
-            tripId = urlParams.get('id') || urlParams.get('tripId');
-            
-            if (!tripId) {
-                showAlert("שגיאה: לא נמצא מזהה טיול (tripId) בכתובת ה-URL.");
-                DOM.loadingOverlay.style.display = 'none';
-                return;
-            }
-
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    loadTripData(user);
-                } else {
-                    // במקרה של ניתוק, בדרך כלל מעבירים לדף התחברות.
-                    // כאן נציג הודעה פשוטה
-                    showAlert("עליך להתחבר כדי לראות את התפריט.");
-                    window.location.href = 'login.html'; // הנחה שקיים דף כזה
-                }
-            });
-        }
-
-        async function loadTripData(user) {
-            try {
-                const tripRef = doc(db, "trips", tripId);
-                const tripSnap = await getDoc(tripRef);
-
-                if (tripSnap.exists()) {
-                    const loadedTripData = tripSnap.data();
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                authStatus.innerHTML = '<span class="text-green-500">מחובר ומסונכרן</span>';
+                try {
+                    const docRef = doc(db, 'trips', tripId);
+                    const docSnap = await getDoc(docRef);
                     
-                    // בדיקת הרשאות בסיסית
-                    const canAccess = loadedTripData.owner === user.uid || (loadedTripData.editors && loadedTripData.editors.includes(user.uid));
-
-                    if (canAccess) {
-                        tripData = loadedTripData;
-                        buildSidebarMenu(); // הבנייה של התפריט
+                    if (docSnap.exists()) {
+                        tripData = docSnap.data();
+                        buildMenuFromTrip();
+                        
+                        // פותח אוטומטית להדגמה אם רוצים:
+                        // toggleSidebar(); 
                     } else {
-                        showAlert("אין לך הרשאה לצפות בטיול זה.");
+                        mainMenu.innerHTML = '<div class="p-4 text-center">הטיול לא נמצא במסד הנתונים</div>';
                     }
-                } else {
-                    showAlert("הטיול לא נמצא.");
+                } catch (error) {
+                    console.error("Error fetching trip:", error);
+                    mainMenu.innerHTML = '<div class="p-4 text-center text-red-500">שגיאה בטעינת הנתונים</div>';
                 }
-            } catch (error) {
-                console.error("Error loading trip:", error);
-                showAlert("שגיאה בטעינת הנתונים.");
-            } finally {
-                // הסתרת מסך הטעינה
-                DOM.loadingOverlay.style.opacity = '0';
-                setTimeout(() => DOM.loadingOverlay.style.display = 'none', 500);
+            } else {
+                authStatus.innerHTML = '<span class="text-orange-500">לא מחובר - אנא התחבר כדי לראות נתונים</span>';
+                mainMenu.innerHTML = `
+                    <div class="p-6 text-center">
+                        <p class="mb-4 text-slate-600">יש להתחבר כדי לטעון את נתוני הטיול.</p>
+                        <a href="login.html" class="inline-block bg-cyan-600 text-white px-6 py-2 rounded-full font-bold">התחברות</a>
+                    </div>`;
             }
-        }
+        });
+    }
 
-        // --- Sidebar Functionality ---
-
-        function toggleSidebar() {
-            // החלפת ה-class שדואג להזזה
-            DOM.sidebar.classList.toggle('translate-x-full');
-            // הצגה/הסתרה של הרקע הכהה
-            DOM.overlay.classList.toggle('hidden');
-        }
-
-        // --- Menu Building Logic (1:1 from original) ---
-
-        function buildSidebarMenu() {
-            DOM.mainMenu.innerHTML = '';
-            
-            // קישור חזרה למרכז הבקרה (ראשי)
-            const homeLink = document.createElement('a');
-            homeLink.href = `index.html?tripId=${tripId}`; 
-            homeLink.className = 'block w-full text-right p-3 bg-blue-50 hover:bg-blue-100 rounded-lg font-bold text-blue-700 mb-2 transition-colors';
-            homeLink.innerHTML = '<i class="fas fa-home ml-2"></i>מרכז הבקרה';
-            DOM.mainMenu.appendChild(homeLink);
-
-            if (!tripData || !tripData.destinations) return;
-
-            // מיון היעדים לפי תאריך
-            const sortedDestinations = [...tripData.destinations].sort((a, b) => {
-                const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
-                const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
-                if (!dateA) return 1;
-                if (!dateB) return -1;
-                return dateA - dateB;
-            });
-
-            // בניית ה-HTML לכל יעד
-            sortedDestinations.forEach(dest => {
-                const destinationDiv = document.createElement('div');
-
-                // כפתור ראשי ליעד (פותח אקורדיון)
-                const button = document.createElement('button');
-                button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
-                button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down transition-transform duration-300"></i>`;
-
-                // מיכל לתתי-התפריטים (ימים)
-                const submenu = document.createElement('div');
-                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
-
-                // יצירת קישור לכל יום בטווח התאריכים
-                const dates = generateDatesFromRange(dest.dates);
-                dates.forEach(dateStr => {
-                    const d = parseDDMMYYYY(dateStr);
-                    if (!d) return;
-                    const a = document.createElement('a');
-
-                    const destNameParam = encodeURIComponent(dest.nameHe);
-                    // שימור הקישור לדף הלו"ז היומי
-                    a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
-
-                    a.className = 'block w-full text-right p-3 pr-4 rounded-md transition-colors hover:bg-sky-50';
-                    a.innerHTML = `
-                        <div class="flex flex-col">
-                            <span class="text-slate-700 text-sm font-bold">${hebWeekday(d)} – (${dest.nameHe})</span>
-                            <span class="text-slate-500 text-xs">${dotted(d)}</span>
-                        </div>
-                    `;
-                    submenu.appendChild(a);
-                });
-
-                // אירוע לחיצה לפתיחת האקורדיון
-                button.addEventListener('click', () => {
-                    submenu.classList.toggle('open');
-                    button.querySelector('i').classList.toggle('rotate-180');
-                });
-
-                destinationDiv.appendChild(button);
-                destinationDiv.appendChild(submenu);
-                DOM.mainMenu.appendChild(destinationDiv);
-            });
-        }
-
-        // --- Event Listeners ---
-        DOM.hamburgerBtn.addEventListener('click', toggleSidebar);
-        DOM.closeSidebarBtn.addEventListener('click', toggleSidebar);
-        DOM.overlay.addEventListener('click', toggleSidebar); // סגירה בלחיצה על הרקע הכהה
-
-        // הרצת האתחול
-        initPage();
-
-    </script>
+    init();
+  </script>
 </body>
 </html>
 
