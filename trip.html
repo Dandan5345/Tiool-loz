@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>מרכז הבקרה של הטיול</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,10 +15,23 @@
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: {
+                sans: ['Assistant', 'sans-serif'],
+                rubik: ['Rubik', 'sans-serif'],
+              }
+            }
+          }
+        }
+    </script>
 
     <style>
-        html { height: 100%; scrollbar-gutter: stable both-edges; }
+        html { height: 100%; scrollbar-gutter: stable both-edges; -webkit-tap-highlight-color: transparent; }
         body {
             font-family: 'Assistant', sans-serif;
             min-height: 100%;
@@ -26,13 +39,31 @@
             overscroll-behavior-y: contain;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-            /* FIX: Set a dark background to prevent white flash on mobile overscroll */
             background-color: #0f172a; 
         }
+        body.modal-locked { overflow: hidden; }
 
-        #sidebar { transition: transform 0.3s ease-in-out; }
-        .submenu { max-height: 0; overflow: hidden; transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
-        .submenu.open { max-height: 1200px; }
+        /* Sidebar Styles - NEW */
+        #sidebar { 
+            transition: transform 0.3s ease-out; 
+            border-left: 1px solid rgba(255,255,255,0.2);
+        }
+        .submenu { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+        }
+        .submenu.open { 
+            max-height: 1000px; 
+        }
+        .chevron-icon { transition: transform 0.3s ease; }
+        .rotate-180 { transform: rotate(180deg); }
+
+        /* Sidebar Scrollbar */
+        #main-menu::-webkit-scrollbar { width: 4px; }
+        #main-menu::-webkit-scrollbar-track { background: transparent; }
+        #main-menu::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
         #trip-map-container, .details-map-container { border-radius: 1rem; z-index: 0; }
         #trip-map-container { height: 450px; }
         .details-map-container { height: 250px; background-color: #e2e8f0; }
@@ -95,7 +126,6 @@
        
         #page-bg {
              transition: background-image 1s ease, transform .6s ease;
-             /* FIX: Helps prevent background zooming on mobile during scroll */
              transform: translateZ(0);
         }
 
@@ -113,13 +143,13 @@
             text-shadow: 0 3px 12px rgba(0,0,0,0.5);
         }
 
-        /* Accordion Styles */
+        /* Accordion Styles (Logistics) */
         .accordion-section {
-            background-color: rgba(15, 23, 42, 0.45); /* Equivalent to bg-slate-900/45 */
-            backdrop-filter: blur(8px); /* backdrop-blur-md */
-            border-radius: 1rem; /* rounded-2xl */
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* shadow-lg */
-            border: 1px solid rgba(255, 255, 255, 0.1); /* border border-white/10 */
+            background-color: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(8px);
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         .accordion-content {
             max-height: 0;
@@ -127,7 +157,7 @@
             transition: max-height 0.5s cubic-bezier(0, 1, 0, 1);
         }
         .accordion-content.open {
-            max-height: 5000px; /* Large enough for content */
+            max-height: 5000px;
             transition: max-height 1s ease-in-out;
         }
         .accordion-button .chevron {
@@ -294,7 +324,7 @@
             </div>
         </div>
        
-        <!-- NEW: Generic Alert/Confirm Modal -->
+        <!-- Generic Alert/Confirm Modal -->
         <div id="generic-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[110] p-4">
             <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm text-center">
                 <h2 id="generic-modal-title" class="text-2xl font-bold mb-4">כותרת</h2>
@@ -306,12 +336,33 @@
         </div>
 
 
-        <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full overflow-y-auto">
-            <div class="p-4 flex justify-between items-center border-b sticky top-0 bg-white">
-                <h2 class="text-2xl font-bold text-slate-800">תפריט המסע</h2>
-                <button id="close-sidebar-btn" class="p-2 text-slate-500 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+        <!-- Overlay for Sidebar -->
+        <div id="overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] hidden transition-opacity duration-300 opacity-0"></div>
+
+        <!-- NEW Sidebar Container -->
+        <aside id="sidebar" class="fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl z-[150] transform translate-x-full transition-transform duration-300 ease-out flex flex-col">
+            
+            <!-- Sidebar Header -->
+            <div class="p-5 flex justify-between items-center border-b border-slate-100 bg-gradient-to-l from-cyan-50 to-transparent shrink-0">
+            <h2 class="text-2xl font-bold text-slate-800 font-rubik">תפריט המסע 🧭</h2>
+            <button id="close-sidebar-btn" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 transition flex items-center justify-center shadow-sm">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
             </div>
-            <nav id="main-menu" class="p-4 space-y-2"></nav>
+
+            <!-- Sidebar Content (Navigation) -->
+            <nav id="main-menu" class="p-4 space-y-3 overflow-y-auto flex-grow pb-20 scroll-smooth">
+            <!-- Content Injected via JS -->
+            <div class="text-center py-10 text-slate-400">
+                <i class="fas fa-circle-notch fa-spin mb-2"></i>
+                <p class="text-sm">טוען תפריט...</p>
+            </div>
+            </nav>
+            
+            <!-- Footer -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50 shrink-0 text-center">
+                <p class="text-xs text-slate-400">תכנון טיול חכם</p>
+            </div>
         </aside>
 
         <div id="main-content" class="min-h-screen">
@@ -379,8 +430,6 @@
                 </div>
             </main>
         </div>
-
-        <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden"></div>
     </div>
 
     <script type="module">
@@ -697,7 +746,10 @@
             DOM.openShortcutsBtn.href = `shortcuts.html?tripId=${tripId}`;
             DOM.todayExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
             DOM.totalExpenseCardLink.href = `expenses.html?tripId=${tripId}`;
-            buildSidebarMenu();
+            
+            // Replaced old sidebar builder with new logic
+            buildSidebarMenu(); 
+            
             buildTripMap();
             buildNavButtons();
         }
@@ -1039,10 +1091,61 @@
             return amount * rate;
         }
 
+        // --- NEW SIDEBAR LOGIC (Updated to match request) ---
         function buildSidebarMenu() {
-            DOM.mainMenu.innerHTML = '';
-            if (!tripData || !tripData.destinations) return;
+            DOM.mainMenu.innerHTML = ''; // Clear existing content
 
+            // 1. Static Navigation Buttons
+            const tParam = `?tripId=${tripId}`;
+            const navLinks = [
+                { name: 'מרכז הבקרה', icon: 'fa-home', href: `trip.html${tParam}`, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { name: 'ניהול לוגיסטיקה', icon: 'fa-suitcase', href: `summary.html${tParam}`, color: 'text-orange-600', bg: 'bg-orange-50' },
+                { name: 'אטרקציות ומסעדות', icon: 'fa-utensils', href: `attractions.html${tParam}`, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+                { name: 'רשימות וצ\'ק ליסט', icon: 'fa-list-check', href: `checklists.html${tParam}`, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { name: 'מעקב הוצאות', icon: 'fa-coins', href: `expenses.html${tParam}`, color: 'text-rose-600', bg: 'bg-rose-50' },
+                { name: 'בניית מסלול חכם', icon: 'fa-magic-wand-sparkles', href: `edit-trip.html${tParam}`, color: 'text-purple-600', bg: 'bg-purple-50' }
+            ];
+
+            const navContainer = document.createElement('div');
+            navContainer.className = 'space-y-2 mb-6';
+
+            const currentPath = window.location.pathname;
+
+            navLinks.forEach(link => {
+                const a = document.createElement('a');
+                a.href = link.href;
+                // Simple active check logic
+                const isActive = currentPath.includes(link.href.split('?')[0]); 
+
+                a.className = `flex items-center gap-3 w-full p-3 rounded-xl transition-all hover:translate-x-1 ${isActive ? 'bg-slate-100 font-bold border-r-4 border-cyan-500' : 'hover:bg-slate-50'}`;
+                
+                a.innerHTML = `
+                    <div class="w-10 h-10 rounded-full ${link.bg} ${link.color} flex items-center justify-center shadow-sm">
+                        <i class="fas ${link.icon}"></i>
+                    </div>
+                    <span class="text-slate-700 ${isActive ? 'font-bold' : 'font-medium'}">${link.name}</span>
+                `;
+                navContainer.appendChild(a);
+            });
+            DOM.mainMenu.appendChild(navContainer);
+
+            // 2. Separator and Header
+            const separator = document.createElement('div');
+            separator.className = 'h-px bg-slate-200 my-4';
+            DOM.mainMenu.appendChild(separator);
+
+            const scheduleHeader = document.createElement('h3');
+            scheduleHeader.className = 'text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2';
+            scheduleHeader.innerText = "לו״ז יומי לפי יעדים";
+            DOM.mainMenu.appendChild(scheduleHeader);
+
+            // 3. Dynamic Destinations from Firebase Data
+            if (!tripData?.destinations || !Array.isArray(tripData.destinations)) {
+                DOM.mainMenu.insertAdjacentHTML('beforeend', '<p class="text-center text-slate-400 text-sm">לא הוגדרו יעדים לטיול זה.</p>');
+                return;
+            }
+
+            // Sort destinations by date
             const sortedDestinations = [...tripData.destinations].sort((a, b) => {
                 const dateA = parseDDMMYYYY(a.dates?.split(' - ')[0]);
                 const dateB = parseDDMMYYYY(b.dates?.split(' - ')[0]);
@@ -1053,36 +1156,53 @@
 
             sortedDestinations.forEach(dest => {
                 const destinationDiv = document.createElement('div');
+                destinationDiv.className = 'mb-2';
 
+                // Destination Header (Accordion Button)
                 const button = document.createElement('button');
-                button.className = 'w-full text-right p-3 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700 flex justify-between items-center transition-colors';
-                button.innerHTML = `<span>${dest.nameHe}</span> <i class="fas fa-chevron-down"></i>`;
+                button.className = 'w-full text-right p-3 hover:bg-cyan-50 rounded-xl font-bold text-slate-700 flex justify-between items-center transition-all group';
+                button.innerHTML = `
+                    <span class="flex items-center gap-3">
+                        <i class="fas fa-map-marked-alt text-slate-400 group-hover:text-cyan-500 transition-colors"></i> 
+                        ${dest.nameHe || dest.name}
+                    </span> 
+                    <i class="fas fa-chevron-down chevron-icon text-slate-300 text-sm"></i>`;
 
+                // Submenu for Days
                 const submenu = document.createElement('div');
-                submenu.className = 'submenu mt-1 mr-2 border-r-2 border-slate-200';
+                submenu.className = 'submenu mt-1 mr-4 border-r-2 border-slate-100 pr-2 space-y-1';
 
-                const dates = generateDatesFromRange(dest.dates);
-                dates.forEach(dateStr => {
-                    const d = parseDDMMYYYY(dateStr);
-                    if (!d) return;
-                    const a = document.createElement('a');
+                if (dest.dates) {
+                    const dates = generateDatesFromRange(dest.dates);
+                    dates.forEach(dateStr => {
+                        const d = parseDDMMYYYY(dateStr);
+                        if (!d) return;
+                        
+                        const a = document.createElement('a');
+                        const destNameParam = encodeURIComponent(dest.nameHe || dest.name);
+                        a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
+                        
+                        a.className = 'block w-full text-right py-2 px-3 text-slate-600 hover:bg-slate-50 hover:text-cyan-700 rounded-lg transition text-sm';
+                        a.innerHTML = `
+                            <div class="flex items-center gap-2">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                <span class="font-medium">${hebWeekday(d)}</span>
+                                <span class="text-xs text-slate-400">(${dotted(d)})</span>
+                            </div>
+                        `;
+                        submenu.appendChild(a);
+                    });
+                } else {
+                    const noDates = document.createElement('div');
+                    noDates.className = 'text-xs text-slate-400 pr-3 py-1';
+                    noDates.innerText = 'ללא תאריכים';
+                    submenu.appendChild(noDates);
+                }
 
-                    const destNameParam = encodeURIComponent(dest.nameHe);
-                    a.href = `daily-schedule.html?tripId=${tripId}&date=${encodeURIComponent(dateStr)}&dest=${destNameParam}`;
-
-                    a.className = 'block w-full text-right p-3 pr-4 rounded-md transition-colors hover:bg-sky-50';
-                    a.innerHTML = `
-                        <div class="flex flex-col">
-                            <span class="text-slate-700 text-sm font-bold">${hebWeekday(d)} – (${dest.nameHe})</span>
-                            <span class="text-slate-500 text-xs">${dotted(d)}</span>
-                        </div>
-                    `;
-                    submenu.appendChild(a);
-                });
-
+                // Toggle Event
                 button.addEventListener('click', () => {
                     submenu.classList.toggle('open');
-                    button.querySelector('i').classList.toggle('rotate-180');
+                    button.querySelector('.chevron-icon').classList.toggle('rotate-180');
                 });
 
                 destinationDiv.appendChild(button);
@@ -1155,9 +1275,27 @@
             return parseDate(dateStr);
         }
        
+        // --- UPDATED TOGGLE SIDEBAR LOGIC ---
         function toggleSidebar() {
-            DOM.sidebar.classList.toggle('translate-x-full');
-            DOM.overlay.classList.toggle('hidden');
+            const isClosed = DOM.sidebar.classList.contains('translate-x-full');
+            if (isClosed) {
+                // Open
+                DOM.sidebar.classList.remove('translate-x-full');
+                DOM.overlay.classList.remove('hidden');
+                // Request animation frame to allow browser to render before adding opacity class
+                requestAnimationFrame(() => {
+                    DOM.overlay.classList.remove('opacity-0');
+                });
+                document.body.classList.add('modal-locked'); // Lock body scroll
+            } else {
+                // Close
+                DOM.sidebar.classList.add('translate-x-full');
+                DOM.overlay.classList.add('opacity-0');
+                setTimeout(() => {
+                    DOM.overlay.classList.add('hidden');
+                    document.body.classList.remove('modal-locked');
+                }, 300); // Matches transition duration
+            }
         }
 
         // --- Navigation Modal Logic ---
@@ -1669,7 +1807,7 @@
                 await updateDoc(tripRef, updated);
                 tripData = updated;
                 // refresh UI
-                buildSidebarMenu();
+                buildSidebarMenu(); // Uses the new function
                 buildTripMap();
                 closeEditDestinationsModal();
             }catch(e){
@@ -1769,3 +1907,4 @@
     </script>
 </body>
 </html>
+
