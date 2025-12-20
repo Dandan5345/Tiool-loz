@@ -405,6 +405,9 @@
                             <i class="fas fa-times"></i> הסר
                         </button>
                     </div>
+                    <!-- New Preview Box -->
+                    <div id="bg-image-preview" class="hidden mt-2 w-24 h-24 rounded-lg bg-cover bg-center border-2 border-slate-200 shadow-md"></div>
+                    
                     <input type="file" id="bg-image-upload-input" class="hidden" accept="image/*">
                     <input type="hidden" id="bg-image-url-storage">
                     <p id="bg-image-status" class="text-sm mt-2 text-slate-400 h-5"></p>
@@ -421,9 +424,16 @@
                     <label class="font-bold text-slate-700">החל הגדרות על:</label>
                     <select id="bg-scope" class="w-full mt-1 p-2 border rounded-md">
                         <option value="trip">כל הטיול (כל היעדים והתאריכים)</option>
-                        <option value="destination" selected>היעד הספציפי הזה (כל התאריכים של יעד זה)</option>
+                        <option value="destination" selected>היעד הספציפי הזה</option>
                         <option value="date">רק לתאריך הספציפי הזה</option>
                     </select>
+                    
+                    <!-- NEW: Secondary dropdown for selecting specific destination -->
+                    <div id="target-dest-container" class="hidden mt-2 bg-slate-50 p-2 rounded-md border border-slate-200">
+                        <label class="text-xs font-bold text-slate-500 block mb-1">בחר לאיזה יעד להחיל:</label>
+                        <select id="target-dest-select" class="w-full p-2 border rounded-md text-sm bg-white"></select>
+                    </div>
+
                     <p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle"></i> שינוי זה נשמר בדפדפן שלך בלבד.</p>
                 </div>
                 <button id="apply-bg-settings" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">החל שינויים</button>
@@ -723,7 +733,11 @@
         const bgImageUploadInput = document.getElementById('bg-image-upload-input');
         const bgImageUrlStorage = document.getElementById('bg-image-url-storage');
         const bgImageStatus = document.getElementById('bg-image-status');
+        const bgImagePreview = document.getElementById('bg-image-preview');
         const bgColorPicker = document.getElementById('bg-color-picker');
+        const bgScopeSelect = document.getElementById('bg-scope');
+        const targetDestContainer = document.getElementById('target-dest-container');
+        const targetDestSelect = document.getElementById('target-dest-select');
 
         const authContainer = document.getElementById('auth-container');
         const tripHomeBtn = document.getElementById('trip-home-btn');
@@ -953,6 +967,16 @@
         }
         
         // ---------- Image Upload Logic ----------
+        function updateImagePreview(imageUrl) {
+            if (imageUrl) {
+                bgImagePreview.style.backgroundImage = `url('${imageUrl}')`;
+                bgImagePreview.classList.remove('hidden');
+            } else {
+                bgImagePreview.style.backgroundImage = 'none';
+                bgImagePreview.classList.add('hidden');
+            }
+        }
+
         async function handleImageUpload(file, urlStorageElement, statusElement, onCompleteCallback) {
             if (!file) return;
 
@@ -984,6 +1008,8 @@
 
                 const imageUrl = result.data.url;
                 urlStorageElement.value = imageUrl;
+                updateImagePreview(imageUrl); // Show preview immediately
+
                 statusElement.textContent = 'ההעלאה הושלמה!';
                 statusElement.classList.add('ok');
 
@@ -1004,6 +1030,33 @@
                 ? '<i class="fas fa-sync-alt mr-1"></i> שנה תמונה' 
                 : '<i class="fas fa-upload mr-1"></i> העלה תמונה';
             bgImageRemoveBtn.classList.toggle('hidden', !hasBgImage);
+            
+            // Show preview if image exists
+            if (hasBgImage) {
+                updateImagePreview(bgImageUrlStorage.value);
+            }
+            
+            // Check scope to toggle select box
+            if (bgScopeSelect.value === 'destination') {
+                targetDestContainer.classList.remove('hidden');
+            } else {
+                targetDestContainer.classList.add('hidden');
+            }
+        }
+
+        function populateDestinationSelect() {
+            if (!tripData || !tripData.destinations) return;
+            targetDestSelect.innerHTML = '';
+            
+            tripData.destinations.forEach(dest => {
+                const opt = document.createElement('option');
+                opt.value = dest.id;
+                opt.text = dest.nameHe || dest.name;
+                if (destForDate && dest.id === destForDate.id) {
+                    opt.selected = true;
+                }
+                targetDestSelect.appendChild(opt);
+            });
         }
 
         // ---------- Rendering Functions ----------
@@ -1813,10 +1866,21 @@
             });
             bgImageRemoveBtn.addEventListener('click', () => {
                 bgImageUrlStorage.value = '';
+                updateImagePreview(''); // Hide preview
                 setBackground({ type: 'color', value: bgColorPicker.value, brightness: document.getElementById('bg-brightness-slider').value });
                 configureBgSettingsUI();
                 bgImageStatus.textContent = 'התמונה הוסרה.';
                 setTimeout(() => bgImageStatus.textContent = '', 2000);
+            });
+            
+            // Scope change event listener
+            bgScopeSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'destination') {
+                    populateDestinationSelect();
+                    targetDestContainer.classList.remove('hidden');
+                } else {
+                    targetDestContainer.classList.add('hidden');
+                }
             });
 
             document.getElementById('apply-bg-settings').addEventListener('click', () => {
@@ -1824,8 +1888,15 @@
                 const color = bgColorPicker.value;
                 const brightness = document.getElementById('bg-brightness-slider').value;
                 const bgSettings = { type: url ? 'image' : 'color', value: url || color, brightness: brightness };
+                
+                const scope = document.getElementById('bg-scope').value;
+                let specificId = null;
+                if (scope === 'destination') {
+                    specificId = targetDestSelect.value;
+                }
+
                 setBackground(bgSettings);
-                saveStyleSetting('background', bgSettings, document.getElementById('bg-scope').value);
+                saveStyleSetting('background', bgSettings, scope, specificId);
                 toggleSettings();
             });
 
@@ -1922,7 +1993,7 @@
         // ---------- Init & Data Fetching ----------
         
         // --- פונקציית שמירת הגדרות ל-LocalStorage (אישי למשתמש) ---
-        async function saveStyleSetting(settingType, value, scope) {
+        async function saveStyleSetting(settingType, value, scope, specificId = null) {
             const storageKey = `trip_style_${tripId}`;
             let currentSettings = {};
             
@@ -1940,8 +2011,11 @@
                 if (!currentSettings[`date_${scheduleDocId}`]) currentSettings[`date_${scheduleDocId}`] = {};
                 currentSettings[`date_${scheduleDocId}`][settingType] = value;
             } else if (scope === 'destination') {
-                if (!currentSettings[`destination_${destForDate.id}`]) currentSettings[`destination_${destForDate.id}`] = {};
-                currentSettings[`destination_${destForDate.id}`][settingType] = value;
+                // BUGFIX: Use the specific ID chosen from dropdown if available, else current dest
+                const destIdToUse = specificId || destForDate.id;
+                
+                if (!currentSettings[`destination_${destIdToUse}`]) currentSettings[`destination_${destIdToUse}`] = {};
+                currentSettings[`destination_${destIdToUse}`][settingType] = value;
             } else {
                 // Trip (or default)
                 if (!currentSettings.trip) currentSettings.trip = {};
@@ -2001,6 +2075,9 @@
             bgImageUrlStorage.value = finalBg.type === 'image' ? finalBg.value : '';
             bgColorPicker.value = finalBg.type === 'color' ? finalBg.value : '#f1f5f9';
             document.getElementById('bg-brightness-slider').value = finalBg.brightness;
+            
+            // Initial Preview update
+            updateImagePreview(bgImageUrlStorage.value);
         }
 
         async function initPage() {
