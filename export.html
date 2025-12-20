@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -42,8 +40,28 @@
             width: 210mm; min-height: 297mm; padding: 15mm; margin: 20px auto; background: white;
             box-shadow: 0 0 15px rgba(0,0,0,0.1); box-sizing: border-box; color: #1e293b; font-size: 11pt; line-height: 1.5;
             text-rendering: geometricPrecision;
+            position: relative; /* For overlays */
+            overflow: hidden;
+            z-index: 1;
         }
         .report-page .page-break { page-break-before: always; }
+
+        /* --- Backgrounds & Overlays for Schedule Pages --- */
+        .page-bg-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+        }
+        /* Make content more readable on backgrounds */
+        .schedule-content-wrapper {
+            background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white card */
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
 
         /* --- Report Header & Section Titles --- */
         .section-title { font-size: 26pt; font-weight: 800; color: #0c4a6e; border-bottom: 3px solid #0ea5e9; padding-bottom: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
@@ -151,6 +169,12 @@
             .logistics-map-container, .attraction-map-container { max-height: 80mm; }
             /* Force-hide modal on print to avoid any overlay glitches */
             #print-modal { display: none !important; }
+            
+            /* Print Specifics for Backgrounds */
+            .page-bg-overlay {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
         }
     </style>
 </head>
@@ -377,7 +401,7 @@
             ]);
 
             const allData = {
-                tripData: tripSnap.data(),
+                tripData: { id: tripSnap.id, ...tripSnap.data()}, // Ensure ID is present
                 logistics: collectionsSnaps[0].docs.map(d => ({ id: d.id, ...d.data() })),
                 places: collectionsSnaps[1].docs.map(d => ({ id: d.id, ...d.data() })),
                 checklists: collectionsSnaps[2].docs.map(d => ({ id: d.id, ...d.data() })),
@@ -401,6 +425,7 @@
             return allData;
         }
 
+        /* --- Helper Functions for Dates and Styling --- */
         const sanitize = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
         const formatISODate = (isoDate) => {
             if (!isoDate) return '';
@@ -424,8 +449,69 @@
             return dateObj;
         }
 
+        // --- Logic to resolve Destination from Date (copied from daily_schedule logic) ---
+        function generateDatesFromRange(rangeStr) { 
+            if (!rangeStr || !rangeStr.includes(' - ')) return []; 
+            const parts = rangeStr.split(' - ');
+            const p1 = parts[0].split('/'); const p2 = parts[1].split('/');
+            const start = new Date(Date.UTC(p1[2], p1[1]-1, p1[0]));
+            const end = new Date(Date.UTC(p2[2], p2[1]-1, p2[0]));
+            if (isNaN(start) || isNaN(end)) return []; 
+            const out = []; 
+            for (let t = new Date(start); t <= end; t.setUTCDate(t.getUTCDate()+1)) { 
+                out.push(new Date(t.getTime())); 
+            } 
+            return out; 
+        }
+
+        function toISODateUTC(d) { 
+            const yyyy = d.getUTCFullYear(); 
+            const mm = String(d.getUTCMonth()+1).padStart(2,'0'); 
+            const dd = String(d.getUTCDate()).padStart(2,'0'); 
+            return `${yyyy}-${mm}-${dd}`; 
+        }
+
+        function findDestinationForDate(trip, dateISO) {
+            if (!trip.destinations) return null;
+            return trip.destinations.find(dest => {
+                const days = generateDatesFromRange(dest.dates);
+                const isoList = days.map(d => toISODateUTC(d));
+                return isoList.includes(dateISO);
+            }) || null;
+        }
+
+        // --- Logic to get Background Style for a specific day ---
+        function getDailyStyle(tripData, dateISO) {
+             const tripId = tripData.id;
+             const dest = findDestinationForDate(tripData, dateISO);
+             const destId = dest ? dest.id : null;
+             const destName = dest ? (dest.nameHe || dest.name) : null;
+
+             // 1. Get Settings from LocalStorage (User Preference)
+             let localStyles = {};
+             try {
+                 const stored = localStorage.getItem(`trip_style_${tripId}`);
+                 if (stored) localStyles = JSON.parse(stored);
+             } catch(e) { console.error("LS Error", e); }
+
+             // 2. Get Settings from Firebase
+             const fbStyles = tripData.styles || {};
+
+             // 3. Helper to merge (Local > Firebase)
+             const getMerged = (key) => ({ ...(fbStyles[key] || {}), ...(localStyles[key] || {}) });
+
+             const tripStyle = getMerged('trip');
+             const destStyle = destId ? getMerged(`destination_${destId}`) : {};
+             const scheduleDocId = (dateISO && destName) ? `${dateISO}_${destName}` : null;
+             const dateStyle = scheduleDocId ? getMerged(`date_${scheduleDocId}`) : {};
+
+             // 4. Resolve Background: Date > Dest > Trip
+             const finalBg = dateStyle.background || destStyle.background || tripStyle.background;
+             return finalBg;
+        }
+
         function renderReportHtml(data, includeMaps, includeAttractions, includeSchedule, includeChecklists) {
-            let html = '<div class="report-page">';
+            let html = '';
             const { tripData, logistics, places, checklists, schedules, notes } = data;
             const sortedDestinations = (tripData.destinations || []).slice().sort((a,b) => parseDDMMYYYY(a.dates.split(' - ')[0]) - parseDDMMYYYY(b.dates.split(' - ')[0]));
 
@@ -447,17 +533,18 @@
                 return `<div class="detail-item full-width"><i class="fas ${icon} fa-fw"></i><div>${sanitize(label)}: <span class="value rtl-force">${sanitize(value)}</span></div></div>`;
             };
 
-            html += `<div class="cover-page"><h1>${sanitize(tripData.name)}</h1><h2>${sanitize(tripData.startDate)} - ${sanitize(tripData.endDate)}</h2><div class="destinations-summary">`;
+            // Cover Page
+            html += `<div class="report-page"><div class="cover-page"><h1>${sanitize(tripData.name)}</h1><h2>${sanitize(tripData.startDate)} - ${sanitize(tripData.endDate)}</h2><div class="destinations-summary">`;
             sortedDestinations.forEach(dest => { html += `<div class="dest-item"><span class="name">${sanitize(dest.nameHe)}</span><span class="dates">${sanitize(dest.dates)}</span></div>`; });
-            html += `</div></div>`;
+            html += `</div></div></div>`;
 
             if (includeMaps) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> מפת המסע הכללית</h3>`;
-                html += `<div id="trip-route-map" class="map-container"></div>`;
+                html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> מפת המסע הכללית</h3>`;
+                html += `<div id="trip-route-map" class="map-container"></div></div>`;
             }
 
             if (transports.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> תחבורה והתניידות</h3>`;
+                html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-route"></i> תחבורה והתניידות</h3>`;
                 transports.forEach(item => {
                     let cardHtml = `<div class="info-card transport-${item.type}">`;
                     switch (item.type) {
@@ -542,10 +629,11 @@
                     }
                     cardHtml += `</div>`; html += cardHtml;
                 });
+                html += `</div>`;
             }
 
             if (hotels.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
+                html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
                 hotels.forEach(item => {
                     html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">
                         ${detailItem('fa-calendar-days','תאריכים', item.dates)}
@@ -560,11 +648,12 @@
                     }
                     html += `</div>`;
                 });
+                html += `</div>`;
             }
 
             if (includeChecklists && (notes?.length > 0 || checklists?.length > 0)) {
                 if (notes && notes.length > 0) {
-                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-lightbulb"></i> דגשים והערות</h3>`;
+                    html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-lightbulb"></i> דגשים והערות</h3>`;
                     const notesByType = groupBy(notes, 'type');
                     Object.keys(notesByType).sort().forEach(type => {
                         html += `<div class="checklist-type-title">${sanitize(type || 'כללי')}</div>`;
@@ -578,9 +667,10 @@
                             });
                         });
                     });
+                    html += `</div>`;
                 }
                 if (checklists.length > 0) {
-                    html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i> רשימות וציוד</h3>`;
+                    html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-list-check"></i> רשימות וציוד</h3>`;
                     const byType = groupBy(checklists, 'type');
                     Object.keys(byType).sort().forEach(type => {
                         html += `<div class="checklist-type-title">${sanitize(type)}</div>`;
@@ -600,11 +690,12 @@
                             });
                         });
                     });
+                    html += `</div>`;
                 }
             }
 
             if (includeAttractions && places.length) {
-                html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
+                html += `<div class="report-page"><div class="page-break"></div><h3 class="section-title"><i class="fas fa-map-location-dot"></i> אטרקציות ומקומות עניין</h3>`;
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
                     attractionsByType[type].forEach(place => {
@@ -624,10 +715,33 @@
                         html += `</div>`;
                     });
                 });
+                html += `</div>`;
             }
 
             if (includeSchedule && schedules.length) {
                 schedules.forEach(day => {
+                    // --- APPLY BACKGROUND LOGIC ---
+                    const dateISO = day.id;
+                    const bgStyle = getDailyStyle(tripData, dateISO);
+                    
+                    let pageStyle = '';
+                    let overlayHtml = '';
+                    
+                    if (bgStyle) {
+                        if (bgStyle.type === 'image') {
+                            pageStyle = `background-image: url('${bgStyle.value}'); background-size: cover; background-position: center;`;
+                            // Brightness logic: 100 brightness = 0 opacity, 0 brightness = 1 opacity
+                            const opacity = 1 - ((bgStyle.brightness || 50) / 100);
+                            overlayHtml = `<div class="page-bg-overlay" style="background-color: rgba(0,0,0,${opacity});"></div>`;
+                        } else if (bgStyle.type === 'color') {
+                            pageStyle = `background-color: ${bgStyle.value};`;
+                        }
+                    }
+
+                    html += `<div class="report-page" style="${pageStyle}">`;
+                    html += overlayHtml;
+                    html += `<div class="schedule-content-wrapper">`; // Add wrapper for readability over images
+
                     html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-calendar-day"></i> לו"ז יומי</h3>`;
                     html += `<div class="daily-schedule-header"><div class="date">${formatISODate(day.id)}</div>${day.title ? `<div class="title rtl-force">${sanitize(day.title)}</div>` : ''}</div>`;
                     if (day.items?.length > 0) {
@@ -650,10 +764,10 @@
                         day.notes.forEach(note => { html += `<div class="note-item note-color-${note.color || 'yellow'}"><strong class="rtl-force">${sanitize(note.kind || 'הערה')}: ${sanitize(note.title || '')}</strong>${note.details ? `<p class="rtl-force">${sanitize(note.details)}</p>` : ''}</div>`; });
                         html += `</div>`;
                     }
+                    html += `</div></div>`; // Close wrapper & report page
                 });
             }
 
-            html += '</div>';
             return html;
         }
 
@@ -860,3 +974,4 @@
     </script>
 </body>
 </html>
+
