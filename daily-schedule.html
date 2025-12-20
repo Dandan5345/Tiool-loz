@@ -1035,10 +1035,14 @@
                      targetDestSelect.innerHTML = '';
                      tripData.destinations.forEach(dest => {
                         const opt = document.createElement('option');
-                        opt.value = dest.id;
+                        // Fix: Fallback to name if ID is missing
+                        const safeId = dest.id || dest.nameHe || dest.name;
+                        opt.value = safeId;
                         opt.text = dest.nameHe || dest.name;
+                        
                         // Select current destination by default
-                        if (destForDate && dest.id === destForDate.id) {
+                        const currentDestSafeId = destForDate ? (destForDate.id || destForDate.nameHe || destForDate.name) : null;
+                        if (currentDestSafeId && safeId === currentDestSafeId) {
                             opt.selected = true;
                         }
                         targetDestSelect.appendChild(opt);
@@ -1856,8 +1860,10 @@
                 if (scope === 'trip') shouldUpdateView = true;
                 else if (scope === 'date') shouldUpdateView = true; // Assumes current date
                 else if (scope === 'destination') {
-                    // Update only if the selected destination ID matches the current page's destination ID
-                    if (destForDate && destForDate.id === targetDestId) {
+                    // Fix: Update only if the selected destination ID/Name matches the current page's destination ID/Name
+                    // Because IDs might be undefined, we check the value we just used (which has fallback)
+                    const currentDestSafeId = destForDate ? (destForDate.id || destForDate.nameHe || destForDate.name) : null;
+                    if (currentDestSafeId && currentDestSafeId === targetDestId) {
                         shouldUpdateView = true;
                     }
                 }
@@ -1976,10 +1982,12 @@
                 if (!currentSettings[`date_${scheduleDocId}`]) currentSettings[`date_${scheduleDocId}`] = {};
                 currentSettings[`date_${scheduleDocId}`][settingType] = value;
             } else if (scope === 'destination') {
-                // Use explicit ID if provided (from the new Select), otherwise fallback to current page dest
-                const destIdToSave = explicitDestId || destForDate.id;
-                if (!currentSettings[`destination_${destIdToSave}`]) currentSettings[`destination_${destIdToSave}`] = {};
-                currentSettings[`destination_${destIdToSave}`][settingType] = value;
+                // Use explicit ID if provided, otherwise fallback to current page dest with safe ID check
+                const destIdToSave = explicitDestId || (destForDate ? (destForDate.id || destForDate.nameHe || destForDate.name) : null);
+                if(destIdToSave) {
+                    if (!currentSettings[`destination_${destIdToSave}`]) currentSettings[`destination_${destIdToSave}`] = {};
+                    currentSettings[`destination_${destIdToSave}`][settingType] = value;
+                }
             } else {
                 if (!currentSettings.trip) currentSettings.trip = {};
                 currentSettings.trip[settingType] = value;
@@ -1999,7 +2007,10 @@
             const getMergedStyle = (key) => ({ ...(fbStyles[key] || {}), ...(localStyles[key] || {}) });
 
             const tripStyle = getMergedStyle('trip');
-            const destStyle = destForDate ? getMergedStyle(`destination_${destForDate.id}`) : {};
+            
+            // Fix: Safe ID fallback for retrieval
+            const safeDestId = destForDate ? (destForDate.id || destForDate.nameHe || destForDate.name) : null;
+            const destStyle = safeDestId ? getMergedStyle(`destination_${safeDestId}`) : {};
             
             const scheduleDocId = (dateISO && destForDate) ? `${dateISO}_${destForDate.nameHe}` : null;
             const dateStyle = scheduleDocId ? getMergedStyle(`date_${scheduleDocId}`) : {};
@@ -2304,3 +2315,4 @@
     </script>
 </body>
 </html>
+
