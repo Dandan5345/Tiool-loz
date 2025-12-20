@@ -16,102 +16,150 @@
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 
     <style>
+        /* --- CSS Variables Definition (Theme System) --- */
+        :root {
+            /* Default Theme Values (Will be overridden by JS) */
+            --page-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #475569;
+            --primary-color: #0c4a6e; /* Section Titles */
+            --accent-color: #0ea5e9;  /* Borders, Icons */
+            
+            /* Card Backgrounds - Distinct per type */
+            --bg-flight: #f0f9ff;
+            --bg-hotel: #f8fafc;
+            --bg-car: #f5f3ff;
+            --bg-train: #fff7ed;
+            --bg-ferry: #eff6ff;
+            --bg-ride: #f0fdf4;
+            --bg-attraction: #ffffff;
+            --bg-general: #f8fafc;
+            
+            /* Border Colors for Cards */
+            --border-flight: #38bdf8;
+            --border-hotel: #e2e8f0;
+            --border-car: #a78bfa;
+            --border-train: #fb923c;
+            --border-ferry: #60a5fa;
+            --border-ride: #34d399;
+            --border-attraction: #e2e8f0;
+
+            --safe-pad: env(safe-area-inset-bottom, 0px);
+        }
+
         /* --- General PDF & Body Styles --- */
-        :root { --safe-pad: env(safe-area-inset-bottom, 0px); }
         html, body { height: 100%; }
         body { font-family: 'Assistant', sans-serif; background:#f1f5f9; }
         .action-btn { transition: all 0.25s ease; }
         .action-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.015); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #0ea5e9; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--accent-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Scroll lock for modal open (prevents background scroll, iOS-safe) */
+        /* Scroll lock for modal */
         .scroll-locked { position: fixed; overflow: hidden; width: 100%; top: var(--scroll-lock-top, 0px); }
 
-        /* --- Force RTL / LTR on mixed content --- */
+        /* --- Utilities --- */
         .rtl-force { direction: rtl; unicode-bidi: isolate; }
         .ltr-force { direction: ltr; unicode-bidi: bidi-override; }
 
         /* --- Preview container --- */
-        #preview-wrapper { background-color: #e2e8f0; /* slate-200 */ }
+        #preview-wrapper { background-color: #cbd5e1; padding-bottom: 80px; }
 
-        /* --- Report Design (used for both preview and PDF) --- */
+        /* --- Report Design --- */
         .report-page {
-            width: 210mm; min-height: 297mm; padding: 15mm; margin: 20px auto; background: white;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1); box-sizing: border-box; color: #1e293b; font-size: 11pt; line-height: 1.5;
+            width: 210mm; min-height: 297mm; padding: 15mm; margin: 20px auto; 
+            background: var(--page-bg);
+            box-shadow: 0 0 15px rgba(0,0,0,0.1); box-sizing: border-box; 
+            color: var(--text-main); font-size: 11pt; line-height: 1.5;
             text-rendering: geometricPrecision;
         }
         .report-page .page-break { page-break-before: always; }
 
-        /* --- Report Header & Section Titles --- */
-        .section-title { font-size: 26pt; font-weight: 800; color: #0c4a6e; border-bottom: 3px solid #0ea5e9; padding-bottom: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
-        .section-title i { font-size: 22pt; }
+        /* --- Header & Titles --- */
+        .section-title { 
+            font-size: 26pt; font-weight: 800; 
+            color: var(--primary-color); 
+            border-bottom: 3px solid var(--accent-color); 
+            padding-bottom: 8px; margin-bottom: 20px; 
+            display: flex; align-items: center; gap: 12px; 
+        }
+        .section-title i { font-size: 22pt; color: var(--accent-color); }
 
         /* --- Cover Page --- */
         .cover-page { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 250mm; }
-        .cover-page h1 { font-size: 42pt; font-weight: 800; color: #0c4a6e; margin: 0; }
-        .cover-page h2 { font-size: 18pt; font-weight: 600; color: #334155; margin-top: 10px; margin-bottom: 40px; }
+        .cover-page h1 { font-size: 42pt; font-weight: 800; color: var(--primary-color); margin: 0; }
+        .cover-page h2 { font-size: 18pt; font-weight: 600; color: var(--text-muted); margin-top: 10px; margin-bottom: 40px; }
         .destinations-summary { border-top: 1px solid #cbd5e1; padding-top: 20px; width: 80%; }
         .dest-item { display: flex; justify-content: space-between; font-size: 14pt; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
-        .dest-item .name { font-weight: 700; }
-        .dest-item .dates { font-weight: 400; color: #475569; }
+        .dest-item .name { font-weight: 700; color: var(--primary-color); }
+        .dest-item .dates { font-weight: 400; color: var(--text-muted); }
 
-        /* --- Card Styles (for Flights, Hotels, etc.) --- */
-        .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-right: 5px solid #0ea5e9; border-radius: 10px; padding: 14px; margin-bottom: 14px; break-inside: avoid; }
-        .info-card h4 { font-size: 14pt; font-weight: 700; color: #0c4a6e; margin: 0 0 8px 0; }
+        /* --- Card Styles (Dynamic Variables) --- */
+        .info-card { 
+            background-color: var(--bg-general); 
+            border: 1px solid #e2e8f0; 
+            border-right: 5px solid var(--accent-color); 
+            border-radius: 10px; padding: 14px; margin-bottom: 14px; 
+            break-inside: avoid; 
+        }
+        .info-card h4 { font-size: 14pt; font-weight: 700; color: var(--primary-color); margin: 0 0 8px 0; }
+        
         .card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 16px; }
         .detail-item { display: flex; align-items: flex-start; gap: 8px; }
         .detail-item i { color: #94a3b8; margin-top: 3px; width: 16px; text-align: center; }
-        .detail-item .value { font-weight: 600; }
+        .detail-item .value { font-weight: 600; color: var(--text-main); }
         .detail-item.full-width { grid-column: 1 / -1; white-space: pre-wrap; }
 
-        /* --- Transport Card Color accents --- */
-        .transport-flight { border-right-color: #38bdf8; background-color: #f0f9ff; }
-        .transport-flight h4 { color: #075985; }
-        .transport-ride { border-right-color: #34d399; background-color: #f0fdf4; }
-        .transport-ride h4 { color: #065f46; }
-        .transport-ferry { border-right-color: #60a5fa; background-color: #eff6ff; }
-        .transport-ferry h4 { color: #1e40af; }
-        .transport-train { border-right-color: #fb923c; background-color: #fff7ed; }
-        .transport-train h4 { color: #9a3412; }
-        .transport-car_rental { border-right-color: #a78bfa; background-color: #f5f3ff; }
-        .transport-car_rental h4 { color: #5b21b6; }
+        /* --- Specific Card Types Colors --- */
+        .transport-flight { border-right-color: var(--border-flight); background-color: var(--bg-flight); }
+        .transport-flight h4 { color: #075985; } /* Slightly darker for contrast */
+        
+        .transport-ride { border-right-color: var(--border-ride); background-color: var(--bg-ride); }
+        .transport-ferry { border-right-color: var(--border-ferry); background-color: var(--bg-ferry); }
+        .transport-train { border-right-color: var(--border-train); background-color: var(--bg-train); }
+        .transport-car_rental { border-right-color: var(--border-car); background-color: var(--bg-car); }
+
+        .hotel-card { background-color: var(--bg-hotel); border-right-color: var(--border-hotel); }
+        .attraction-card { background-color: var(--bg-attraction); border-right-color: var(--border-attraction); }
 
         .flight-card h4 { display: flex; align-items: center; justify-content: space-between; }
-        .flight-path { display: flex; align-items: center; gap: 10px; font-size: 12pt; font-weight: 400; color: #475569; }
+        .flight-path { display: flex; align-items: center; gap: 10px; font-size: 12pt; font-weight: 400; color: var(--text-muted); }
 
         /* --- Attractions --- */
-        .attraction-category { font-size: 16pt; font-weight: 700; color: #1e3a8a; margin-top: 25px; margin-bottom: 10px; padding-right: 10px; border-right: 3px solid #60a5fa; }
+        .attraction-category { 
+            font-size: 16pt; font-weight: 700; 
+            color: var(--primary-color); margin-top: 25px; margin-bottom: 10px; 
+            padding-right: 10px; border-right: 3px solid var(--accent-color); 
+        }
 
         /* --- Checklists & Notes --- */
         .checklist-container { break-inside: avoid; margin-bottom: 18px; }
-        .checklist-type-title { font-size: 18pt; font-weight: 700; color: #1e3a8a; background-color: #e0f2fe; padding: 10px; border-radius: 8px; margin-top: 14px; }
-        .checklist-dest-title { font-size: 15pt; font-weight: 600; color: #1e40af; margin-top: 12px; padding-right: 8px; border-right: 2px solid #93c5fd; }
-        .checklist-list-title { font-size: 13pt; font-weight: bold; color: #1d4ed8; margin: 10px 0 8px; }
-        .checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; margin-bottom: 4px; border-right: 4px solid transparent; border-radius: 6px; background-color: #f8fafc; }
+        .checklist-type-title { font-size: 18pt; font-weight: 700; color: var(--primary-color); background-color: var(--bg-flight); padding: 10px; border-radius: 8px; margin-top: 14px; }
+        .checklist-dest-title { font-size: 15pt; font-weight: 600; color: var(--primary-color); margin-top: 12px; padding-right: 8px; border-right: 2px solid var(--accent-color); }
+        .checklist-list-title { font-size: 13pt; font-weight: bold; color: var(--accent-color); margin: 10px 0 8px; }
+        .checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; margin-bottom: 4px; border-right: 4px solid transparent; border-radius: 6px; background-color: var(--bg-general); }
         .checklist-item .checkbox { font-size: 14pt; color: #333; line-height: 1.2; }
         .checklist-item .item-details { flex-grow: 1; }
         .checklist-item .item-text { font-weight: 600; }
-        .checklist-item .item-description { font-size: 9pt; color: #475569; margin-top: 2px; white-space: pre-wrap; }
+        .checklist-item .item-description { font-size: 9pt; color: var(--text-muted); margin-top: 2px; white-space: pre-wrap; }
         .item-checked .item-text, .item-checked .item-description { text-decoration: line-through; color: #9ca3af; }
-        .priority-3 { border-right-color: #f43f5e; } /* High */
-        .priority-2 { border-right-color: #f97316; } /* Medium */
-        .priority-1 { border-right-color: #eab308; } /* Low */
+        .priority-3 { border-right-color: #f43f5e; } 
+        .priority-2 { border-right-color: #f97316; } 
+        .priority-1 { border-right-color: #eab308; } 
 
         /* --- Daily Schedule --- */
         .daily-schedule-header { margin-bottom: 12px; }
-        .daily-schedule-header .date { font-size: 13pt; font-weight: 500; color: #475569; }
-        .daily-schedule-header .title { font-size: 16pt; font-weight: 800; }
+        .daily-schedule-header .date { font-size: 13pt; font-weight: 500; color: var(--text-muted); }
+        .daily-schedule-header .title { font-size: 16pt; font-weight: 800; color: var(--primary-color); }
         .timeline-item { display: flex; gap: 12px; margin-bottom: 12px; }
-        .timeline-item .time { font-weight: 800; font-size: 11pt; color: #0ea5e9; flex-shrink: 0; width: 76px; }
+        .timeline-item .time { font-weight: 800; font-size: 11pt; color: var(--accent-color); flex-shrink: 0; width: 76px; }
         .timeline-item .content { border-right: 2px solid #e2e8f0; padding-right: 12px; }
         .timeline-item h5 { font-size: 12pt; font-weight: 800; margin: 0 0 4px 0; }
-        .timeline-item p { margin: 0; white-space: pre-wrap; }
-        .ref-details { font-size: 9pt; color: #475569; background-color: #f1f5f9; padding: 5px 8px; border-radius: 4px; margin-top: 8px; }
+        .ref-details { font-size: 9pt; color: var(--text-muted); background-color: var(--bg-general); padding: 5px 8px; border-radius: 4px; margin-top: 8px; }
 
         .notes-section { margin-top: 26px; }
         .notes-section h4 { font-size: 14pt; font-weight: 800; margin-bottom: 8px; }
-        .note-item { padding: 10px 12px; margin-bottom: 8px; border-radius: 6px; break-inside: avoid; border: 1px solid #e2e8f0; border-right: 5px solid #94a3b8; }
+        .note-item { padding: 10px 12px; margin-bottom: 8px; border-radius: 6px; break-inside: avoid; border: 1px solid #e2e8f0; border-right: 5px solid #94a3b8; background-color: var(--bg-general); }
         .note-item strong { display: block; margin-bottom: 4px; font-size: 11pt; }
         .note-item p { white-space: pre-wrap; font-size: 10pt; margin: 0; }
         .note-color-red { border-right-color: #ef4444 !important; }
@@ -121,9 +169,29 @@
         .note-color-orange { border-right-color: #f97316 !important; }
 
         /* Map container styles */
-        .map-container { height: 340px; border-radius: 10px; margin: 10px 0 14px; background-color: #f1f5f9; z-index: 1; break-inside: avoid; }
+        .map-container { height: 340px; border-radius: 10px; margin: 10px 0 14px; background-color: #e2e8f0; z-index: 1; break-inside: avoid; }
         .attraction-map-container, .logistics-map-container { height: 250px; }
         .leaflet-container { z-index: 1; }
+
+        /* Theme Selection UI Styles */
+        .theme-btn {
+            position: relative;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .theme-btn.active {
+            border-color: #0ea5e9;
+            transform: scale(0.95);
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
+        }
+        .theme-preview {
+            height: 40px;
+            width: 100%;
+            display: flex;
+        }
+        .theme-stripe { flex: 1; height: 100%; }
 
         /* --- Mobile-first optimizations --- */
         @media screen and (max-width: 768px) {
@@ -140,14 +208,12 @@
         /* --- STYLES FOR PRINTING --- */
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            /* Hide UI and only show preview content when printing */
             body > *:not(#preview-wrapper) { display: none !important; }
             #preview-wrapper, #preview-container { display: block !important; position: static !important; background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
-            .report-page { margin: 0 auto !important; box-shadow: none !important; border: none !important; width: 210mm !important; min-height: 290mm; padding: 10mm; font-size: 11pt; }
+            .report-page { margin: 0 auto !important; box-shadow: none !important; border: none !important; width: 210mm !important; min-height: 290mm; padding: 10mm; font-size: 11pt; background: var(--page-bg) !important; }
             .page-break { page-break-before: always; }
             .map-container { max-width: 170mm; max-height: 120mm; margin-left: auto; margin-right: auto; page-break-inside: avoid !important; }
             .logistics-map-container, .attraction-map-container { max-height: 80mm; }
-            /* Force-hide modal on print to avoid any overlay glitches */
             #print-modal { display: none !important; }
         }
     </style>
@@ -172,39 +238,57 @@
             </header>
 
             <main id="export-controls" class="flex-grow flex items-center justify-center p-4 pb-[calc(16px+var(--safe-pad))]">
-                <div class="w-full max-w-2xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-5 sm:p-8">
+                <div class="w-full max-w-4xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-5 sm:p-8">
                     <div class="text-center">
                         <i class="fas fa-file-export fa-2x sm:fa-3x text-sky-500 mb-3"></i>
                         <h2 id="export-title" class="text-2xl sm:text-3xl font-extrabold text-slate-800">הפקת סיכום הטיול</h2>
-                        <p class="text-slate-600 mt-2 mb-6 sm:mb-8">בחר אילו חלקים לכלול בסיכום הטיול שלך.</p>
+                        <p class="text-slate-600 mt-2 mb-6 sm:mb-8">עצב את הסיכום שלך, בחר ערכת נושא והפק קובץ PDF.</p>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
-                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
-                            <input type="checkbox" id="include-maps-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <span class="font-semibold text-slate-700">🗺️ הכללת מפות</span>
-                        </label>
-                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
-                            <input type="checkbox" id="include-attractions-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <span class="font-semibold text-slate-700">🎢 אטרקציות ומסעדות</span>
-                        </label>
-                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
-                            <input type="checkbox" id="include-schedule-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <span class="font-semibold text-slate-700">🗓️ לו"ז יומי</span>
-                        </label>
-                        <label class="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
-                            <input type="checkbox" id="include-checklists-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
-                            <span class="font-semibold text-slate-700">📝 צ'קליסטים וטיפים</span>
-                        </label>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Left Column: Settings -->
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                <i class="fas fa-sliders-h text-sky-500"></i> תוכן הסיכום
+                            </h3>
+                            <div class="grid grid-cols-1 gap-3">
+                                <label class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition cursor-pointer">
+                                    <input type="checkbox" id="include-maps-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                                    <span class="font-semibold text-slate-700">🗺️ הכללת מפות</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition cursor-pointer">
+                                    <input type="checkbox" id="include-attractions-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                                    <span class="font-semibold text-slate-700">🎢 אטרקציות ומסעדות</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition cursor-pointer">
+                                    <input type="checkbox" id="include-schedule-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                                    <span class="font-semibold text-slate-700">🗓️ לו"ז יומי</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition cursor-pointer">
+                                    <input type="checkbox" id="include-checklists-checkbox" checked class="h-5 w-5 rounded text-sky-600 focus:ring-sky-500 border-slate-300 shrink-0">
+                                    <span class="font-semibold text-slate-700">📝 צ'קליסטים וטיפים</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Themes -->
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                <i class="fas fa-palette text-sky-500"></i> ערכת נושא
+                            </h3>
+                            <div id="theme-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[300px] overflow-y-auto pr-1">
+                                <!-- Themes injected by JS -->
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="flex justify-center">
-                        <button id="start-preview-btn" class="action-btn w-full sm:w-auto flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-xl">
-                            <i class="fas fa-eye mr-2"></i> הצג תצוגה מקדימה
+                    <div class="flex justify-center mt-8">
+                        <button id="start-preview-btn" class="action-btn w-full sm:w-auto min-w-[200px] bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-blue-200 shadow-xl">
+                            <i class="fas fa-eye mr-2"></i> צור סיכום
                         </button>
                     </div>
 
-                    <div id="status-container" class="mt-6 sm:mt-8 min-h-[56px] flex flex-col items-center justify-center">
+                    <div id="status-container" class="mt-6 min-h-[56px] flex flex-col items-center justify-center">
                         <div id="loader" class="loader hidden"></div>
                         <p id="status-message" class="text-slate-500 font-semibold"></p>
                     </div>
@@ -223,47 +307,27 @@
     <!-- Print / Save Modal -->
     <div id="print-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="print-modal-title">
         <div class="relative bg-white rounded-2xl shadow-2xl w-[min(92vw,480px)] max-w-md text-slate-800 p-5 sm:p-6 flex flex-col max-h-[85dvh]">
-            <!-- Close button -->
             <button id="close-modal-btn" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600" aria-label="סגירת חלון">
                 <i class="fas fa-times fa-lg"></i>
             </button>
-
-            <!-- Container for content that will be hidden for the loader -->
             <div id="modal-content-wrapper" class="overflow-y-auto pr-1 -mr-1" style="-webkit-overflow-scrolling: touch;">
                 <div class="text-center">
                     <i class="fas fa-file-pdf fa-3x text-red-500 mb-3"></i>
                     <h3 id="print-modal-title" class="text-2xl font-bold mb-2">שמירת סיכום הטיול</h3>
-                    <p class="text-slate-600 mb-4">כדי לקבל PDF מדויק, השתמש באפשרות ההדפסה של הדפדפן.</p>
+                    <p class="text-slate-600 mb-4">מומלץ: בהגדרות ההדפסה וודא שמסומן <strong>"גרפיקת רקע"</strong> כדי לראות את הצבעים שבחרת.</p>
                 </div>
-
                 <div class="mb-5 text-center">
                     <button id="trigger-print-btn" class="action-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl">
                         <i class="fas fa-file-import mr-2"></i> המשך להדפסה / שמירה
                     </button>
                 </div>
-
-                <div class="space-y-4 text-right text-base">
-                    <p><strong>אפשרות 1: הדפסה רגילה</strong><br>אם ברצונך להדפיס את הסיכום, בחר מדפסת ולחץ "הדפס".</p>
-
-                    <p><strong>אפשרות 2: שמירה כקובץ PDF (במיוחד בנייד)</strong></p>
-                    <div class="bg-slate-100 p-4 rounded-lg space-y-4">
-                        <div>
-                            <strong>שלב 1:</strong> לאחר לחיצה על כפתור ההמשך, יפתח מסך ההדפסה. לחץ על אייקון <strong>השיתוף</strong>.
-                            <img src="https://i.imgur.com/X2WJ6za.jpeg" alt="שלב 1: לחיצה על שיתוף" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
-                        </div>
-                        <div>
-                            <strong>שלב 2:</strong> מהתפריט שייפתח, בחר באפשרות <strong>"שמור בקבצים"</strong>.
-                            <img src="https://i.imgur.com/twkyQ7a.jpeg" alt="שלב 2: שמירה לקבצים" class="mt-2 rounded-md border shadow-sm w-full max-w-xs mx-auto">
-                        </div>
-                    </div>
+                <div class="space-y-4 text-right text-base bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <p class="text-sm"><strong>בנייד (iPhone/Android):</strong><br>לאחר הלחיצה, לחץ על כפתור ה<strong>שיתוף</strong> ובחר ב<strong>"שמור לקבצים"</strong>.</p>
                 </div>
             </div>
-
-            <!-- Loader section, initially hidden -->
             <div id="modal-loader" class="hidden text-center p-8">
                 <div class="loader mx-auto" style="border-top-color: #3b82f6;"></div>
                 <p class="mt-4 text-slate-600 font-semibold">מכין את המפות להדפסה…</p>
-                <p class="mt-2 text-sm text-slate-500">זה עשוי לקחת כמה שניות.</p>
             </div>
         </div>
     </div>
@@ -286,6 +350,246 @@
         const db = getFirestore(app);
         enableIndexedDbPersistence(db).catch(console.warn);
 
+        // --- Theme Definitions ---
+        const THEMES = {
+            default: {
+                name: "ברירת מחדל",
+                colors: {
+                    "--page-bg": "#ffffff",
+                    "--text-main": "#1e293b",
+                    "--primary-color": "#0c4a6e",
+                    "--accent-color": "#0ea5e9",
+                    "--bg-flight": "#f0f9ff",
+                    "--bg-hotel": "#f8fafc",
+                    "--bg-car": "#f5f3ff",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f8fafc",
+                    "--border-flight": "#38bdf8",
+                    "--border-hotel": "#e2e8f0"
+                }
+            },
+            print: {
+                name: "חיסכון בדיו",
+                colors: {
+                    "--page-bg": "#ffffff",
+                    "--text-main": "#000000",
+                    "--primary-color": "#000000",
+                    "--accent-color": "#444444",
+                    "--bg-flight": "#ffffff",
+                    "--bg-hotel": "#ffffff",
+                    "--bg-car": "#ffffff",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#ffffff",
+                    "--bg-train": "#ffffff",
+                    "--bg-ferry": "#ffffff",
+                    "--bg-ride": "#ffffff",
+                    "--border-flight": "#cccccc",
+                    "--border-hotel": "#cccccc",
+                    "--border-car": "#cccccc",
+                    "--border-attraction": "#cccccc",
+                    "--border-train": "#cccccc",
+                    "--border-ferry": "#cccccc",
+                    "--border-ride": "#cccccc"
+                }
+            },
+            ocean: {
+                name: "אוקיינוס",
+                colors: {
+                    "--page-bg": "#f0f8ff",
+                    "--text-main": "#0f172a",
+                    "--primary-color": "#1e3a8a",
+                    "--accent-color": "#3b82f6",
+                    "--bg-flight": "#dbeafe",
+                    "--bg-hotel": "#eff6ff",
+                    "--bg-car": "#e0e7ff",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f1f5f9"
+                }
+            },
+            sunset: {
+                name: "שקיעה",
+                colors: {
+                    "--page-bg": "#fffaf0",
+                    "--text-main": "#431407",
+                    "--primary-color": "#9a3412",
+                    "--accent-color": "#f97316",
+                    "--bg-flight": "#ffedd5",
+                    "--bg-hotel": "#fff7ed",
+                    "--bg-car": "#ffe4e6",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fffaf0"
+                }
+            },
+            forest: {
+                name: "יער",
+                colors: {
+                    "--page-bg": "#f0fdf4",
+                    "--text-main": "#064e3b",
+                    "--primary-color": "#14532d",
+                    "--accent-color": "#22c55e",
+                    "--bg-flight": "#dcfce7",
+                    "--bg-hotel": "#f0fdf4",
+                    "--bg-car": "#ecfccb",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f6fff8"
+                }
+            },
+            lavender: {
+                name: "לבנדר",
+                colors: {
+                    "--page-bg": "#faf5ff",
+                    "--text-main": "#4c1d95",
+                    "--primary-color": "#6b21a8",
+                    "--accent-color": "#a855f7",
+                    "--bg-flight": "#f3e8ff",
+                    "--bg-hotel": "#faf5ff",
+                    "--bg-car": "#fce7f3",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fdf4ff"
+                }
+            },
+            mint: {
+                name: "מנטה",
+                colors: {
+                    "--page-bg": "#f0fdfa",
+                    "--text-main": "#134e4a",
+                    "--primary-color": "#0f766e",
+                    "--accent-color": "#14b8a6",
+                    "--bg-flight": "#ccfbf1",
+                    "--bg-hotel": "#f0fdfa",
+                    "--bg-car": "#d1fae5",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#e6fffa"
+                }
+            },
+            desert: {
+                name: "מדבר",
+                colors: {
+                    "--page-bg": "#fffbeb",
+                    "--text-main": "#451a03",
+                    "--primary-color": "#78350f",
+                    "--accent-color": "#d97706",
+                    "--bg-flight": "#fef3c7",
+                    "--bg-hotel": "#fffbeb",
+                    "--bg-car": "#ffedd5",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fffaf0"
+                }
+            },
+            cherry: {
+                name: "פריחת הדובדבן",
+                colors: {
+                    "--page-bg": "#fff1f2",
+                    "--text-main": "#881337",
+                    "--primary-color": "#be123c",
+                    "--accent-color": "#f43f5e",
+                    "--bg-flight": "#ffe4e6",
+                    "--bg-hotel": "#fff1f2",
+                    "--bg-car": "#fce7f3",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fff0f5"
+                }
+            },
+            coffee: {
+                name: "קפה",
+                colors: {
+                    "--page-bg": "#fafaf9",
+                    "--text-main": "#44403c",
+                    "--primary-color": "#57534e",
+                    "--accent-color": "#a8a29e",
+                    "--bg-flight": "#e7e5e4",
+                    "--bg-hotel": "#f5f5f4",
+                    "--bg-car": "#d6d3d1",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fafaf9"
+                }
+            },
+            royal: {
+                name: "מלכותי",
+                colors: {
+                    "--page-bg": "#f8fafc",
+                    "--text-main": "#1e1b4b",
+                    "--primary-color": "#312e81",
+                    "--accent-color": "#eab308", /* Gold accent */
+                    "--bg-flight": "#e0e7ff",
+                    "--bg-hotel": "#f1f5f9",
+                    "--bg-car": "#ede9fe",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f8fafc"
+                }
+            },
+            retro: {
+                name: "רטרו",
+                colors: {
+                    "--page-bg": "#fefce8",
+                    "--text-main": "#1c1917",
+                    "--primary-color": "#0f766e",
+                    "--accent-color": "#f59e0b",
+                    "--bg-flight": "#ffedd5",
+                    "--bg-hotel": "#fefce8",
+                    "--bg-car": "#ccfbf1",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fff7ed"
+                }
+            },
+            berry: {
+                name: "פירות יער",
+                colors: {
+                    "--page-bg": "#fdf2f8",
+                    "--text-main": "#4a044e",
+                    "--primary-color": "#86198f",
+                    "--accent-color": "#d946ef",
+                    "--bg-flight": "#fbcfe8",
+                    "--bg-hotel": "#fdf2f8",
+                    "--bg-car": "#f5d0fe",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fce7f3"
+                }
+            },
+            minimal_gray: {
+                name: "מינימליסטי",
+                colors: {
+                    "--page-bg": "#f3f4f6",
+                    "--text-main": "#111827",
+                    "--primary-color": "#374151",
+                    "--accent-color": "#9ca3af",
+                    "--bg-flight": "#e5e7eb",
+                    "--bg-hotel": "#f3f4f6",
+                    "--bg-car": "#d1d5db",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f9fafb"
+                }
+            },
+            corporate: {
+                name: "עסקי",
+                colors: {
+                    "--page-bg": "#f8fafc",
+                    "--text-main": "#0f172a",
+                    "--primary-color": "#1e293b",
+                    "--accent-color": "#475569",
+                    "--bg-flight": "#e2e8f0",
+                    "--bg-hotel": "#f1f5f9",
+                    "--bg-car": "#cbd5e1",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#f8fafc"
+                }
+            },
+            lemon: {
+                name: "לימון",
+                colors: {
+                    "--page-bg": "#fef9c3",
+                    "--text-main": "#422006",
+                    "--primary-color": "#854d0e",
+                    "--accent-color": "#ca8a04",
+                    "--bg-flight": "#fef08a",
+                    "--bg-hotel": "#fef9c3",
+                    "--bg-car": "#fde047",
+                    "--bg-attraction": "#ffffff",
+                    "--bg-general": "#fffbeb"
+                }
+            }
+        };
+
         const DOM = {
             loader: document.getElementById('loader'),
             statusMessage: document.getElementById('status-message'),
@@ -304,14 +608,64 @@
             includeAttractionsCheckbox: document.getElementById('include-attractions-checkbox'),
             includeScheduleCheckbox: document.getElementById('include-schedule-checkbox'),
             includeChecklistsCheckbox: document.getElementById('include-checklists-checkbox'),
+            themeGrid: document.getElementById('theme-grid')
         };
 
         let tripId = null;
         let isGenerating = false;
         let tripDataCache = null;
         let mapInstances = [];
+        let currentTheme = 'default';
 
-        /* ===== Scroll lock helpers (prevent background scroll under modal) ===== */
+        function renderThemeSelection() {
+            DOM.themeGrid.innerHTML = '';
+            Object.keys(THEMES).forEach(key => {
+                const theme = THEMES[key];
+                const btn = document.createElement('div');
+                btn.className = `theme-btn cursor-pointer bg-slate-50 hover:bg-white p-2 flex flex-col items-center gap-2 ${key === currentTheme ? 'active' : ''}`;
+                btn.onclick = () => selectTheme(key);
+                
+                // Create preview strips
+                const c = theme.colors;
+                btn.innerHTML = `
+                    <div class="theme-preview rounded overflow-hidden flex border border-slate-200">
+                        <div class="theme-stripe" style="background:${c['--primary-color']}"></div>
+                        <div class="theme-stripe" style="background:${c['--bg-flight']}"></div>
+                        <div class="theme-stripe" style="background:${c['--bg-hotel']}"></div>
+                        <div class="theme-stripe" style="background:${c['--accent-color']}"></div>
+                    </div>
+                    <span class="text-xs font-bold text-slate-700 text-center leading-tight">${theme.name}</span>
+                `;
+                DOM.themeGrid.appendChild(btn);
+            });
+        }
+
+        function selectTheme(key) {
+            currentTheme = key;
+            // UI Update
+            document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+            const index = Object.keys(THEMES).indexOf(key);
+            if (DOM.themeGrid.children[index]) {
+                DOM.themeGrid.children[index].classList.add('active');
+            }
+            applyThemeToRoot();
+        }
+
+        function applyThemeToRoot() {
+            const theme = THEMES[currentTheme];
+            const root = document.documentElement;
+            // Reset to defaults first (safety)
+            const defaults = THEMES.default.colors;
+            
+            // Merge defaults with current theme (in case some keys are missing)
+            const activeColors = { ...defaults, ...theme.colors };
+
+            Object.keys(activeColors).forEach(prop => {
+                root.style.setProperty(prop, activeColors[prop]);
+            });
+        }
+
+        /* ===== Scroll lock helpers ===== */
         let _scrollY = 0;
         function lockScroll() {
             _scrollY = window.scrollY || document.documentElement.scrollTop || 0;
@@ -333,6 +687,7 @@
             tripId = urlParams.get('tripId');
             if (!tripId) { showErrorModal("שגיאה: לא נמצא מזהה טיול."); return; }
 
+            renderThemeSelection(); // Init themes
             DOM.backToTripBtn.href = `trip.html?id=${tripId}`;
 
             onAuthStateChanged(auth, async (user) => {
@@ -545,7 +900,7 @@
             if (hotels.length) {
                 html += `<div class="page-break"></div><h3 class="section-title"><i class="fas fa-bed"></i> מקומות לינה</h3>`;
                 hotels.forEach(item => {
-                    html += `<div class="info-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">
+                    html += `<div class="info-card hotel-card"><h4>${sanitize(item.name)}</h4><div class="card-grid">
                         ${detailItem('fa-calendar-days','תאריכים', item.dates)}
                         ${detailItem('fa-map-marker-alt','יעד', item.destination)}
                         ${detailItem('fa-location-dot','כתובת', item.address)}
@@ -606,7 +961,7 @@
                 Object.keys(attractionsByType).forEach(type => {
                     html += `<h4 class="attraction-category">${sanitize(type)}</h4>`;
                     attractionsByType[type].forEach(place => {
-                        html += `<div class="info-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">
+                        html += `<div class="info-card attraction-card"><h4>${sanitize(place.name)}</h4><div class="card-grid">
                             ${detailItem('fa-map-marker-alt','יעד', place.destination)}
                             ${detailItem('fa-location-dot','כתובת', place.location)}
                             ${detailItem('fa-clock','שעות פתיחה', place.hours)}
@@ -664,7 +1019,7 @@
                 symbol: L.Symbol.arrowHead({
                     pixelSize: 12,
                     polygon: false,
-                    pathOptions: { color: '#0ea5e9', weight: 3, opacity: 0.9 }
+                    pathOptions: { color: 'var(--accent-color)', weight: 3, opacity: 0.9 }
                 })
             };
 
@@ -687,7 +1042,7 @@
                 });
 
                 if (points.length > 1) {
-                    const routeLine = L.polyline(points, { color: '#38bdf8', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
+                    const routeLine = L.polyline(points, { color: 'var(--accent-color)', weight: 3, opacity: 0.7, dashArray: '5, 10' }).addTo(tripMap);
                     if (L.polylineDecorator) {
                         L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(tripMap);
                     }
@@ -698,7 +1053,7 @@
                 setTimeout(() => tripMap.invalidateSize(), 120);
             }
 
-            // Single-point maps (מלונות / אטרקציות / רכב שכור)
+            // Single-point maps
             document.querySelectorAll('.attraction-map-container, .logistics-map-container[data-lat]').forEach(mapDiv => {
                 const lat = parseFloat(mapDiv.dataset.lat), lng = parseFloat(mapDiv.dataset.lng), name = mapDiv.dataset.name;
                 if (!isNaN(lat) && !isNaN(lng)) {
@@ -710,21 +1065,20 @@
                 }
             });
 
-            // Maps with שני נקודות / מסלול
+            // Route maps
             document.querySelectorAll('.logistics-map-container[data-from-lat], .logistics-map-container[data-route-geometry]').forEach(mapDiv => {
                 const map = L.map(mapDiv);
                 mapInstances.push(map);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-                if (mapDiv.dataset.routeGeometry) { // Ride Map with full geometry
+                if (mapDiv.dataset.routeGeometry) { 
                     try {
                         const geometry = JSON.parse(mapDiv.dataset.routeGeometry || '[]');
                         const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                         const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                         if (geometry && geometry.length > 0) {
-                            // בהנחה שהפורמט הוא [lat, lng]
                             const latlngs = geometry.map(coord => L.latLng(coord[0], coord[1]));
-                            const polyline = L.polyline(latlngs, { color: '#0ea5e9', weight: 5 }).addTo(map);
+                            const polyline = L.polyline(latlngs, { color: 'var(--accent-color)', weight: 5 }).addTo(map);
                             if (L.polylineDecorator) {
                                 L.polylineDecorator(polyline, { patterns: [arrowPattern] }).addTo(map);
                             }
@@ -732,13 +1086,12 @@
                             if (!isNaN(toLat)) L.marker([toLat, toLng]).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
                             map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
                         } else {
-                            // Fallback to markers if geometry missing
                             if (!isNaN(fromLat) && !isNaN(toLat)) {
                                 const fromPoint = [fromLat, fromLng], toPoint = [toLat, toLng];
                                 const bounds = L.latLngBounds([fromPoint, toPoint]);
                                 L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
                                 L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
-                                const routeLine = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+                                const routeLine = L.polyline([fromPoint, toPoint], { color: 'var(--accent-color)', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
                                 if (L.polylineDecorator) {
                                     L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(map);
                                 }
@@ -746,7 +1099,7 @@
                             }
                         }
                     } catch (e) { console.error("Failed to render ride map", e); }
-                } else { // Flight, Ferry, Train Map (from / to)
+                } else { 
                     const fromLat = parseFloat(mapDiv.dataset.fromLat), fromLng = parseFloat(mapDiv.dataset.fromLng), fromName = mapDiv.dataset.fromName;
                     const toLat = parseFloat(mapDiv.dataset.toLat), toLng = parseFloat(mapDiv.dataset.toLng), toName = mapDiv.dataset.toName;
                     if (!isNaN(fromLat) && !isNaN(toLat)) {
@@ -754,7 +1107,7 @@
                         const bounds = L.latLngBounds([fromPoint, toPoint]);
                         L.marker(fromPoint).addTo(map).bindPopup(`<b>יציאה:</b> ${fromName||''}`);
                         L.marker(toPoint).addTo(map).bindPopup(`<b>הגעה:</b> ${toName||''}`);
-                        const routeLine = L.polyline([fromPoint, toPoint], { color: '#0ea5e9', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
+                        const routeLine = L.polyline([fromPoint, toPoint], { color: 'var(--accent-color)', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(map);
                         if (L.polylineDecorator) {
                             L.polylineDecorator(routeLine, { patterns: [arrowPattern] }).addTo(map);
                         }
@@ -764,7 +1117,6 @@
                 setTimeout(() => map.invalidateSize(), 120);
             });
 
-            // Reflow maps on resize/orientation change
             let resizeTimeout;
             window.addEventListener('resize', () => {
                 clearTimeout(resizeTimeout);
@@ -775,14 +1127,12 @@
         async function showPreview() {
             if (isGenerating) return;
             try {
-                // ניקוי מפות קודמות אם יש (כדי למנוע באגים כשמריצים שוב תצוגה מקדימה)
                 if (mapInstances && mapInstances.length) {
-                    mapInstances.forEach(m => {
-                        try { m.remove(); } catch (e) {}
-                    });
+                    mapInstances.forEach(m => { try { m.remove(); } catch (e) {} });
                     mapInstances = [];
                 }
 
+                applyThemeToRoot(); // Ensure colors are set
                 const allData = await fetchAllTripData();
                 setStatus('מעצב ומסדר את כל המידע...', true);
 
@@ -822,11 +1172,9 @@
         function triggerPrint() {
             const modalContent = document.getElementById('modal-content-wrapper');
             const modalLoader = document.getElementById('modal-loader');
-
             const standalone = isStandaloneMode();
             const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 
-            // באפליקציית אינטרנט מותקנת ב-iOS – window.print לרוב לא פותח כלום
             if (standalone && isIOS) {
                 modalLoader.classList.add('hidden');
                 modalContent.classList.remove('hidden');
@@ -837,16 +1185,13 @@
             modalContent.classList.add('hidden');
             modalLoader.classList.remove('hidden');
 
-            // Force maps to finalize layout before print
             setTimeout(() => {
                 mapInstances.forEach(map => map.invalidateSize(true));
                 setTimeout(() => { window.print(); closePrintModal(); }, 900);
             }, 120);
         }
 
-        // Close on overlay click (but not when clicking inside panel)
         DOM.printModal.addEventListener('click', (e) => { if (e.target === DOM.printModal) closePrintModal(); });
-        // Close on ESC
         window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !DOM.printModal.classList.contains('hidden')) closePrintModal(); });
 
         DOM.startPreviewBtn.addEventListener('click', showPreview);
@@ -858,3 +1203,4 @@
     </script>
 </body>
 </html>
+
