@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -464,6 +463,7 @@
                     <div id="normal-view-all">
                         <div class="space-y-6">
                             <section class="p-3 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                                <!-- Standard Filters -->
                                 <div id="filters" class="flex items-center justify-center gap-2 bg-blue-700 p-1 rounded-full flex-wrap">
                                     <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="week">שבוע</button>
                                     <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="month">חודש</button>
@@ -471,7 +471,39 @@
                                     <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="6months">חצי שנה</button>
                                     <button class="filter-btn active text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="all">הכל</button>
                                 </div>
+
+                                <!-- Advanced Filters Toggle -->
+                                <div class="text-center mt-2 border-t pt-2 border-slate-100">
+                                    <button id="toggle-advanced-filters" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition flex items-center justify-center gap-2 w-full">
+                                        <i class="fas fa-filter"></i> סינון מתקדם (תאריכים/יעדים) <i class="fas fa-chevron-down text-xs"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Advanced Filters Panel (Hidden by default) -->
+                                <div id="advanced-filters" class="hidden mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-500 mb-1">מתאריך</label>
+                                            <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-500 mb-1">עד תאריך</label>
+                                            <input type="date" id="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">סינון לפי יעד בטיול</label>
+                                        <select id="filter-destination-select" class="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                            <option value="">-- כל היעדים --</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex justify-between items-center pt-1">
+                                         <span id="active-filter-label" class="text-xs text-orange-600 font-bold hidden">סינון מותאם פעיל</span>
+                                         <button id="clear-advanced-filters" class="text-xs text-red-500 hover:text-red-700 font-bold ml-auto">נקה סינון</button>
+                                    </div>
+                                </div>
                             </section>
+
                             <section id="summary-section-all" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
                             <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
                                 <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">התפלגות לפי קטגוריה (בשקלים)</h3>
@@ -592,6 +624,9 @@
         let rateCache = {};
         let renderTimeout = null;
 
+        // New Advanced Filter State
+        let customDateRange = { start: null, end: null };
+
         const defaultCategories = ['🍔 אוכל ושתיה', '🚗 תחבורה', '🏨 לינה', '🎢 אטרקציות', '🛍️ קניות', '📎 אחר'];
         const currencies = {
             "ILS": "Israeli New Sheqel (₪)", "USD": "United States Dollar ($)", "EUR": "Euro (€)", "GBP": "British Pound (£)", "AUD": "Australian Dollar (A$)", "BGN": "Bulgarian Lev (лв)", "BRL": "Brazilian Real (R$)", "CAD": "Canadian Dollar (C$)", "CHF": "Swiss Franc (CHF)", "CNY": "Chinese Renminbi Yuan (¥)", "CZK": "Czech Koruna (Kč)", "DKK": "Danish Krone (kr)", "HKD": "Hong Kong Dollar (HK$)", "HUF": "Hungarian Forint (Ft)", "IDR": "Indonesian Rupiah (Rp)", "INR": "Indian Rupee (₹)", "ISK": "Icelandic Króna (kr)", "JPY": "Japanese Yen (¥)", "KRW": "South Korean Won (₩)", "MXN": "Mexican Peso (MX$)", "MYR": "Malaysian Ringgit (RM)", "NOK": "Norwegian Krone (kr)", "NZD": "New Zealand Dollar (NZ$)", "PHP": "Philippine Peso (₱)", "PLN": "Polish Złoty (zł)", "RON": "Romanian Leu (lei)", "SEK": "Swedish Krona (kr)", "SGD": "Singapore Dollar (S$)", "THB": "Thai Baht (฿)", "TRY": "Turkish Lira (₺)", "ZAR": "South African Rand (R)"
@@ -640,6 +675,9 @@
                 
                 // Initialize Sidebar Content with full trip details
                 buildMenuFromTrip(tripDetails);
+                
+                // NEW: Populate Destination Filter
+                populateDestinationFilter(tripDetails.destinations);
             }
         }
 
@@ -738,7 +776,7 @@
              }
         }
 
-        // --- Filtering Logic ---
+        // --- Filtering Logic (UPDATED) ---
         function getFilteredExpenses() {
             const now = new Date();
             const todayString = now.toISOString().split('T')[0];
@@ -747,18 +785,53 @@
             if (activeTab === 'today') {
                 dateFilteredExpenses = allExpenses.filter(exp => exp.date === todayString);
             } else {
-                let startDate = new Date(0);
-                switch (activeFilter) {
-                    case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
-                    case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
-                    case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
-                    case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
-                    default: break; 
-                }
-                if (activeFilter !== 'all') {
-                    dateFilteredExpenses = allExpenses.filter(exp => new Date(exp.date) >= startDate);
+                // Logic for "All" Tab
+                
+                // 1. Check Custom Range (Has priority over week/month buttons)
+                if (customDateRange.start || customDateRange.end) {
+                    // Update UI to show custom filter is active
+                    document.querySelectorAll('.filter-btn').forEach(f => f.classList.remove('active'));
+                    document.getElementById('active-filter-label').classList.remove('hidden');
+
+                    dateFilteredExpenses = allExpenses.filter(exp => {
+                        const expDate = new Date(exp.date);
+                        let isValid = true;
+                        
+                        // Start Date Comparison (inclusive)
+                        if (customDateRange.start) {
+                            const startDate = new Date(customDateRange.start);
+                            startDate.setHours(0,0,0,0);
+                            if (expDate < startDate) isValid = false;
+                        }
+
+                        // End Date Comparison (inclusive)
+                        if (customDateRange.end) {
+                            const endDate = new Date(customDateRange.end);
+                            endDate.setHours(23,59,59,999);
+                             // Need to handle timezone offsets if comparing directly, but exp.date is YYYY-MM-DD
+                             // Best to compare strings or normalized dates
+                             if (exp.date > customDateRange.end) isValid = false;
+                        }
+                        
+                        return isValid;
+                    });
+
                 } else {
-                    dateFilteredExpenses = allExpenses;
+                    // 2. Standard Buttons (Week, Month, etc.)
+                    document.getElementById('active-filter-label').classList.add('hidden');
+                    let startDate = new Date(0);
+                    switch (activeFilter) {
+                        case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
+                        case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
+                        case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
+                        case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
+                        default: break; 
+                    }
+                    if (activeFilter !== 'all') {
+                        dateFilteredExpenses = allExpenses.filter(exp => new Date(exp.date) >= startDate);
+                    } else {
+                        dateFilteredExpenses = allExpenses;
+                    }
                 }
             }
 
@@ -1140,6 +1213,64 @@
                 optionsHTML += `<option value="${cat}" ${activeComparisonCategory === cat ? 'selected' : ''}>${cat}</option>`;
             });
             select.innerHTML = optionsHTML;
+        }
+
+        // --- NEW: Populate Destination Filter ---
+        function populateDestinationFilter(destinations) {
+            const select = document.getElementById('filter-destination-select');
+            if (!destinations || destinations.length === 0) {
+                select.innerHTML = '<option value="">לא נמצאו יעדים</option>';
+                select.disabled = true;
+                return;
+            }
+
+            let html = '<option value="">-- כל היעדים --</option>';
+            destinations.forEach((dest, index) => {
+                if (dest.dates) {
+                    html += `<option value="${index}" data-dates="${dest.dates}">${dest.nameHe || dest.name}</option>`;
+                }
+            });
+            select.innerHTML = html;
+
+            // Add event listener here to avoid duplication
+            select.addEventListener('change', (e) => {
+                const selectedOption = e.target.selectedOptions[0];
+                const dateRange = selectedOption.dataset.dates;
+                
+                if (dateRange) {
+                    const [startStr, endStr] = dateRange.split(' - ');
+                    const startDate = parseDDMMYYYY(startStr);
+                    const endDate = parseDDMMYYYY(endStr);
+                    
+                    if (startDate && endDate) {
+                        // Adjust for input type="date" format (YYYY-MM-DD)
+                        // Add 1 day to correct timezone/parsing offset for UI if needed, 
+                        // but generally ISO string split works for local dates if we are careful.
+                        // Here we use simple formatting:
+                        
+                        const format = (d) => {
+                             const year = d.getFullYear();
+                             const month = String(d.getMonth() + 1).padStart(2, '0');
+                             const day = String(d.getDate()).padStart(2, '0');
+                             return `${year}-${month}-${day}`;
+                        };
+
+                        document.getElementById('filter-start-date').value = format(startDate);
+                        document.getElementById('filter-end-date').value = format(endDate);
+                        
+                        // Update state
+                        customDateRange.start = format(startDate);
+                        customDateRange.end = format(endDate);
+                    }
+                } else {
+                    // Reset if "All Destinations" selected
+                    document.getElementById('filter-start-date').value = '';
+                    document.getElementById('filter-end-date').value = '';
+                    customDateRange.start = null;
+                    customDateRange.end = null;
+                }
+                scheduleRender();
+            });
         }
 
         // --- Currency Conversion API & Helpers ---
@@ -1873,8 +2004,48 @@
                     activeFilter = filter.dataset.filter;
                     document.querySelectorAll('.filter-btn').forEach(f => f.classList.remove('active'));
                     filter.classList.add('active');
+                    
+                    // Reset custom filters when standard filter is clicked
+                    customDateRange.start = null;
+                    customDateRange.end = null;
+                    document.getElementById('filter-start-date').value = '';
+                    document.getElementById('filter-end-date').value = '';
+                    document.getElementById('filter-destination-select').value = '';
+                    document.getElementById('active-filter-label').classList.add('hidden');
+
                     await scheduleRender();
                 });
+            });
+
+            // Advanced Filters Listeners
+            document.getElementById('toggle-advanced-filters').addEventListener('click', () => {
+                const panel = document.getElementById('advanced-filters');
+                panel.classList.toggle('hidden');
+            });
+
+            document.getElementById('filter-start-date').addEventListener('change', (e) => {
+                customDateRange.start = e.target.value;
+                scheduleRender();
+            });
+
+            document.getElementById('filter-end-date').addEventListener('change', (e) => {
+                customDateRange.end = e.target.value;
+                scheduleRender();
+            });
+
+            document.getElementById('clear-advanced-filters').addEventListener('click', () => {
+                document.getElementById('filter-start-date').value = '';
+                document.getElementById('filter-end-date').value = '';
+                document.getElementById('filter-destination-select').value = '';
+                customDateRange.start = null;
+                customDateRange.end = null;
+                
+                // Switch back to "All" default filter
+                activeFilter = 'all';
+                document.querySelectorAll('.filter-btn').forEach(f => f.classList.remove('active'));
+                document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+                
+                scheduleRender();
             });
             
             document.body.addEventListener('click', async (e) => {
@@ -1993,3 +2164,4 @@
     </script>
 </body>
 </html>
+
